@@ -574,7 +574,7 @@ void setup() {
   #define DEFAULT_WIFI_PASS "12345678"
 #endif
     wifi_quick(DEFAULT_WIFI_SSID, DEFAULT_WIFI_PASS);
-    wifi_setup("LoRaGW-Setup", "lora1234", gw_id, "LoRa Gateway");
+    wifi_setup("Bakhromdev", "998935580311", gw_id, "LoRa Gateway");
 
     // Server + OTA
     gw_server_ok = server_check();
@@ -702,6 +702,7 @@ void loop() {
         // firmware_mode=lora_gateway bilan yuborish (electricity ESP32 uchun L: indikatori)
         StaticJsonDocument<256> _sd;
         _sd["device_id"]        = gw_id;
+        _sd["utility_type"]     = "gateway";
         _sd["software_version"] = FW_VERSION;
         _sd["ip"]               = WiFi.localIP().toString();
         _sd["rssi"]             = WiFi.RSSI();

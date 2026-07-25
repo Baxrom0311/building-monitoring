@@ -1,51 +1,77 @@
-"""ESP32 Studio — Main Window UI.
+"""ESP32 Studio — Professional Firmware Flasher & Monitor.
 
-Cross-platform PySide6 / PyQt6 main interface for ESP32 Firmware Flashing, Dual Serial Monitoring,
-LoRa Packet Inspecting, and ESP32 NVS Configuration.
+Toshelectroapparat loyihasi uchun ESP32 mikrokontrollerlariga firmware
+yuklash, serial monitoring va LoRa paket tahlili dasturi.
 """
 import os
 import sys
+import tempfile
 from datetime import datetime
 
-try:
-    from PySide6.QtWidgets import (
-        QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-        QPushButton, QComboBox, QLineEdit, QTextEdit, QProgressBar,
-        QFrame, QMessageBox, QTabWidget, QCheckBox, QFileDialog, QSplitter,
-        QTableWidget, QTableWidgetItem, QHeaderView, QGroupBox
-    )
-    from PySide6.QtCore import Qt, QTimer
-    from PySide6.QtGui import QFont, QColor, QTextCursor, QIcon
-except ImportError:
-    from PyQt6.QtWidgets import (
-        QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-        QPushButton, QComboBox, QLineEdit, QTextEdit, QProgressBar,
-        QFrame, QMessageBox, QTabWidget, QCheckBox, QFileDialog, QSplitter,
-        QTableWidget, QTableWidgetItem, QHeaderView, QGroupBox
-    )
-    from PyQt6.QtCore import Qt, QTimer
-    from PyQt6.QtGui import QFont, QColor, QTextCursor, QIcon
+from PyQt6.QtWidgets import (
+    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
+    QPushButton, QComboBox, QLineEdit, QTextEdit, QProgressBar,
+    QFrame, QMessageBox, QTabWidget, QCheckBox, QFileDialog, QSplitter,
+    QTableWidget, QTableWidgetItem, QHeaderView, QRadioButton, QButtonGroup,
+)
+from PyQt6.QtCore import Qt, QTimer, QSettings
+from PyQt6.QtGui import QFont, QTextCursor
 
 from controllers.flash_controller import FlashController
 from services.esptool_service import EsptoolService
-from services.flash_service import FlashService
+from services.api_client import ApiClient
 from services.lora_decoder import LoRaPacketDecoder
 from .styles import DARK_THEME
 
+# Sensor turlari ro'yxati
+SENSOR_TYPES = [
+    ("all",         "Barchasi"),
+    ("electricity", "Elektr hisoblagich"),
+    ("soil",        "Tuproq namligi"),
+    ("sound",       "Ovoz sensori"),
+    ("water",       "Suv bosimi"),
+    ("gas",         "Gaz bosimi"),
+    ("lora_gateway","LoRa Gateway"),
+]
+
+DEFAULT_SERVER = "https://ss.boos.uz"
+DEFAULT_TOKEN = "T30gwzZJ6YTvQeLRMCZyTi-GBAYogsQV"
+
 
 class ESP32StudioWindow(QMainWindow):
-    """ESP32 Dasturchi, Serial Monitor va LoRa Paket Inspector oynasi."""
+    """ESP32 Studio asosiy oynasi."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("⚡ ESP32 Studio — Flasher & LoRa Inspector")
-        self.setMinimumSize(1080, 720)
-        self.resize(1240, 820)
+        self.setWindowTitle("ESP32 Studio — Toshelectroapparat")
+        self.setMinimumSize(1120, 740)
+        self.resize(1300, 840)
 
+        self.settings = QSettings("Toshelectroapparat", "ESP32Studio")
         self.controller = FlashController()
         self._serial_workers = {}
+        self._firmware_list = []
+        self._selected_firmware = None
+        self._download_path = None
+
+        # API Client
+        server = self.settings.value("server_url", DEFAULT_SERVER)
+        token = self.settings.value("device_token", DEFAULT_TOKEN)
+        self.api = ApiClient(server, token)
+
+        # Firmware cache directory
+        self._cache_dir = os.path.join(tempfile.gettempdir(), "esp32studio_fw")
+        os.makedirs(self._cache_dir, exist_ok=True)
+
         self._setup_ui()
         self._refresh_ports()
+
+        # Auto-fetch firmware list
+        QTimer.singleShot(500, self._fetch_firmware_list)
+
+    # ══════════════════════════════════════════════════════════════════════
+    # UI Setup
+    # ══════════════════════════════════════════════════════════════════════
 
     def _setup_ui(self):
         self.setStyleSheet(DARK_THEME)
@@ -53,199 +79,296 @@ class ESP32StudioWindow(QMainWindow):
         central = QWidget()
         self.setCentralWidget(central)
         main_layout = QVBoxLayout(central)
-        main_layout.setContentsMargins(14, 14, 14, 14)
-        main_layout.setSpacing(12)
+        main_layout.setContentsMargins(12, 12, 12, 12)
+        main_layout.setSpacing(10)
 
-        # ── Top Bar ──
+        # ── Header Bar ──
         header = QFrame()
         header.setObjectName("card")
         header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(16, 12, 16, 12)
+        header_layout.setContentsMargins(16, 10, 16, 10)
 
         title_box = QVBoxLayout()
-        lbl_title = QLabel("⚡ ESP32 Studio")
+        title_box.setSpacing(2)
+        lbl_title = QLabel("ESP32 Studio")
         lbl_title.setObjectName("brandTitle")
-        lbl_sub = QLabel("Multi-Board Firmware Flasher, LoRa Live Packet Inspector & Serial Monitor")
+        lbl_sub = QLabel("Toshelectroapparat — Firmware Flasher & Monitor")
         lbl_sub.setObjectName("brandSubtitle")
         title_box.addWidget(lbl_title)
         title_box.addWidget(lbl_sub)
         header_layout.addLayout(title_box)
         header_layout.addStretch()
 
-        btn_refresh_ports = QPushButton("🔄 Refresh USB Ports")
-        btn_refresh_ports.clicked.connect(self._refresh_ports)
-        header_layout.addWidget(btn_refresh_ports)
+        # Server status
+        self.lbl_server = QLabel("Server: tekshirilmoqda...")
+        self.lbl_server.setStyleSheet("color: #fbbf24; font-weight: 600; font-size: 12px;")
+        header_layout.addWidget(self.lbl_server)
+
+        btn_refresh = QPushButton("Portlarni yangilash")
+        btn_refresh.clicked.connect(self._refresh_ports)
+        header_layout.addWidget(btn_refresh)
 
         main_layout.addWidget(header)
 
-        # ── Main Tabs ──
+        # ── Tabs ──
         self.tabs = QTabWidget()
         main_layout.addWidget(self.tabs, 1)
 
-        # Build tabs
-        self.tab_flasher = self._create_flasher_tab()
-        self.tab_monitor = self._create_monitor_tab()
-        self.tab_inspector = self._create_inspector_tab()
-        self.tab_config = self._create_config_tab()
-        self.tab_pio = self._create_pio_tab()
+        self.tabs.addTab(self._create_flasher_tab(), "Firmware Flasher")
+        self.tabs.addTab(self._create_monitor_tab(), "Serial Monitor")
+        self.tabs.addTab(self._create_inspector_tab(), "LoRa Inspector")
+        self.tabs.addTab(self._create_settings_tab(), "Sozlamalar")
 
-        self.tabs.addTab(self.tab_flasher, "⚡ ESP32 Flasher (Kod Urish)")
-        self.tabs.addTab(self.tab_monitor, "📺 Dual Serial Monitor")
-        self.tabs.addTab(self.tab_inspector, "📡 LoRa Live Inspector")
-        self.tabs.addTab(self.tab_config, "⚙️ Quick NVS Configurator")
-        self.tabs.addTab(self.tab_pio, "🛠️ PlatformIO Builder")
-
-        # Status Bar
-        self.lbl_status = QLabel("⚡ Tayyor")
+        # Status bar
+        self.lbl_status = QLabel("Tayyor")
         self.lbl_status.setStyleSheet("color: #94a3b8; font-weight: 600; padding: 4px 8px;")
         self.statusBar().addWidget(self.lbl_status)
 
-    # ── Tab 1: ESP32 Flasher ──
+    # ══════════════════════════════════════════════════════════════════════
+    # Tab 1: Firmware Flasher
+    # ══════════════════════════════════════════════════════════════════════
+
     def _create_flasher_tab(self) -> QWidget:
         widget = QWidget()
         layout = QHBoxLayout(widget)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(12)
+        layout.setContentsMargins(6, 6, 6, 6)
+        layout.setSpacing(10)
 
-        # Sol taraf: Konfiguratsiya kartasi
-        left_card = QFrame()
-        left_card.setObjectName("card")
-        left_card.setMaximumWidth(440)
-        left_layout = QVBoxLayout(left_card)
+        # ── Chap panel — Konfiguratsiya ──
+        left = QFrame()
+        left.setObjectName("card")
+        left.setFixedWidth(380)
+        left_layout = QVBoxLayout(left)
         left_layout.setContentsMargins(16, 16, 16, 16)
-        left_layout.setSpacing(12)
+        left_layout.setSpacing(10)
 
-        left_layout.addWidget(self._section_title("🎯 Maqsadli ESP32 Qurilmasi"))
-
-        # Port Tanlash
-        left_layout.addWidget(QLabel("USB Serial Port:"))
+        # USB Port
+        left_layout.addWidget(self._section("USB Port"))
         port_row = QHBoxLayout()
-        self.combo_ports = QComboBox()
-        port_row.addWidget(self.combo_ports, 1)
-        btn_chip_info = QPushButton("🔍 Chip Info")
-        btn_chip_info.clicked.connect(self._on_check_chip_info)
-        port_row.addWidget(btn_chip_info)
+        self.combo_port = QComboBox()
+        port_row.addWidget(self.combo_port, 1)
+        btn_chip = QPushButton("Chip Info")
+        btn_chip.setFixedWidth(80)
+        btn_chip.clicked.connect(self._on_chip_info)
+        port_row.addWidget(btn_chip)
         left_layout.addLayout(port_row)
 
-        # Presetlar (Gateway / Meter / Sensor)
-        left_layout.addWidget(self._section_title("📦 Firmware Manbai"))
-        self.combo_preset = QComboBox()
-        self.combo_preset.addItem("📡 LoRa Gateway (WiFi + Display) [/dev/cu.usbserial-10]", "lora_gateway")
-        self.combo_preset.addItem("⚡ LoRa Electric Meter Node (TE71/TE73 RS-485) [/dev/cu.usbserial-110]", "electricity_lora")
-        self.combo_preset.addItem("🌱 Tuproq / Suv / Gaz Sensor Node", "soil_lora")
-        self.combo_preset.addItem("📂 Fayldan tanlash (.bin)", "custom")
-        self.combo_preset.currentIndexChanged.connect(self._on_preset_changed)
-        left_layout.addWidget(self.combo_preset)
+        # Firmware manbai
+        left_layout.addWidget(self._section("Firmware manbai"))
+        src_row = QHBoxLayout()
+        self.rb_server = QRadioButton("Serverdan")
+        self.rb_local = QRadioButton("Lokal fayl")
+        self.rb_server.setChecked(True)
+        src_group = QButtonGroup(self)
+        src_group.addButton(self.rb_server)
+        src_group.addButton(self.rb_local)
+        self.rb_server.toggled.connect(self._on_source_changed)
+        src_row.addWidget(self.rb_server)
+        src_row.addWidget(self.rb_local)
+        src_row.addStretch()
+        left_layout.addLayout(src_row)
 
-        # File Chooser (Custom .bin)
-        self.file_row_widget = QWidget()
-        file_row = QHBoxLayout(self.file_row_widget)
-        file_row.setContentsMargins(0, 0, 0, 0)
+        # Server filter (sensor turi)
+        self.server_filter_widget = QWidget()
+        sf_layout = QVBoxLayout(self.server_filter_widget)
+        sf_layout.setContentsMargins(0, 0, 0, 0)
+        sf_layout.setSpacing(6)
+        sf_layout.addWidget(self._small_label("Sensor turi:"))
+        filter_row = QHBoxLayout()
+        self.combo_sensor_filter = QComboBox()
+        for key, label in SENSOR_TYPES:
+            self.combo_sensor_filter.addItem(label, key)
+        self.combo_sensor_filter.currentIndexChanged.connect(self._apply_firmware_filter)
+        filter_row.addWidget(self.combo_sensor_filter, 1)
+        btn_refresh_fw = QPushButton("Yangilash")
+        btn_refresh_fw.setFixedWidth(80)
+        btn_refresh_fw.clicked.connect(self._fetch_firmware_list)
+        filter_row.addWidget(btn_refresh_fw)
+        sf_layout.addLayout(filter_row)
+        left_layout.addWidget(self.server_filter_widget)
+
+        # Local file
+        self.local_file_widget = QWidget()
+        lf_layout = QVBoxLayout(self.local_file_widget)
+        lf_layout.setContentsMargins(0, 0, 0, 0)
+        lf_layout.setSpacing(6)
+        lf_layout.addWidget(self._small_label("Firmware fayl (.bin):"))
+        file_row = QHBoxLayout()
         self.edit_bin_path = QLineEdit()
-        self.edit_bin_path.setPlaceholderText("Firmware .bin fayl yo'li...")
-        btn_browse = QPushButton("📁 Browse")
+        self.edit_bin_path.setPlaceholderText("firmware.bin yo'lini tanlang...")
+        btn_browse = QPushButton("Tanlash")
+        btn_browse.setFixedWidth(80)
         btn_browse.clicked.connect(self._on_browse_bin)
         file_row.addWidget(self.edit_bin_path, 1)
         file_row.addWidget(btn_browse)
-        self.file_row_widget.setVisible(False)
-        left_layout.addWidget(self.file_row_widget)
+        lf_layout.addLayout(file_row)
+        self.local_file_widget.setVisible(False)
+        left_layout.addWidget(self.local_file_widget)
 
-        # Advanced Settings
-        left_layout.addWidget(self._section_title("⚙️ Flashing Sozlamalari"))
+        # Tanlangan firmware ma'lumoti
+        left_layout.addWidget(self._section("Tanlangan firmware"))
+        self.lbl_fw_info = QLabel("Firmware tanlanmagan")
+        self.lbl_fw_info.setStyleSheet("color: #94a3b8; font-size: 12px;")
+        self.lbl_fw_info.setWordWrap(True)
+        left_layout.addWidget(self.lbl_fw_info)
 
-        left_layout.addWidget(QLabel("Baud Rate:"))
+        # Flash sozlamalari
+        left_layout.addWidget(self._section("Flash sozlamalari"))
+        left_layout.addWidget(self._small_label("Tezlik (Baud):"))
         self.combo_baud = QComboBox()
-        self.combo_baud.addItems(["460800 (Tavsiya etiladi)", "921600 (Juda tez)", "115200 (Standart)", "230400"])
+        self.combo_baud.addItems(["460800", "921600", "230400", "115200"])
         left_layout.addWidget(self.combo_baud)
 
-        left_layout.addWidget(QLabel("Flash Address Offset:"))
-        self.edit_offset = QLineEdit("0x10000")
-        left_layout.addWidget(self.edit_offset)
-
-        self.chk_erase = QCheckBox("Yuklashdan oldin xotirani to'liq tozalash (Erase Flash)")
+        self.chk_erase = QCheckBox("Oldin xotirani tozalash (Erase Flash)")
         left_layout.addWidget(self.chk_erase)
 
         left_layout.addStretch()
 
-        # Action Buttons
-        self.btn_flash = QPushButton("⚡ FLASH FIRMWARE TO ESP32")
+        # Flash tugmasi
+        self.btn_flash = QPushButton("FLASH QILISH")
         self.btn_flash.setObjectName("btnPrimary")
-        self.btn_flash.setMinimumHeight(44)
-        self.btn_flash.clicked.connect(self._on_start_flash)
+        self.btn_flash.setMinimumHeight(48)
+        self.btn_flash.setStyleSheet("""
+            QPushButton {
+                background-color: #0284c7;
+                color: #ffffff;
+                border: 1px solid #0369a1;
+                font-weight: 800;
+                font-size: 15px;
+                border-radius: 10px;
+            }
+            QPushButton:hover { background-color: #0369a1; }
+            QPushButton:disabled { background-color: #1e293b; color: #475569; border-color: #334155; }
+        """)
+        self.btn_flash.clicked.connect(self._on_flash)
         left_layout.addWidget(self.btn_flash)
 
-        self.btn_erase_only = QPushButton("🗑️ Erase Flash Only")
-        self.btn_erase_only.setObjectName("btnDanger")
-        self.btn_erase_only.clicked.connect(self._on_erase_flash_only)
-        left_layout.addWidget(self.btn_erase_only)
+        btn_erase = QPushButton("Faqat xotirani tozalash")
+        btn_erase.setObjectName("btnDanger")
+        btn_erase.clicked.connect(self._on_erase_only)
+        left_layout.addWidget(btn_erase)
 
-        layout.addWidget(left_card)
+        layout.addWidget(left)
 
-        # O'ng taraf: Terminal & Progress Bar
-        right_card = QFrame()
-        right_card.setObjectName("card")
-        right_layout = QVBoxLayout(right_card)
-        right_layout.setContentsMargins(16, 16, 16, 16)
-        right_layout.setSpacing(10)
+        # ── O'ng panel — Firmware jadvali va Terminal ──
+        right = QWidget()
+        right_layout = QVBoxLayout(right)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setSpacing(8)
 
-        right_layout.addWidget(self._section_title("🖥️ Flashing Terminal Log"))
+        # Firmware jadvali
+        fw_card = QFrame()
+        fw_card.setObjectName("card")
+        fw_card_layout = QVBoxLayout(fw_card)
+        fw_card_layout.setContentsMargins(12, 12, 12, 12)
+        fw_card_layout.setSpacing(6)
+
+        fw_header = QHBoxLayout()
+        fw_header.addWidget(self._section("Mavjud firmwarelar"))
+        self.lbl_fw_count = QLabel("")
+        self.lbl_fw_count.setStyleSheet("color: #64748b; font-size: 12px;")
+        fw_header.addStretch()
+        fw_header.addWidget(self.lbl_fw_count)
+        fw_card_layout.addLayout(fw_header)
+
+        self.table_fw = QTableWidget(0, 7)
+        self.table_fw.setHorizontalHeaderLabels([
+            "Versiya", "Turi", "Rejim", "Roli", "Hajmi", "Sana", "Holati"
+        ])
+        self.table_fw.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.table_fw.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.table_fw.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        self.table_fw.setAlternatingRowColors(True)
+        self.table_fw.setStyleSheet("""
+            QTableWidget {
+                background-color: #020617;
+                border: 1px solid #1e293b;
+                border-radius: 6px;
+                gridline-color: #1e293b;
+                font-size: 12px;
+            }
+            QTableWidget::item { padding: 4px 8px; }
+            QTableWidget::item:selected {
+                background-color: #0c4a6e;
+                color: #38bdf8;
+            }
+            QHeaderView::section {
+                background-color: #0f172a;
+                color: #94a3b8;
+                border: 1px solid #1e293b;
+                padding: 6px;
+                font-weight: 700;
+                font-size: 11px;
+            }
+            QTableWidget::item:alternate { background-color: #0a0f1a; }
+        """)
+        self.table_fw.selectionModel().selectionChanged.connect(self._on_fw_selected)
+        fw_card_layout.addWidget(self.table_fw, 1)
+
+        right_layout.addWidget(fw_card, 1)
+
+        # Terminal va Progress
+        term_card = QFrame()
+        term_card.setObjectName("card")
+        term_card_layout = QVBoxLayout(term_card)
+        term_card_layout.setContentsMargins(12, 12, 12, 12)
+        term_card_layout.setSpacing(6)
+
+        term_card_layout.addWidget(self._section("Terminal"))
 
         self.progress_bar = QProgressBar()
         self.progress_bar.setValue(0)
-        right_layout.addWidget(self.progress_bar)
+        term_card_layout.addWidget(self.progress_bar)
 
         self.term_flash = QTextEdit()
         self.term_flash.setObjectName("terminalOutput")
         self.term_flash.setReadOnly(True)
-        right_layout.addWidget(self.term_flash, 1)
+        self.term_flash.setMinimumHeight(140)
+        term_card_layout.addWidget(self.term_flash, 1)
 
-        layout.addWidget(right_card, 1)
+        right_layout.addWidget(term_card, 1)
 
+        layout.addWidget(right, 1)
         return widget
 
-    # ── Tab 2: Dual Serial Monitor ──
+    # ══════════════════════════════════════════════════════════════════════
+    # Tab 2: Dual Serial Monitor
+    # ══════════════════════════════════════════════════════════════════════
+
     def _create_monitor_tab(self) -> QWidget:
         widget = QWidget()
         layout = QVBoxLayout(widget)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(10)
+        layout.setContentsMargins(6, 6, 6, 6)
+        layout.setSpacing(8)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
 
-        # Port 1 Monitor Card (Gateway)
-        self.mon1_widget = self._create_single_monitor_box("📡 Gateway Port (/dev/cu.usbserial-10)", 0)
+        self.mon1_widget = self._create_monitor_box("Port 1 (Gateway)", 0)
         splitter.addWidget(self.mon1_widget)
 
-        # Port 2 Monitor Card (Meter Node)
-        self.mon2_widget = self._create_single_monitor_box("⚡ Meter Node Port (/dev/cu.usbserial-110)", 1)
+        self.mon2_widget = self._create_monitor_box("Port 2 (Node)", 1)
         splitter.addWidget(self.mon2_widget)
 
         layout.addWidget(splitter, 1)
         return widget
 
-    def _create_single_monitor_box(self, default_title: str, idx: int) -> QWidget:
+    def _create_monitor_box(self, title: str, idx: int) -> QWidget:
         card = QFrame()
         card.setObjectName("card")
         layout = QVBoxLayout(card)
         layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(8)
+        layout.setSpacing(6)
 
-        lbl_title = QLabel(default_title)
-        lbl_title.setObjectName("sectionTitle")
-        layout.addWidget(lbl_title)
+        layout.addWidget(self._section(title))
 
-        # Control row
         ctrl_row = QHBoxLayout()
         combo_port = QComboBox()
-
         combo_baud = QComboBox()
         combo_baud.addItems(["115200", "9600", "57600", "230400", "460800"])
-
-        btn_conn = QPushButton("🔌 Start")
+        btn_conn = QPushButton("Boshlash")
         btn_conn.setObjectName("btnSuccess")
-
-        btn_clear = QPushButton("🧹 Clear")
-        btn_save = QPushButton("💾 Save")
+        btn_clear = QPushButton("Tozalash")
+        btn_save = QPushButton("Saqlash")
 
         ctrl_row.addWidget(combo_port, 1)
         ctrl_row.addWidget(combo_baud)
@@ -254,289 +377,429 @@ class ESP32StudioWindow(QMainWindow):
         ctrl_row.addWidget(btn_save)
         layout.addLayout(ctrl_row)
 
-        # Terminal
         term = QTextEdit()
         term.setObjectName("terminalOutput")
         term.setReadOnly(True)
         layout.addWidget(term, 1)
 
-        # Command input row
         cmd_row = QHBoxLayout()
         edit_cmd = QLineEdit()
-        edit_cmd.setPlaceholderText("Send command (e.g. AT, reset, STATUS)...")
-        btn_send = QPushButton("Send")
-
+        edit_cmd.setPlaceholderText("Buyruq yuboring...")
+        btn_send = QPushButton("Yuborish")
         cmd_row.addWidget(edit_cmd, 1)
         cmd_row.addWidget(btn_send)
         layout.addLayout(cmd_row)
 
-        # Store references
-        setattr(self, f"mon_port_combo_{idx}", combo_port)
-        setattr(self, f"mon_baud_combo_{idx}", combo_baud)
-        setattr(self, f"mon_btn_conn_{idx}", btn_conn)
+        setattr(self, f"mon_port_{idx}", combo_port)
+        setattr(self, f"mon_baud_{idx}", combo_baud)
+        setattr(self, f"mon_btn_{idx}", btn_conn)
         setattr(self, f"mon_term_{idx}", term)
         setattr(self, f"mon_cmd_{idx}", edit_cmd)
-        setattr(self, f"mon_btn_send_{idx}", btn_send)
 
         btn_conn.clicked.connect(lambda: self._toggle_monitor(idx))
         btn_clear.clicked.connect(term.clear)
-        btn_save.clicked.connect(lambda: self._save_log_file(term))
-        btn_send.clicked.connect(lambda: self._send_monitor_cmd(idx))
-        edit_cmd.returnPressed.connect(lambda: self._send_monitor_cmd(idx))
+        btn_save.clicked.connect(lambda: self._save_log(term))
+        btn_send.clicked.connect(lambda: self._send_cmd(idx))
+        edit_cmd.returnPressed.connect(lambda: self._send_cmd(idx))
 
         return card
 
-    # ── Tab 3: LoRa Live Inspector ──
+    # ══════════════════════════════════════════════════════════════════════
+    # Tab 3: LoRa Inspector
+    # ══════════════════════════════════════════════════════════════════════
+
     def _create_inspector_tab(self) -> QWidget:
         widget = QWidget()
         layout = QVBoxLayout(widget)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(10)
+        layout.setContentsMargins(6, 6, 6, 6)
+        layout.setSpacing(8)
 
-        # Live Metric Cards Row
+        # Metric cards
         cards_row = QHBoxLayout()
-
-        self.lbl_card_meter = self._create_metric_card("📌 METER SERIAL", "N/A", cards_row)
-        self.lbl_card_v = self._create_metric_card("⚡ VOLTAGE L1", "0.0 V", cards_row)
-        self.lbl_card_i = self._create_metric_card("🔌 CURRENT L1", "0.0 A", cards_row)
-        self.lbl_card_p = self._create_metric_card("💡 POWER", "0.0 kW", cards_row)
-        self.lbl_card_e = self._create_metric_card("📊 ENERGY", "0.00 kWh", cards_row)
-        self.lbl_card_rssi = self._create_metric_card("📡 LORA RSSI / SNR", "N/A", cards_row)
-
+        self.lbl_card_meter = self._metric_card("METER SERIAL", "—", cards_row)
+        self.lbl_card_v = self._metric_card("KUCHLANISH L1", "0.0 V", cards_row)
+        self.lbl_card_i = self._metric_card("TOK L1", "0.0 A", cards_row)
+        self.lbl_card_p = self._metric_card("QUVVAT", "0.0 kW", cards_row)
+        self.lbl_card_e = self._metric_card("ENERGIYA", "0.00 kWh", cards_row)
+        self.lbl_card_rssi = self._metric_card("RSSI / SNR", "—", cards_row)
         layout.addLayout(cards_row)
 
-        # History Table
-        lbl_tbl = QLabel("📋 Recevied LoRa Packet Log History")
-        lbl_tbl.setObjectName("sectionTitle")
-        layout.addWidget(lbl_tbl)
-
+        # Paket tarixi
+        layout.addWidget(self._section("Qabul qilingan LoRa paketlar"))
         self.table_lora = QTableWidget(0, 9)
         self.table_lora.setHorizontalHeaderLabels([
-            "Time", "Type", "Meter Serial", "Voltage (V)", "Current (A)", "Power (kW)", "Energy (kWh)", "RSSI / SNR", "CRC Status"
+            "Vaqt", "Turi", "Meter Serial", "Kuchlanish", "Tok", "Quvvat", "Energiya", "RSSI/SNR", "CRC"
         ])
         self.table_lora.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.table_lora.setStyleSheet("""
+            QTableWidget {
+                background-color: #020617;
+                border: 1px solid #1e293b;
+                border-radius: 6px;
+                gridline-color: #1e293b;
+            }
+            QHeaderView::section {
+                background-color: #0f172a;
+                color: #94a3b8;
+                border: 1px solid #1e293b;
+                padding: 6px;
+                font-weight: 700;
+            }
+        """)
         layout.addWidget(self.table_lora, 1)
 
         return widget
 
-    def _create_metric_card(self, title: str, default_val: str, parent_layout: QHBoxLayout) -> QLabel:
+    def _metric_card(self, title: str, val: str, parent: QHBoxLayout) -> QLabel:
         card = QFrame()
         card.setObjectName("card")
         l = QVBoxLayout(card)
         l.setContentsMargins(12, 10, 12, 10)
         lbl_t = QLabel(title)
-        lbl_t.setStyleSheet("color: #64748b; font-weight: 700; font-size: 11px;")
-        lbl_v = QLabel(default_val)
-        lbl_v.setStyleSheet("color: #38bdf8; font-weight: 900; font-size: 18px;")
+        lbl_t.setStyleSheet("color: #64748b; font-weight: 700; font-size: 10px; letter-spacing: 1px;")
+        lbl_v = QLabel(val)
+        lbl_v.setStyleSheet("color: #38bdf8; font-weight: 900; font-size: 17px;")
         l.addWidget(lbl_t)
         l.addWidget(lbl_v)
-        parent_layout.addWidget(card, 1)
+        parent.addWidget(card, 1)
         return lbl_v
 
-    # ── Tab 4: Quick NVS Configurator ──
-    def _create_config_tab(self) -> QWidget:
+    # ══════════════════════════════════════════════════════════════════════
+    # Tab 4: Sozlamalar
+    # ══════════════════════════════════════════════════════════════════════
+
+    def _create_settings_tab(self) -> QWidget:
         widget = QWidget()
         layout = QVBoxLayout(widget)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(12)
-
-        card = QFrame()
-        card.setObjectName("card")
-        card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(20, 20, 20, 20)
-        card_layout.setSpacing(14)
-
-        card_layout.addWidget(self._section_title("⚙️ ESP32 EEPROM / NVS WiFi & Server Konfiguratori"))
-        lbl_info = QLabel("ESP32 ga qayta firmware urmasdan, serial port orqali WiFi va Server sozlamalarini yozish va yangilash.")
-        lbl_info.setStyleSheet("color: #94a3b8;")
-        card_layout.addWidget(lbl_info)
-
-        grid = QVBoxLayout()
-
-        grid.addWidget(QLabel("Target Serial Port:"))
-        self.combo_cfg_port = QComboBox()
-        grid.addWidget(self.combo_cfg_port)
-
-        grid.addWidget(QLabel("WiFi SSID:"))
-        self.edit_cfg_ssid = QLineEdit("12")
-        grid.addWidget(self.edit_cfg_ssid)
-
-        grid.addWidget(QLabel("WiFi Password:"))
-        self.edit_cfg_pass = QLineEdit("12345678")
-        grid.addWidget(self.edit_cfg_pass)
-
-        grid.addWidget(QLabel("Backend Server URL:"))
-        self.edit_cfg_url = QLineEdit("https://ss.boos.uz")
-        grid.addWidget(self.edit_cfg_url)
-
-        grid.addWidget(QLabel("Device Token:"))
-        self.edit_cfg_token = QLineEdit("T30gwzZJ6YTvQeLRMCZyTi-GBAYogsQV")
-        grid.addWidget(self.edit_cfg_token)
-
-        card_layout.addLayout(grid)
-
-        row_btn = QHBoxLayout()
-        btn_write = QPushButton("💾 Write Config to ESP32 Serial")
-        btn_write.setObjectName("btnPrimary")
-        btn_write.clicked.connect(self._on_write_nvs_config)
-
-        btn_reboot = QPushButton("🔄 Soft Reboot ESP32")
-        btn_reboot.clicked.connect(self._on_reboot_esp32)
-
-        row_btn.addWidget(btn_write)
-        row_btn.addWidget(btn_reboot)
-        card_layout.addLayout(row_btn)
-
-        card_layout.addStretch()
-        layout.addWidget(card)
-        return widget
-
-    # ── Tab 5: PlatformIO Builder ──
-    def _create_pio_tab(self) -> QWidget:
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
-        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setContentsMargins(6, 6, 6, 6)
         layout.setSpacing(10)
 
         card = QFrame()
         card.setObjectName("card")
-        card_layout = QVBoxLayout(card)
+        card.setMaximumWidth(600)
+        c = QVBoxLayout(card)
+        c.setContentsMargins(20, 20, 20, 20)
+        c.setSpacing(12)
 
-        card_layout.addWidget(self._section_title("🛠️ PlatformIO Environment Builder"))
+        c.addWidget(self._section("Server sozlamalari"))
 
-        lbl_pio = QLabel(f"PlatformIO CLI Path: {self.controller.pio_path or 'Topilmadi (Install PlatformIO)'}")
-        lbl_pio.setStyleSheet("color: #38bdf8; font-weight: 600;")
-        card_layout.addWidget(lbl_pio)
+        c.addWidget(self._small_label("Backend Server URL:"))
+        self.edit_server = QLineEdit(self.settings.value("server_url", DEFAULT_SERVER))
+        self.edit_server.textEdited.connect(lambda v: self._save_setting("server_url", v.strip()))
+        c.addWidget(self.edit_server)
 
-        row_envs = QHBoxLayout()
-        row_envs.addWidget(QLabel("Environment:"))
-        self.combo_pio_env = QComboBox()
-        self.combo_pio_env.addItems([
-            "lora_gateway", "lora_gateway_debug",
-            "electricity", "electricity_debug", "electricity_test",
-            "soil_lora", "soil_wifi_lcd", "sound_wifi"
-        ])
-        row_envs.addWidget(self.combo_pio_env, 1)
+        c.addWidget(self._small_label("Device Token:"))
+        self.edit_token = QLineEdit(self.settings.value("device_token", DEFAULT_TOKEN))
+        self.edit_token.textEdited.connect(lambda v: self._save_setting("device_token", v.strip()))
+        c.addWidget(self.edit_token)
 
-        btn_build = QPushButton("🔨 Build Only")
-        btn_build.clicked.connect(self._on_pio_build)
-        row_envs.addWidget(btn_build)
+        btn_apply = QPushButton("Saqlash va qayta ulanish")
+        btn_apply.setObjectName("btnPrimary")
+        btn_apply.clicked.connect(self._apply_server_settings)
+        c.addWidget(btn_apply)
 
-        card_layout.addLayout(row_envs)
+        c.addWidget(self._section("PlatformIO"))
+        pio_text = self.controller.pio_path or "Topilmadi"
+        proj_text = self.controller.project_root or "Topilmadi"
+        lbl_pio = QLabel(f"PIO CLI: {pio_text}")
+        lbl_pio.setStyleSheet("color: #64748b; font-size: 12px;")
+        lbl_proj = QLabel(f"Loyiha: {proj_text}")
+        lbl_proj.setStyleSheet("color: #64748b; font-size: 12px;")
+        c.addWidget(lbl_pio)
+        c.addWidget(lbl_proj)
 
-        self.term_pio = QTextEdit()
-        self.term_pio.setObjectName("terminalOutput")
-        self.term_pio.setReadOnly(True)
-        card_layout.addWidget(self.term_pio, 1)
-
+        c.addStretch()
         layout.addWidget(card)
+        layout.addStretch()
         return widget
 
-    # ── Helpers & Event Handlers ──
-    def _section_title(self, text: str) -> QLabel:
+    # ══════════════════════════════════════════════════════════════════════
+    # UI Helpers
+    # ══════════════════════════════════════════════════════════════════════
+
+    def _section(self, text: str) -> QLabel:
         lbl = QLabel(text)
         lbl.setObjectName("sectionTitle")
         return lbl
 
+    def _small_label(self, text: str) -> QLabel:
+        lbl = QLabel(text)
+        lbl.setStyleSheet("color: #64748b; font-size: 12px; font-weight: 600;")
+        return lbl
+
+    def _save_setting(self, key: str, value):
+        self.settings.setValue(key, value)
+
+    # ══════════════════════════════════════════════════════════════════════
+    # Port Management
+    # ══════════════════════════════════════════════════════════════════════
+
     def _refresh_ports(self):
         ports = EsptoolService.list_serial_ports()
-        self.combo_ports.clear()
-        self.mon_port_combo_0.clear()
-        self.mon_port_combo_1.clear()
-        self.combo_cfg_port.clear()
+        combos = [self.combo_port]
+        for i in range(2):
+            combos.append(getattr(self, f"mon_port_{i}"))
 
-        if not ports:
-            for combo in [self.combo_ports, self.mon_port_combo_0, self.mon_port_combo_1, self.combo_cfg_port]:
-                combo.addItem("Port topilmadi", "")
+        for c in combos:
+            c.clear()
+            if not ports:
+                c.addItem("Port topilmadi", "")
+            else:
+                for p in ports:
+                    c.addItem(p["display_name"], p["device"])
+
+        # Auto-select known ports
+        for i in range(self.combo_port.count()):
+            val = self.combo_port.itemData(i) or ""
+            if "usbserial-10" in val:
+                self.mon_port_0.setCurrentIndex(i)
+            elif "usbserial-110" in val:
+                self.mon_port_1.setCurrentIndex(i)
+
+        self.lbl_status.setText(f"{len(ports)} ta USB port topildi")
+
+    # ══════════════════════════════════════════════════════════════════════
+    # Server / Firmware
+    # ══════════════════════════════════════════════════════════════════════
+
+    def _apply_server_settings(self):
+        server = self.edit_server.text().strip()
+        token = self.edit_token.text().strip()
+        self.settings.setValue("server_url", server)
+        self.settings.setValue("device_token", token)
+        self.api = ApiClient(server, token)
+        self._fetch_firmware_list()
+        QMessageBox.information(self, "Saqlandi", "Server sozlamalari saqlandi.")
+
+    def _fetch_firmware_list(self):
+        self.lbl_server.setText("Server: yuklanmoqda...")
+        self.lbl_server.setStyleSheet("color: #fbbf24; font-weight: 600; font-size: 12px;")
+        self.controller.fetch_firmware_list(
+            self.api,
+            result_cb=self._on_firmware_list,
+            error_cb=self._on_firmware_list_error,
+        )
+
+    def _on_firmware_list(self, items: list):
+        self._firmware_list = items
+        self.lbl_server.setText(f"Server: ulangan ({len(items)} firmware)")
+        self.lbl_server.setStyleSheet("color: #4ade80; font-weight: 600; font-size: 12px;")
+        self._apply_firmware_filter()
+
+    def _on_firmware_list_error(self, err: str):
+        self._firmware_list = []
+        self.lbl_server.setText("Server: ulanib bo'lmadi")
+        self.lbl_server.setStyleSheet("color: #f87171; font-weight: 600; font-size: 12px;")
+        self._apply_firmware_filter()
+
+    def _apply_firmware_filter(self):
+        filter_key = self.combo_sensor_filter.currentData() or "all"
+        filtered = self._firmware_list
+
+        if filter_key != "all":
+            filtered = [
+                fw for fw in self._firmware_list
+                if (fw.get("firmware_mode") == filter_key
+                    or fw.get("utility_type") == filter_key)
+            ]
+
+        self.table_fw.setRowCount(0)
+        for fw in filtered:
+            row = self.table_fw.rowCount()
+            self.table_fw.insertRow(row)
+
+            version = fw.get("version", "?")
+            utility = fw.get("utility_type", "—")
+            mode = fw.get("firmware_mode", "—")
+            role = fw.get("device_role", "—") or "—"
+            size = fw.get("size", 0)
+            size_str = f"{size / 1024:.0f} KB" if size else "—"
+            uploaded = fw.get("uploaded", 0)
+            date_str = datetime.fromtimestamp(uploaded).strftime("%Y-%m-%d") if uploaded else "—"
+            active = fw.get("active", False)
+            stable = fw.get("is_stable", False)
+            status = ""
+            if active:
+                status += "Aktiv"
+            if stable:
+                status += " Barqaror" if status else "Barqaror"
+            if not status:
+                status = "Noaktiv"
+
+            items = [version, utility, mode, role, size_str, date_str, status]
+            for col, text in enumerate(items):
+                item = QTableWidgetItem(str(text))
+                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                if col == 6:  # Status column color
+                    if active:
+                        item.setForeground(Qt.GlobalColor.green)
+                    else:
+                        item.setForeground(Qt.GlobalColor.gray)
+                self.table_fw.setItem(row, col, item)
+
+            # Store firmware data in first column item
+            self.table_fw.item(row, 0).setData(Qt.ItemDataRole.UserRole, fw)
+
+        count = self.table_fw.rowCount()
+        self.lbl_fw_count.setText(f"{count} ta firmware" if count else "Firmware topilmadi")
+
+    def _on_fw_selected(self):
+        rows = self.table_fw.selectionModel().selectedRows()
+        if not rows:
+            self._selected_firmware = None
+            self.lbl_fw_info.setText("Firmware tanlanmagan")
             return
 
-        for p in ports:
-            display = p["display_name"]
-            dev = p["device"]
-            for combo in [self.combo_ports, self.mon_port_combo_0, self.mon_port_combo_1, self.combo_cfg_port]:
-                combo.addItem(display, dev)
+        row = rows[0].row()
+        item = self.table_fw.item(row, 0)
+        fw = item.data(Qt.ItemDataRole.UserRole) if item else None
+        if not fw:
+            return
 
-        # Auto-select user requested ports
-        for i in range(self.combo_ports.count()):
-            val = self.combo_ports.itemData(i)
-            if "usbserial-10" in val or "COM10" in val:
-                self.mon_port_combo_0.setCurrentIndex(i)
-            elif "usbserial-110" in val or "COM110" in val:
-                self.mon_port_combo_1.setCurrentIndex(i)
+        self._selected_firmware = fw
+        version = fw.get("version", "?")
+        filename = fw.get("filename", "?")
+        size = fw.get("size", 0)
+        size_str = f"{size / 1024:.0f} KB" if size else "?"
+        utility = fw.get("utility_type", "?")
+        role = fw.get("device_role", "—") or "—"
+        sha = fw.get("sha256", "")[:16]
+        notes = fw.get("release_notes") or fw.get("notes") or ""
 
-        self.lbl_status.setText(f"Ports refresh qilindi: {len(ports)} ta port topildi.")
+        info = (
+            f"Versiya: {version}\n"
+            f"Fayl: {filename}\n"
+            f"Turi: {utility}  |  Roli: {role}\n"
+            f"Hajmi: {size_str}  |  SHA256: {sha}..."
+        )
+        if notes:
+            info += f"\n{notes}"
+        self.lbl_fw_info.setText(info)
 
-    def _on_preset_changed(self, idx: int):
-        data = self.combo_preset.itemData(idx)
-        self.file_row_widget.setVisible(data == "custom")
+    def _on_source_changed(self, checked: bool):
+        is_server = self.rb_server.isChecked()
+        self.server_filter_widget.setVisible(is_server)
+        self.local_file_widget.setVisible(not is_server)
+        self.table_fw.setVisible(is_server)
+        if is_server:
+            self.lbl_fw_info.setText("Jadvaldan firmware tanlang")
+        else:
+            self.lbl_fw_info.setText("Lokal .bin faylni tanlang")
+            self._selected_firmware = None
 
     def _on_browse_bin(self):
-        file_path, _ = QFileDialog.getOpenFileName(self, "Firmware Binary Tanlang", "", "Binary Files (*.bin);;All Files (*)")
-        if file_path:
-            self.edit_bin_path.setText(file_path)
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Firmware faylni tanlang", "", "Binary (*.bin);;Barchasi (*)"
+        )
+        if path:
+            self.edit_bin_path.setText(path)
+            size_kb = os.path.getsize(path) / 1024
+            self.lbl_fw_info.setText(f"Lokal fayl: {os.path.basename(path)}\nHajmi: {size_kb:.0f} KB")
 
-    def _on_check_chip_info(self):
-        port = self.combo_ports.currentData()
+    # ══════════════════════════════════════════════════════════════════════
+    # Flash Actions
+    # ══════════════════════════════════════════════════════════════════════
+
+    def _on_chip_info(self):
+        port = self.combo_port.currentData()
         if not port:
-            QMessageBox.warning(self, "Xato", "Iltimos, USB portni tanlang!")
+            QMessageBox.warning(self, "Xato", "USB portni tanlang!")
             return
+        self.term_flash.append("Chip ma'lumoti tekshirilmoqda...\n")
+        self.controller.fetch_chip_info(port, 115200, self._on_chip_info_result)
 
-        self.term_flash.append(f"\n🔍 Chip diagnostikasi tekshirilmoqda ({port})...\n")
-        self.controller.fetch_chip_info(port, 115200, self._on_chip_info_received)
-
-    def _on_chip_info_received(self, info: dict):
+    def _on_chip_info_result(self, info: dict):
         if info.get("success"):
-            self.term_flash.append(f"✅ Chip Aniqlandi: {info.get('chip_type')}")
-            self.term_flash.append(f"📌 MAC Manzil: {info.get('mac')}")
+            self.term_flash.append(f'<span style="color:#4ade80;">Chip: {info.get("chip_type")}</span>')
+            self.term_flash.append(f'<span style="color:#4ade80;">MAC: {info.get("mac")}</span>')
             if "flash_size" in info:
-                self.term_flash.append(f"💾 Flash Hajmi: {info.get('flash_size')}")
+                self.term_flash.append(f'<span style="color:#4ade80;">Flash: {info.get("flash_size")}</span>')
         else:
-            self.term_flash.append(f"⚠️ Chip diagnostika ma'lumoti:\n{info.get('raw')}")
+            self.term_flash.append(f'<span style="color:#f87171;">Chip aniqlash xatosi</span>')
+            raw = info.get("raw", "")
+            if raw:
+                self.term_flash.append(raw[:500])
 
-    def _on_start_flash(self):
-        port = self.combo_ports.currentData()
+    def _on_flash(self):
+        port = self.combo_port.currentData()
         if not port:
-            QMessageBox.warning(self, "Xato", "Iltimos, USB Serial portni tanlang!")
+            QMessageBox.warning(self, "Xato", "USB portni tanlang!")
             return
-
-        preset = self.combo_preset.currentData()
-        bin_path = ""
-
-        if preset == "custom":
-            bin_path = self.edit_bin_path.text().strip()
-        else:
-            root = self.controller.project_root
-            if root:
-                bin_path = FlashService.find_compiled_bin(root, preset)
-
-        if not bin_path or not os.path.exists(bin_path):
-            QMessageBox.warning(
-                self, "Firmware Topilmadi",
-                f"Tanlangan preset firmware.bin fayli topilmadi.\n"
-                f"Iltimos, avval PlatformIO tabida build qiling yoki 'Custom .bin' orqali faylni ko'rsating.\n\nYo'l: {bin_path}"
-            )
-            return
-
-        baud_raw = self.combo_baud.currentText().split()[0]
-        baud = int(baud_raw)
-        offset = self.edit_offset.text().strip() or "0x10000"
-        erase_first = self.chk_erase.isChecked()
 
         self.term_flash.clear()
         self.progress_bar.setValue(0)
+
+        if self.rb_server.isChecked():
+            # Serverdan yuklab olish va flash
+            if not self._selected_firmware:
+                QMessageBox.warning(self, "Xato", "Jadvaldan firmware tanlang!")
+                return
+            self._flash_from_server(port)
+        else:
+            # Lokal fayldan flash
+            bin_path = self.edit_bin_path.text().strip()
+            if not bin_path or not os.path.exists(bin_path):
+                QMessageBox.warning(self, "Xato", "Firmware fayl topilmadi!")
+                return
+            self._flash_bin(port, bin_path)
+
+    def _flash_from_server(self, port: str):
+        """Serverdan yuklab olish va flash qilish."""
+        fw = self._selected_firmware
+        filename = fw.get("filename", "")
+        dest_path = os.path.join(self._cache_dir, filename)
+
+        # Cache tekshirish — allaqachon yuklab olingan bo'lsa qayta yuklamaydi
+        expected_size = fw.get("size", 0)
+        if os.path.exists(dest_path) and expected_size:
+            actual_size = os.path.getsize(dest_path)
+            if actual_size == expected_size:
+                self._log("Firmware keshdan olinmoqda...", "#38bdf8")
+                self._flash_bin(port, dest_path)
+                return
+
+        self.btn_flash.setEnabled(False)
+        self._log(f"Serverdan yuklab olinmoqda: {filename}...", "#38bdf8")
+
+        self._pending_flash_port = port
+        self.controller.download_firmware(
+            api=self.api,
+            filename=filename,
+            dest_path=dest_path,
+            log_cb=self._on_flash_log,
+            prog_cb=self.progress_bar.setValue,
+            finish_cb=self._on_download_finished,
+        )
+
+    def _on_download_finished(self, success: bool, result: str):
+        if success:
+            self._log("Yuklab olindi. Flash boshlanmoqda...", "#4ade80")
+            self.progress_bar.setValue(0)
+            port = getattr(self, "_pending_flash_port", "")
+            if port:
+                self._flash_bin(port, result)
+            else:
+                self.btn_flash.setEnabled(True)
+        else:
+            self._log(f"Yuklash xatosi: {result}", "#f87171")
+            self.btn_flash.setEnabled(True)
+
+    def _flash_bin(self, port: str, bin_path: str):
+        """Tayyor bin faylni ESP32 ga yuklash."""
+        baud = int(self.combo_baud.currentText())
+        erase = self.chk_erase.isChecked()
+
         self.btn_flash.setEnabled(False)
 
         ok, msg = self.controller.start_direct_flash(
             port=port,
             bin_path=bin_path,
-            offset=offset,
             baud=baud,
-            erase_first=erase_first,
+            erase_first=erase,
             log_cb=self._on_flash_log,
             prog_cb=self.progress_bar.setValue,
-            finish_cb=self._on_flash_finished
+            finish_cb=self._on_flash_finished,
         )
-
         if not ok:
             QMessageBox.warning(self, "Xato", msg)
             self.btn_flash.setEnabled(True)
@@ -548,30 +811,38 @@ class ESP32StudioWindow(QMainWindow):
     def _on_flash_finished(self, success: bool, msg: str):
         self.btn_flash.setEnabled(True)
         if success:
-            QMessageBox.information(self, "Muvaffaqiyat", msg)
+            self._log(f"Muvaffaqiyat: {msg}", "#4ade80")
+            self.lbl_status.setText("Firmware yuklandi!")
         else:
-            QMessageBox.critical(self, "Flashing Xatosi", msg)
+            self._log(f"Xato: {msg}", "#f87171")
 
-    def _on_erase_flash_only(self):
-        port = self.combo_ports.currentData()
+    def _on_erase_only(self):
+        port = self.combo_port.currentData()
         if not port:
             return
         reply = QMessageBox.question(
             self, "Tasdiqlang",
-            f"{port} mikrokontrollerining flash xotirasi tozalanadi. Davom etasizmi?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            f"{port} flash xotirasi tozalanadi. Davom etasizmi?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if reply == QMessageBox.StandardButton.Yes:
-            self.term_flash.append(f"🗑️ Flash tozalash boshlandi ({port})...")
+            self._log(f"Flash tozalanmoqda: {port}...", "#fbbf24")
             proc = EsptoolService.erase_flash(port)
-            out, err = proc.communicate()
-            self.term_flash.append(out)
+            out, _ = proc.communicate()
+            self._log(out or "Tozalandi", "#4ade80")
 
-    # ── Serial Monitor & LoRa Inspector Integration ──
+    def _log(self, text: str, color: str = "#cbd5e1"):
+        self.term_flash.append(f'<span style="color:{color};">{text}</span>')
+        self.term_flash.moveCursor(QTextCursor.MoveOperation.End)
+
+    # ══════════════════════════════════════════════════════════════════════
+    # Serial Monitor
+    # ══════════════════════════════════════════════════════════════════════
+
     def _toggle_monitor(self, idx: int):
-        combo_p = getattr(self, f"mon_port_combo_{idx}")
-        combo_b = getattr(self, f"mon_baud_combo_{idx}")
-        btn_c = getattr(self, f"mon_btn_conn_{idx}")
+        combo_p = getattr(self, f"mon_port_{idx}")
+        combo_b = getattr(self, f"mon_baud_{idx}")
+        btn = getattr(self, f"mon_btn_{idx}")
         term = getattr(self, f"mon_term_{idx}")
 
         port = combo_p.currentData()
@@ -581,35 +852,33 @@ class ESP32StudioWindow(QMainWindow):
         if idx in self._serial_workers and self._serial_workers[idx].isRunning():
             self.controller.stop_serial_monitor(port)
             self._serial_workers.pop(idx, None)
-            btn_c.setText("🔌 Start")
-            btn_c.setObjectName("btnSuccess")
-            btn_c.setStyleSheet("")
-            term.append(f"\n[SYSTEM] Serial Monitor to'xtatildi ({port})\n")
+            btn.setText("Boshlash")
+            btn.setObjectName("btnSuccess")
+            term.append('<span style="color:#94a3b8;">[Monitor to\'xtatildi]</span>')
         else:
             baud = int(combo_b.currentText())
-            term.append(f"\n[SYSTEM] Ulanmoqda: {port} @ {baud} baud...\n")
+            term.append(f'<span style="color:#94a3b8;">[Ulanmoqda: {port} @ {baud}]</span>')
 
             def _on_data(p, line):
                 ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
                 term.append(f'<span style="color:#64748b;">[{ts}]</span> {line}')
                 term.moveCursor(QTextCursor.MoveOperation.End)
+                # LoRa Inspector parsing
+                decoded = LoRaPacketDecoder.parse_serial_log_line(line)
+                if decoded:
+                    self._update_inspector(decoded)
 
-                # Live LoRa Packet Inspector parsing
-                decoded_info = LoRaPacketDecoder.parse_serial_log_line(line)
-                if decoded_info:
-                    self._update_inspector_ui(decoded_info)
-
-            def _on_status(p, connected, status_msg):
-                term.append(f'<span style="color:#38bdf8;">[STATUS] {status_msg}</span>')
+            def _on_status(p, connected, msg):
+                term.append(f'<span style="color:#38bdf8;">[{msg}]</span>')
 
             worker = self.controller.start_serial_monitor(port, baud, _on_data, _on_status)
             self._serial_workers[idx] = worker
-            btn_c.setText("⏹ Stop")
-            btn_c.setObjectName("btnDanger")
+            btn.setText("To'xtatish")
+            btn.setObjectName("btnDanger")
 
-    def _update_inspector_ui(self, info: dict):
-        rssi_text = f"{info.get('rssi', 'N/A')} dBm / {info.get('snr', 'N/A')} dB" if "rssi" in info else "N/A"
-        if "rssi" in info:
+    def _update_inspector(self, info: dict):
+        rssi_text = f"{info.get('rssi', '—')} / {info.get('snr', '—')}" if "rssi" in info else ""
+        if rssi_text:
             self.lbl_card_rssi.setText(rssi_text)
 
         pkt = info.get("packet")
@@ -617,93 +886,77 @@ class ESP32StudioWindow(QMainWindow):
             return
 
         if pkt.get("type") == "ELECTRICITY_UPLINK":
-            serial_no = pkt.get("meter_serial", "N/A")
-            v_l1 = pkt["voltage_v"]["l1"]
-            i_l1 = pkt["current_a"]["l1"]
-            power_kw = pkt.get("power_kw", 0.0)
-            energy_kwh = pkt.get("energy_kwh", 0.0)
+            v1 = pkt["voltage_v"]["l1"]
+            i1 = pkt["current_a"]["l1"]
+            pw = pkt.get("power_kw", 0.0)
+            en = pkt.get("energy_kwh", 0.0)
+            serial_no = pkt.get("meter_serial", "—")
 
             self.lbl_card_meter.setText(serial_no)
-            self.lbl_card_v.setText(f"{v_l1:.1f} V")
-            self.lbl_card_i.setText(f"{i_l1:.2f} A")
-            self.lbl_card_p.setText(f"{power_kw:.3f} kW")
-            self.lbl_card_e.setText(f"{energy_kwh:.2f} kWh")
+            self.lbl_card_v.setText(f"{v1:.1f} V")
+            self.lbl_card_i.setText(f"{i1:.2f} A")
+            self.lbl_card_p.setText(f"{pw:.3f} kW")
+            self.lbl_card_e.setText(f"{en:.2f} kWh")
 
-            row_idx = self.table_lora.rowCount()
-            self.table_lora.insertRow(row_idx)
+            row = self.table_lora.rowCount()
+            self.table_lora.insertRow(row)
             ts = datetime.now().strftime("%H:%M:%S")
+            vals = [ts, "ELECTRICITY", serial_no, f"{v1:.1f}",
+                    f"{i1:.2f}", f"{pw:.3f}", f"{en:.2f}",
+                    rssi_text, "OK" if pkt.get("valid_crc") else "CRC XATO"]
+            for col, txt in enumerate(vals):
+                self.table_lora.setItem(row, col, QTableWidgetItem(txt))
 
-            self.table_lora.setItem(row_idx, 0, QTableWidgetItem(ts))
-            self.table_lora.setItem(row_idx, 1, QTableWidgetItem("ELECTRICITY"))
-            self.table_lora.setItem(row_idx, 2, QTableWidgetItem(serial_no))
-            self.table_lora.setItem(row_idx, 3, QTableWidgetItem(f"{v_l1:.1f} V"))
-            self.table_lora.setItem(row_idx, 4, QTableWidgetItem(f"{i_l1:.2f} A"))
-            self.table_lora.setItem(row_idx, 5, QTableWidgetItem(f"{power_kw:.3f} kW"))
-            self.table_lora.setItem(row_idx, 6, QTableWidgetItem(f"{energy_kwh:.2f} kWh"))
-            self.table_lora.setItem(row_idx, 7, QTableWidgetItem(rssi_text))
-            self.table_lora.setItem(row_idx, 8, QTableWidgetItem("✅ OK" if pkt.get("valid_crc") else "❌ CRC ERROR"))
+        elif pkt.get("type") == "SOIL_UPLINK":
+            hum = pkt.get("humidity_pct", 0)
+            self.lbl_card_meter.setText(pkt.get("mac", "—"))
+            self.lbl_card_v.setText(f"{hum:.1f}%")
 
-    def _send_monitor_cmd(self, idx: int):
+            row = self.table_lora.rowCount()
+            self.table_lora.insertRow(row)
+            ts = datetime.now().strftime("%H:%M:%S")
+            vals = [ts, "SOIL", pkt.get("mac", ""), f"{hum:.1f}%",
+                    "—", "—", "—", rssi_text,
+                    "OK" if pkt.get("valid_crc") else "CRC XATO"]
+            for col, txt in enumerate(vals):
+                self.table_lora.setItem(row, col, QTableWidgetItem(txt))
+
+    def _send_cmd(self, idx: int):
         edit = getattr(self, f"mon_cmd_{idx}")
         cmd = edit.text().strip()
         if cmd and idx in self._serial_workers:
             self._serial_workers[idx].send_command(cmd)
             term = getattr(self, f"mon_term_{idx}")
-            term.append(f'<span style="color:#f59e0b;">&gt;&gt;&gt; {cmd}</span>')
+            term.append(f'<span style="color:#fbbf24;">>>> {cmd}</span>')
             edit.clear()
 
-    def _save_log_file(self, term_widget: QTextEdit):
-        text = term_widget.toPlainText()
+    def _save_log(self, term: QTextEdit):
+        text = term.toPlainText()
         if not text:
             return
-        file_path, _ = QFileDialog.getSaveFileName(self, "Log Faylini Saqlash", "serial_log.txt", "Text Files (*.txt);;Log Files (*.log)")
-        if file_path:
-            with open(file_path, "w", encoding="utf-8") as f:
-                f.write(text)
-            QMessageBox.information(self, "Saqlandi", f"Log saqlandi: {file_path}")
-
-    # ── NVS Config Handler ──
-    def _on_write_nvs_config(self):
-        port = self.combo_cfg_port.currentData()
-        if not port:
-            return
-        ssid = self.edit_cfg_ssid.text().strip()
-        pwd = self.edit_cfg_pass.text().strip()
-        url = self.edit_cfg_url.text().strip()
-        tok = self.edit_cfg_token.text().strip()
-
-        cmd = f"SET_CONFIG {ssid} {pwd} {url} {tok}"
-        if port in self._serial_workers:
-            self._serial_workers[port].send_command(cmd)
-            QMessageBox.information(self, "Yuborildi", f"Konfiguratsiya serial portga yuborildi: {cmd}")
-
-    def _on_reboot_esp32(self):
-        port = self.combo_cfg_port.currentData()
-        if port in self._serial_workers:
-            self._serial_workers[port].send_command("REBOOT")
-            QMessageBox.information(self, "Yuborildi", "ESP32 ga REBOOT buyrug'i yuborildi.")
-
-    # ── PlatformIO Builder ──
-    def _on_pio_build(self):
-        env_name = self.combo_pio_env.currentText()
-        if not self.controller.pio_path or not self.controller.project_root:
-            QMessageBox.warning(self, "Xato", "PlatformIO CLI yoki platformio.ini topilmadi!")
-            return
-
-        self.term_pio.clear()
-        self.term_pio.append(f"🔨 Building PlatformIO environment: {env_name}...\n")
-
-        cmd = [self.controller.pio_path, "run", "-e", env_name]
-        self.term_pio.append(f"▶ {' '.join(cmd)}\n")
-
-        import subprocess
-        proc = subprocess.Popen(
-            cmd, cwd=self.controller.project_root,
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Log saqlash", "serial_log.txt", "Text (*.txt);;Log (*.log)"
         )
-        for line in iter(proc.stdout.readline, ''):
-            self.term_pio.append(line.strip())
-            self.term_pio.moveCursor(QTextCursor.MoveOperation.End)
-        proc.stdout.close()
-        proc.wait()
-        self.term_pio.append("\n✅ Build tugatildi!")
+        if path:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(text)
+            QMessageBox.information(self, "Saqlandi", f"Log saqlandi: {path}")
+
+    # ══════════════════════════════════════════════════════════════════════
+    # Close
+    # ══════════════════════════════════════════════════════════════════════
+
+    def closeEvent(self, event):
+        self.controller.cancel_flash()
+        for port in list(self._serial_workers.keys()):
+            idx = port
+            if isinstance(port, int):
+                combo = getattr(self, f"mon_port_{port}", None)
+                if combo:
+                    port_name = combo.currentData()
+                    if port_name:
+                        self.controller.stop_serial_monitor(port_name)
+            w = self._serial_workers.get(idx)
+            if w:
+                w.stop()
+        event.accept()

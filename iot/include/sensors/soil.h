@@ -84,9 +84,13 @@ static bool sensor_read(SensorData& d) {
 void sensor_set_volume(float) {}  // stub (common.h extern talab qiladi)
 
 // WiFi rejimida ishlatiladi (lora_node da bu funksiyalar kerak emas)
+#ifndef SOIL_DEVICE_ROLE
+  #define SOIL_DEVICE_ROLE "soil_outdoor"
+#endif
+
 #ifndef LORA_NODE
 static bool sensor_do_register(const char* device_id, const char* fw_version) {
-    return app_register(device_id, "soil", "capacitive_soil_moisture", "", fw_version, 0);
+    return app_register(device_id, "soil", "capacitive_soil_moisture", "", fw_version, 0, SOIL_DEVICE_ROLE);
 }
 
 static String sensor_build_json(const char* device_id,
@@ -96,6 +100,7 @@ static String sensor_build_json(const char* device_id,
     doc["device_id"]    = device_id;
     doc["utility_type"] = "soil";
     doc["sensor_type"]  = "capacitive_soil_moisture";
+    doc["device_role"]  = SOIL_DEVICE_ROLE;
     doc["fw_version"]   = fw_ver;
     if (g_cfg.test_mode) doc["is_test_device"] = true;
     if (d.valid) doc["humidity"] = serialized(String(d.humidity, 1));

@@ -15,10 +15,10 @@
   #define PIN_SOUND_ADC   34
 #endif
 #ifndef SOUND_SAMPLES
-  #define SOUND_SAMPLES   64
+  #define SOUND_SAMPLES   300
 #endif
 #ifndef SOUND_FIGHT_REF
-  #define SOUND_FIGHT_REF 2500
+  #define SOUND_FIGHT_REF 40
 #endif
 
 struct SensorData {

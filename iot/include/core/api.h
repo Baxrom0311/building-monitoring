@@ -17,7 +17,8 @@ static bool app_register(const char* device_id,
                           const char* meter_type,
                           const char* meter_serial,
                           const char* fw_version,
-                          int baud_rate) {
+                          int baud_rate,
+                          const char* device_role = nullptr) {
     if (WiFi.status() != WL_CONNECTED) return false;
 
     StaticJsonDocument<384> doc;
@@ -30,6 +31,7 @@ static bool app_register(const char* device_id,
     doc["ip"]               = WiFi.localIP().toString();
     doc["rssi"]             = WiFi.RSSI();
     doc["chip_model"]       = "ESP32";
+    if (device_role) doc["device_role"] = device_role;
     if (g_cfg.test_mode) doc["is_test_device"] = true;
     if (g_cfg.provisioning_token[0])
         doc["provisioning_token"] = g_cfg.provisioning_token;

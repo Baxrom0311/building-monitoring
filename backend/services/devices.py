@@ -235,6 +235,7 @@ async def update_device_status(body: DeviceStatus, test_mode: bool = False) -> d
         if not device:
             device = Device(id=body.device_id, name=body.device_id, registered=ts, created_at=ts)
             device_repo.add(device)
+        device.utility_type = body.utility_type or device.utility_type
         device.ip = body.ip or device.ip
         device.rssi = body.rssi
         device.hardware_version = body.hardware_version or device.hardware_version

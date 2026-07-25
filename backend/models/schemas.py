@@ -10,6 +10,7 @@ class UtilityType(StrEnum):
     gas = "gas"
     soil = "soil"
     sound = "sound"
+    gateway = "gateway"
 
 
 class MeasurementRole(StrEnum):
@@ -29,6 +30,8 @@ class DeviceRole(StrEnum):
     water_node = "water_node"
     gas_node = "gas_node"
     soil_node = "soil_node"
+    soil_outdoor = "soil_outdoor"
+    soil_basement = "soil_basement"
     sound_node = "sound_node"
 
 
@@ -1140,6 +1143,7 @@ class BuildingAnalyticsResponse(BaseModel):
 
 class DeviceStatus(BaseModel):
     device_id: str
+    utility_type: Optional[str] = None
     ip: Optional[str] = None
     rssi: Optional[int] = None
     online: bool = True

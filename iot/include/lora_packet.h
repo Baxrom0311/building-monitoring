@@ -18,7 +18,9 @@
 #include <LoRa.h>
 
 // ─── SX1278 SPI pinlari ───────────────────────────────────────────────────────
-#define LORA_PIN_CS   15
+#ifndef LORA_PIN_CS
+  #define LORA_PIN_CS   5
+#endif
 #define LORA_PIN_RST  14
 #define LORA_PIN_IRQ  2
 
