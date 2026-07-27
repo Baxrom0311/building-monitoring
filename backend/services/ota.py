@@ -218,6 +218,12 @@ async def ota_upload(
     sensor_label = target_tuple[4] or "any"
     converter_label = target_tuple[5] or "any"
     filename = f"{target_tuple[1]}_{utility_label}_{role_label}_{hardware_label}_{sensor_label}_{converter_label}_{version}.bin".replace("/", "_")
+    # Bir xil version qayta yuklansa eski .bin ustidan yozilib, eski Firmware
+    # qatorining sha256 fayldan farq qilib qolardi — OTA verifikatsiya buziladi
+    async with SessionLocal() as session:
+        existing = await FirmwareRepository(session).by_filename(filename)
+        if existing:
+            raise HTTPException(409, f"Bu versiya allaqachon yuklangan: {filename}. Avval eski firmware ni o'chiring")
     (settings.ota_dir / filename).write_bytes(data)
     firmware = Firmware(
         filename=filename,

@@ -61,7 +61,8 @@ class AlertRepository(BaseRepository[Alert]):
         )
 
     async def clear_all(self, ts: int, device_id: str | None = None) -> int:
-        stmt = update(Alert).values(cleared=True, cleared_at=ts)
+        # Faqat ochiq alertlar — aks holda eski cleared_at tarixi qayta yozilardi
+        stmt = update(Alert).where(Alert.cleared.is_(False)).values(cleared=True, cleared_at=ts)
         if device_id:
             stmt = stmt.where(Alert.device_id == device_id)
         result = await self.session.execute(stmt)

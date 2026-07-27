@@ -1,14 +1,38 @@
 """lora_decoder.py — LoRa ikkilik va text paketlarini tahlil qilish va dekodlash.
 
-`iot/include/lora_packet.h` C++ strukturalari bilan 100% mos keladi.
+`iot/include/lora_packet.h` (MESH v2) C++ strukturalari bilan 100% mos keladi.
+
+Mesh v2 umumiy header (12 bayt, ochiq):
+    [pkt_type(1)][mac(6)][flags(1)][seq(4, little-endian)]
+CRC16-CCITT: flags baytining TTL bitlari (0x70) 0 deb hisoblanadi —
+relay TTL ni o'zgartirganda CRC buzilmasligi uchun.
+
+Eslatma: shifrlangan (LORA_ENCRYPT) paketlarda payload+CRC shifrlangan bo'ladi;
+header baribir ochiq, shuning uchun type/mac/seq har doim dekodlanadi,
+CRC esa faqat shifrlanmagan paketlarda mos keladi.
 """
 import struct
 
+LORA_TTL_MASK = 0x70
+LORA_OFF_FLAGS = 7
+HDR_FMT = "<B6sBI"          # pkt_type, mac, flags, seq
+HDR_LEN = 12
+
+PKT_UPLINK = 0x01
+PKT_DOWNLINK = 0x02
+PKT_UPLINK_SOIL = 0x03
+PKT_UPLINK_SOUND = 0x04
+PKT_UPLINK_WATER = 0x05
+PKT_UPLINK_GAS = 0x06
+PKT_ACK = 0x08
+
 
 def crc16_ccitt(data: bytes) -> int:
-    """CRC16-CCITT hisoblash (lora_packet.h lora_crc16 bilan mos)."""
+    """CRC16-CCITT (lora_packet.h lora_crc16 bilan mos — TTL bitlari maskalanadi)."""
     crc = 0xFFFF
-    for byte in data:
+    for i, byte in enumerate(data):
+        if i == LORA_OFF_FLAGS:
+            byte &= ~LORA_TTL_MASK & 0xFF
         crc ^= (byte << 8)
         for _ in range(8):
             if crc & 0x8000:
@@ -18,8 +42,16 @@ def crc16_ccitt(data: bytes) -> int:
     return crc
 
 
+def _hdr(data: bytes) -> tuple[str, int, int, int]:
+    """Umumiy headerni ochish: (mac_str, flags, seq, ttl)."""
+    _, mac_b, flags, seq = struct.unpack(HDR_FMT, data[:HDR_LEN])
+    mac_str = ":".join(f"{b:02X}" for b in mac_b)
+    ttl = (flags & LORA_TTL_MASK) >> 4
+    return mac_str, flags, seq, ttl
+
+
 class LoRaPacketDecoder:
-    """ESP32 LoRa paketlarini dekodlash xizmati."""
+    """ESP32 LoRa MESH v2 paketlarini dekodlash xizmati."""
 
     @staticmethod
     def parse_hex_string(hex_str: str) -> bytes | None:
@@ -32,81 +64,140 @@ class LoRaPacketDecoder:
 
     @classmethod
     def decode_packet(cls, data: bytes) -> dict | None:
-        """LoRa UPLINK / SOIL_UPLINK paketlarini dekodlaydi."""
-        if not data or len(data) < 12:
+        """LoRa mesh v2 paketlarini dekodlaydi."""
+        if not data or len(data) < HDR_LEN + 2:
             return None
 
         pkt_type = data[0]
 
-        # ── PKT_UPLINK_SOIL (0x03) ── 12 bytes
-        if pkt_type == 0x03 and len(data) >= 12:
-            try:
-                pkt_t, mac_b, flags, humidity_raw, crc_rx = struct.unpack("<B6sBhH", data[:12])
-                mac_str = ":".join(f"{b:02X}" for b in mac_b)
-                crc_calc = crc16_ccitt(data[:10])
+        try:
+            mac_str, flags, seq, ttl = _hdr(data)
+        except Exception:
+            return None
 
-                return {
-                    "valid_crc": (crc_rx == crc_calc),
-                    "type": "SOIL_UPLINK",
-                    "type_code": 0x03,
-                    "mac": mac_str,
-                    "flags": flags,
-                    "humidity_pct": humidity_raw / 100.0,
-                    "crc_rx": hex(crc_rx),
-                    "crc_calc": hex(crc_calc)
-                }
+        def base(type_name: str, total: int) -> dict:
+            crc_rx = data[total - 2] | (data[total - 1] << 8)
+            crc_calc = crc16_ccitt(data[:total - 2])
+            return {
+                "valid_crc": (crc_rx == crc_calc),
+                "type": type_name,
+                "type_code": pkt_type,
+                "mac": mac_str,
+                "flags": flags,
+                "seq": seq,
+                "ttl": ttl,
+                "crc_rx": hex(crc_rx),
+                "crc_calc": hex(crc_calc),
+            }
+
+        # ── PKT_UPLINK_SOIL (0x03) ── 16 bayt
+        if pkt_type == PKT_UPLINK_SOIL and len(data) >= 16:
+            try:
+                (humidity_raw,) = struct.unpack("<h", data[12:14])
+                res = base("SOIL_UPLINK", 16)
+                res["test_mode"] = bool(flags & 0x01)
+                res["humidity_pct"] = humidity_raw / 100.0
+                return res
             except Exception:
                 return None
 
-        # ── PKT_UPLINK Electricity (0x01) ── 47 bytes
-        # Format: pkt_type(B), mac(6s), flags(B), meter_serial(13s), v_l1..l3(3h), i_l1..l3(3h), power_w(i), freq_chz(h), energy_wh(i), pf_pct(h), crc16(H)
-        if pkt_type == 0x01 and len(data) >= 47:
+        # ── PKT_UPLINK_SOUND (0x04) ── 16 bayt
+        if pkt_type == PKT_UPLINK_SOUND and len(data) >= 16:
             try:
-                fmt = "<B6sB13s" + "h"*6 + "i" + "h" + "i" + "hH"
-                unpacked = struct.unpack(fmt, data[:47])
+                (level_raw,) = struct.unpack("<h", data[12:14])
+                res = base("SOUND_UPLINK", 16)
+                res["test_mode"] = bool(flags & 0x01)
+                res["level_pct"] = level_raw / 100.0
+                return res
+            except Exception:
+                return None
 
-                pkt_t = unpacked[0]
-                mac_b = unpacked[1]
-                flags = unpacked[2]
-                serial_b = unpacked[3]
-                v_l1, v_l2, v_l3 = unpacked[4], unpacked[5], unpacked[6]
-                i_l1, i_l2, i_l3 = unpacked[7], unpacked[8], unpacked[9]
-                power_w = unpacked[10]
-                freq_chz = unpacked[11]
-                energy_wh = unpacked[12]
-                pf_pct = unpacked[13]
-                crc_rx = unpacked[14]
+        # ── PKT_UPLINK_WATER (0x05) ── 26 bayt
+        if pkt_type == PKT_UPLINK_WATER and len(data) >= 26:
+            try:
+                p_bottom, p_top, flow, volume, temp = struct.unpack("<hhhih", data[12:24])
+                res = base("WATER_UPLINK", 26)
+                res["test_mode"] = bool(flags & 0x01)
+                res["p_bottom_bar"] = p_bottom / 1000.0
+                res["p_top_bar"] = p_top / 1000.0
+                res["flow_lmin"] = flow / 100.0
+                res["volume_m3"] = volume / 1000.0
+                res["temp_c"] = temp / 100.0
+                return res
+            except Exception:
+                return None
 
-                mac_str = ":".join(f"{b:02X}" for b in mac_b)
+        # ── PKT_UPLINK_GAS (0x06) ── 24 bayt
+        if pkt_type == PKT_UPLINK_GAS and len(data) >= 24:
+            try:
+                pressure, flow, volume, temp = struct.unpack("<hhih", data[12:22])
+                res = base("GAS_UPLINK", 24)
+                res["test_mode"] = bool(flags & 0x01)
+                res["pressure_bar"] = pressure / 1000.0
+                res["flow_m3h"] = flow / 1000.0
+                res["volume_m3"] = volume / 1000.0
+                res["temp_c"] = temp / 100.0
+                return res
+            except Exception:
+                return None
+
+        # ── PKT_UPLINK Electricity (0x01) ── 51 bayt
+        if pkt_type == PKT_UPLINK and len(data) >= 51:
+            try:
+                fmt = "<13s" + "h" * 6 + "i" + "h" + "i" + "h"
+                unpacked = struct.unpack(fmt, data[12:49])
+                serial_b = unpacked[0]
+                v_l1, v_l2, v_l3 = unpacked[1], unpacked[2], unpacked[3]
+                i_l1, i_l2, i_l3 = unpacked[4], unpacked[5], unpacked[6]
+                power_w = unpacked[7]
+                freq_chz = unpacked[8]
+                energy_wh = unpacked[9]
+                pf_pct = unpacked[10]
+
                 serial_str = serial_b.decode("utf-8", errors="ignore").rstrip("\x00")
-                crc_calc = crc16_ccitt(data[:45])
+                res = base("ELECTRICITY_UPLINK", 51)
+                res["is_te73"] = bool(flags & 0x01)
+                res["test_mode"] = bool(flags & 0x02)
+                res["meter_serial"] = serial_str
+                res["voltage_v"] = {"l1": v_l1 / 100.0, "l2": v_l2 / 100.0, "l3": v_l3 / 100.0}
+                res["current_a"] = {"l1": i_l1 / 1000.0, "l2": i_l2 / 1000.0, "l3": i_l3 / 1000.0}
+                res["power_w"] = power_w
+                res["power_kw"] = power_w / 1000.0
+                res["frequency_hz"] = freq_chz / 100.0
+                res["energy_kwh"] = energy_wh / 1000.0
+                res["power_factor"] = pf_pct / 100.0
+                return res
+            except Exception:
+                return None
 
-                return {
-                    "valid_crc": (crc_rx == crc_calc),
-                    "type": "ELECTRICITY_UPLINK",
-                    "type_code": 0x01,
-                    "mac": mac_str,
-                    "is_te73": bool(flags & 0x01),
-                    "test_mode": bool(flags & 0x02),
-                    "meter_serial": serial_str,
-                    "voltage_v": {
-                        "l1": v_l1 / 100.0,
-                        "l2": v_l2 / 100.0,
-                        "l3": v_l3 / 100.0
-                    },
-                    "current_a": {
-                        "l1": i_l1 / 1000.0,
-                        "l2": i_l2 / 1000.0,
-                        "l3": i_l3 / 1000.0
-                    },
-                    "power_w": power_w,
-                    "power_kw": power_w / 1000.0,
-                    "frequency_hz": freq_chz / 100.0,
-                    "energy_kwh": energy_wh / 1000.0,
-                    "power_factor": pf_pct / 100.0,
-                    "crc_rx": hex(crc_rx),
-                    "crc_calc": hex(crc_calc)
-                }
+        # ── PKT_DOWNLINK (0x02) ── 15 bayt
+        if pkt_type == PKT_DOWNLINK and len(data) >= 15:
+            try:
+                relay_cmd = data[12]
+                res = base("DOWNLINK", 15)
+                res["relay_cmd"] = relay_cmd
+                res["relay_action"] = {0: "none", 1: "relay_off", 2: "relay_on"}.get(
+                    relay_cmd, f"unknown({relay_cmd})"
+                )
+                return res
+            except Exception:
+                return None
+
+        # ── PKT_ACK (0x08) ── 15 bayt
+        if pkt_type == PKT_ACK and len(data) >= 15:
+            try:
+                ack_type = data[12]
+                res = base("ACK", 15)
+                res["ack_type"] = ack_type
+                res["ack_type_name"] = {
+                    PKT_UPLINK: "ELECTRICITY_UPLINK",
+                    PKT_DOWNLINK: "DOWNLINK",
+                    PKT_UPLINK_SOIL: "SOIL_UPLINK",
+                    PKT_UPLINK_SOUND: "SOUND_UPLINK",
+                    PKT_UPLINK_WATER: "WATER_UPLINK",
+                    PKT_UPLINK_GAS: "GAS_UPLINK",
+                }.get(ack_type, f"unknown(0x{ack_type:02X})")
+                return res
             except Exception:
                 return None
 

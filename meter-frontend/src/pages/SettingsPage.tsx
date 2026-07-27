@@ -81,8 +81,21 @@ export default function SettingsPage() {
     }, 600)
   }
 
-  const handleDownload = (filename: string) => {
-    window.open(`${API_BASE_URL}/api/backups/download/${filename}`, '_blank')
+  const handleDownload = async (filename: string) => {
+    try {
+      // window.open Authorization header yubormaydi (doim 401) — apiClient orqali blob sifatida olamiz
+      const { data } = await apiClient.get(`/api/backups/download/${filename}`, { responseType: 'blob' })
+      const url = URL.createObjectURL(data)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = filename
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      notifyError('Backupni yuklab bo\'lmadi', getApiErrorMessage(err))
+    }
   }
 
   return (

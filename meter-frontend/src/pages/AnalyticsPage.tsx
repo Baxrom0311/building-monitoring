@@ -36,9 +36,15 @@ export default function AnalyticsPage() {
     } else if (dateRange === '30d') {
       start = now - 30 * 24 * 60 * 60
     } else if (dateRange === 'custom') {
-      const sDate = customStart ? new Date(customStart).getTime() / 1000 : now - 7 * 24 * 60 * 60
-      const eDate = customEnd ? new Date(customEnd).getTime() / 1000 : now
-      return { fromTs: Math.floor(sDate), toTs: Math.floor(eDate) }
+      // 'YYYY-MM-DD' ni lokal vaqt sifatida parse qilamiz (new Date(string) UTC deb oladi)
+      const parseLocalDate = (value: string) => {
+        const [y, m, d] = value.split('-').map(Number)
+        return Math.floor(new Date(y, m - 1, d).getTime() / 1000)
+      }
+      const sDate = customStart ? parseLocalDate(customStart) : now - 7 * 24 * 60 * 60
+      // Tugash kunini to'liq qamrab olish uchun kun oxirigacha (+86399s)
+      const eDate = customEnd ? parseLocalDate(customEnd) + 86399 : now
+      return { fromTs: sDate, toTs: eDate }
     }
     return { fromTs: start, toTs: now }
   }, [dateRange, customStart, customEnd])
@@ -85,54 +91,106 @@ export default function AnalyticsPage() {
       label: string
       voltage: number
       power: number
-      pressure: number
-      pressureTop: number
-      flow: number
-      volume: number
+      waterPressure: number
+      waterPressureTop: number
+      waterFlow: number
+      waterVolume: number
+      gasPressure: number
+      gasFlow: number
+      gasVolume: number
       humidity: number
       level: number
       samples: number
+      elecSamples: number
+      waterSamples: number
+      gasSamples: number
+      soilSamples: number
+      soundSamples: number
     }>()
 
-    ;[...hourlyStats.stats].reverse().forEach((row) => {
-      const current = buckets.get(row.bucket_ts) ?? {
-        bucket_ts: row.bucket_ts,
-        label: new Date(row.bucket_ts * 1000).toLocaleString('uz-UZ', { month: 'short', day: 'numeric', hour: '2-digit' }),
-        voltage: 0,
-        power: 0,
-        pressure: 0,
-        pressureTop: 0,
-        flow: 0,
-        volume: 0,
-        humidity: 0,
-        level: 0,
-        samples: 0,
-      }
-      const samples = Math.max(row.samples || 1, 1)
-      current.voltage += (row.avg_voltage_l1 ?? 0) * samples
-      current.power += (row.avg_power_w ?? 0) * samples
-      current.pressure += (row.avg_pressure_bottom_bar ?? row.avg_pressure_bar ?? 0) * samples
-      current.pressureTop += (row.avg_pressure_top_bar ?? 0) * samples
-      current.flow += (row.avg_flow_rate ?? 0) * samples
-      current.volume = Math.max(current.volume, row.max_volume_m3 ?? 0)
-      current.humidity += (row.avg_humidity ?? 0) * samples
-      current.level += (row.avg_level ?? 0) * samples
-      current.samples += samples
-      buckets.set(row.bucket_ts, current)
-    })
+    // Har bir utility_type bo'yicha alohida agregatsiya — aralash o'rtacha (diluted average) bo'lmasligi uchun
+    ;[...hourlyStats.stats]
+      .sort((a, b) => a.bucket_ts - b.bucket_ts)
+      .forEach((row) => {
+        const current = buckets.get(row.bucket_ts) ?? {
+          bucket_ts: row.bucket_ts,
+          label: new Date(row.bucket_ts * 1000).toLocaleString('uz-UZ', { month: 'short', day: 'numeric', hour: '2-digit' }),
+          voltage: 0,
+          power: 0,
+          waterPressure: 0,
+          waterPressureTop: 0,
+          waterFlow: 0,
+          waterVolume: 0,
+          gasPressure: 0,
+          gasFlow: 0,
+          gasVolume: 0,
+          humidity: 0,
+          level: 0,
+          samples: 0,
+          elecSamples: 0,
+          waterSamples: 0,
+          gasSamples: 0,
+          soilSamples: 0,
+          soundSamples: 0,
+        }
+        const samples = Math.max(row.samples || 1, 1)
+        current.samples += samples
+        if (row.utility_type === 'electricity') {
+          current.voltage += (row.avg_voltage_l1 ?? 0) * samples
+          current.power += (row.avg_power_w ?? 0) * samples
+          current.elecSamples += samples
+        } else if (row.utility_type === 'water') {
+          current.waterPressure += (row.avg_pressure_bottom_bar ?? row.avg_pressure_bar ?? 0) * samples
+          current.waterPressureTop += (row.avg_pressure_top_bar ?? 0) * samples
+          current.waterFlow += (row.avg_flow_rate ?? 0) * samples
+          current.waterVolume = Math.max(current.waterVolume, row.max_volume_m3 ?? 0)
+          current.waterSamples += samples
+        } else if (row.utility_type === 'gas') {
+          current.gasPressure += (row.avg_pressure_bottom_bar ?? row.avg_pressure_bar ?? 0) * samples
+          current.gasFlow += (row.avg_flow_rate ?? 0) * samples
+          current.gasVolume = Math.max(current.gasVolume, row.max_volume_m3 ?? 0)
+          current.gasSamples += samples
+        } else if (row.utility_type === 'soil') {
+          current.humidity += (row.avg_humidity ?? 0) * samples
+          current.soilSamples += samples
+        } else if (row.utility_type === 'sound') {
+          current.level += (row.avg_level ?? 0) * samples
+          current.soundSamples += samples
+        }
+        buckets.set(row.bucket_ts, current)
+      })
 
-    return Array.from(buckets.values()).map((row) => ({
-      ...row,
-      voltage: row.samples ? Number((row.voltage / row.samples).toFixed(2)) : 0,
-      power: row.samples ? Number((row.power / row.samples).toFixed(1)) : 0,
-      pressure: row.samples ? Number((row.pressure / row.samples).toFixed(3)) : 0,
-      pressureTop: row.samples ? Number((row.pressureTop / row.samples).toFixed(3)) : 0,
-      flow: row.samples ? Number((row.flow / row.samples).toFixed(3)) : 0,
-      volume: Number(row.volume.toFixed(3)),
-      humidity: row.samples ? Number((row.humidity / row.samples).toFixed(1)) : 0,
-      level: row.samples ? Number((row.level / row.samples).toFixed(1)) : 0,
-    }))
-  }, [hourlyStats])
+    return Array.from(buckets.values()).map((row) => {
+      const waterPressure = row.waterSamples ? Number((row.waterPressure / row.waterSamples).toFixed(3)) : 0
+      const waterPressureTop = row.waterSamples ? Number((row.waterPressureTop / row.waterSamples).toFixed(3)) : 0
+      const waterFlow = row.waterSamples ? Number((row.waterFlow / row.waterSamples).toFixed(3)) : 0
+      const waterVolume = Number(row.waterVolume.toFixed(3))
+      const gasPressure = row.gasSamples ? Number((row.gasPressure / row.gasSamples).toFixed(3)) : 0
+      const gasFlow = row.gasSamples ? Number((row.gasFlow / row.gasSamples).toFixed(3)) : 0
+      const gasVolume = Number(row.gasVolume.toFixed(3))
+      return {
+        bucket_ts: row.bucket_ts,
+        label: row.label,
+        samples: row.samples,
+        voltage: row.elecSamples ? Number((row.voltage / row.elecSamples).toFixed(2)) : 0,
+        power: row.elecSamples ? Number((row.power / row.elecSamples).toFixed(1)) : 0,
+        waterPressure,
+        waterPressureTop,
+        waterFlow,
+        waterVolume,
+        gasPressure,
+        gasFlow,
+        gasVolume,
+        humidity: row.soilSamples ? Number((row.humidity / row.soilSamples).toFixed(1)) : 0,
+        level: row.soundSamples ? Number((row.level / row.soundSamples).toFixed(1)) : 0,
+        // Bitta utility tanlanganda jadval/eksport uchun eski nomlar saqlanadi
+        pressure: utilityType === 'gas' ? gasPressure : waterPressure,
+        pressureTop: waterPressureTop,
+        flow: utilityType === 'gas' ? gasFlow : waterFlow,
+        volume: utilityType === 'gas' ? gasVolume : waterVolume,
+      }
+    })
+  }, [hourlyStats, utilityType])
 
   // CSV Data Export (Dynamic based on selected utility type)
   const handleExportCSV = () => {
@@ -496,7 +554,7 @@ export default function AnalyticsPage() {
           </div>
         ) : isError ? (
           <ErrorBlock message={getApiErrorMessage(analyticsError)} onRetry={() => refetch()} />
-        ) : formattedData.length > 0 ? (
+        ) : (
           <div className="grid grid-cols-1 gap-6">
             {/* Summary Stats Cards */}
             {summaryStats && (
@@ -513,6 +571,9 @@ export default function AnalyticsPage() {
               </div>
             )}
 
+            {/* Energiya grafiklari faqat formattedData mavjud bo'lganda chiziladi */}
+            {formattedData.length > 0 ? (
+            <>
             {/* Energy delta chart (AreaChart) */}
             <div className="glass-card chart-panel rounded-xl p-6 shadow-sm space-y-4">
               <div className="flex items-start justify-between gap-4">
@@ -572,6 +633,10 @@ export default function AnalyticsPage() {
                 </ResponsiveContainer>
               </div>
             </div>
+            </>
+            ) : (utilityType === 'electricity' || utilityType === 'all') && (
+              <EmptyBlock title={translations.common.noData} message="Ushbu sana oralig‘ida o‘lchovlar topilmadi" />
+            )}
 
             {hourlyLoading ? (
               <ChartSkeleton titleWidth="w-56" />
@@ -606,17 +671,17 @@ export default function AnalyticsPage() {
                       )}
                       {(utilityType === 'all' || utilityType === 'water') && (
                         <>
-                          <Line type="monotone" dataKey="pressure" name="Pastki bosim (bar)" stroke="#06B6D4" strokeWidth={2.5} dot={false} />
-                          <Line type="monotone" dataKey="pressureTop" name="Yuqori bosim (bar)" stroke="#8B5CF6" strokeWidth={2.5} dot={false} />
-                          <Line type="monotone" dataKey="flow" name="Suv oqimi (L/min)" stroke="#3B82F6" strokeWidth={2.5} dot={false} />
-                          <Line type="monotone" dataKey="volume" name="Suv hajmi (m³)" stroke="#EC4899" strokeWidth={2.5} dot={false} />
+                          <Line type="monotone" dataKey="waterPressure" name="Pastki bosim (bar)" stroke="#06B6D4" strokeWidth={2.5} dot={false} />
+                          <Line type="monotone" dataKey="waterPressureTop" name="Yuqori bosim (bar)" stroke="#8B5CF6" strokeWidth={2.5} dot={false} />
+                          <Line type="monotone" dataKey="waterFlow" name="Suv oqimi (L/min)" stroke="#3B82F6" strokeWidth={2.5} dot={false} />
+                          <Line type="monotone" dataKey="waterVolume" name="Suv hajmi (m³)" stroke="#EC4899" strokeWidth={2.5} dot={false} />
                         </>
                       )}
                       {(utilityType === 'all' || utilityType === 'gas') && (
                         <>
-                          <Line type="monotone" dataKey="pressure" name="Gaz bosimi (bar)" stroke="#06B6D4" strokeWidth={2.5} dot={false} />
-                          <Line type="monotone" dataKey="flow" name="Gaz oqimi (m³/h)" stroke="#F59E0B" strokeWidth={2.5} dot={false} />
-                          <Line type="monotone" dataKey="volume" name="Gaz hajmi (m³)" stroke="#10B981" strokeWidth={2.5} dot={false} />
+                          <Line type="monotone" dataKey="gasPressure" name="Gaz bosimi (bar)" stroke="#14B8A6" strokeWidth={2.5} dot={false} />
+                          <Line type="monotone" dataKey="gasFlow" name="Gaz oqimi (m³/h)" stroke="#F59E0B" strokeWidth={2.5} dot={false} />
+                          <Line type="monotone" dataKey="gasVolume" name="Gaz hajmi (m³)" stroke="#10B981" strokeWidth={2.5} dot={false} />
                         </>
                       )}
                       {(utilityType === 'all' || utilityType === 'soil') && (
@@ -634,6 +699,7 @@ export default function AnalyticsPage() {
             )}
 
             {/* Data table */}
+            {(utilityType === 'electricity' || utilityType === 'all' ? formattedData.length > 0 : hourlyChartData.length > 0) && (
             <div className="glass-card data-table-card rounded-xl overflow-hidden shadow-sm">
               <div className="p-5 border-b border-gray-300 dark:border-gray-800 flex justify-between items-center">
                 <h3 className="text-lg font-bold text-gray-950 dark:text-gray-100">Tahliliy hisobot jadvali</h3>
@@ -833,9 +899,8 @@ export default function AnalyticsPage() {
                     ))}
               </div>
             </div>
+            )}
           </div>
-        ) : (
-          <EmptyBlock title={translations.common.noData} message="Ushbu sana oralig‘ida o‘lchovlar topilmadi" />
         )}
       </div>
     </RootLayout>

@@ -34,7 +34,7 @@ export default function BuildingDetailPage() {
     isError: devicesIsError,
     error: devicesQueryError,
     refetch: refetchDevices,
-  } = useDevices(100)
+  } = useDevices(500)
 
   type ConfirmAction = { type: 'unbind'; deviceId: string } | { type: 'delete' }
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null)
@@ -78,14 +78,17 @@ export default function BuildingDetailPage() {
 
     try {
       const dev = devices?.find((d) => d.id === selectedDeviceId)
-      if (dev) {
-        await apiClient.put(`/api/devices/${selectedDeviceId}`, {
-          building_id: buildingIdInt,
-          name: dev.name || null,
-          utility_type: dev.utility_type,
-          is_active: dev.is_active ?? true,
-        })
+      if (!dev) {
+        // Ro'yxatdan topilmasa PUT yuborilmaydi — muvaffaqiyat deb ko'rsatmaymiz
+        setError("Qurilma ro'yxatdan topilmadi. Sahifani yangilab qayta urining.")
+        return
       }
+      await apiClient.put(`/api/devices/${selectedDeviceId}`, {
+        building_id: buildingIdInt,
+        name: dev.name || null,
+        utility_type: dev.utility_type,
+        is_active: dev.is_active ?? true,
+      })
       queryClient.invalidateQueries({ queryKey: qk.devices() })
       queryClient.invalidateQueries({ queryKey: qk.buildings() })
       queryClient.invalidateQueries({ queryKey: qk.summary() })

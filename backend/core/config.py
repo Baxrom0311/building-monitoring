@@ -10,6 +10,7 @@ class Settings:
     )
     ota_dir: Path = Path(os.getenv("OTA_DIR", "firmware"))
     backup_dir: Path = Path(os.getenv("BACKUP_DIR", "backups"))
+    billing_upload_dir: Path = Path(os.getenv("BILLING_UPLOAD_DIR", "data/billing_uploads"))
     static_dir: Path = Path(os.getenv("STATIC_DIR", "../meter-frontend/dist"))
     backup_keep_days: int = int(os.getenv("BACKUP_KEEP_DAYS", "14"))
     audit_keep_days: int = int(os.getenv("AUDIT_KEEP_DAYS", "180"))
@@ -32,6 +33,12 @@ class Settings:
     trusted_hosts: list[str] = [
         item.strip()
         for item in os.getenv("TRUSTED_HOSTS", "*").split(",")
+        if item.strip()
+    ]
+    # X-Forwarded-For headeriga faqat shu proxylardan kelganda ishonamiz
+    trusted_proxy_ips: list[str] = [
+        item.strip()
+        for item in os.getenv("TRUSTED_PROXY_IPS", "127.0.0.1,::1").split(",")
         if item.strip()
     ]
     rate_limit_per_minute: int = int(os.getenv("RATE_LIMIT_PER_MINUTE", "120"))
@@ -165,5 +172,5 @@ class Settings:
 
 settings = Settings()
 
-for directory in (settings.db_path.parent, settings.ota_dir, settings.backup_dir):
+for directory in (settings.db_path.parent, settings.ota_dir, settings.backup_dir, settings.billing_upload_dir):
     directory.mkdir(parents=True, exist_ok=True)

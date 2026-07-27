@@ -22,6 +22,7 @@ from routers.alerts import router as alerts_router
 from routers.audit import router as audit_router
 from routers.auth import router as auth_router
 from routers.backups import router as backups_router
+from routers.billing import router as billing_router
 from routers.buildings import router as buildings_router
 from routers.commands import router as commands_router
 from routers.devices import router as devices_router
@@ -48,6 +49,11 @@ from services.websocket import ws_manager
 configure_logging()
 
 
+# Event loop task larga faqat weak reference saqlaydi — reference ushlab
+# turilmasa worker GC bo'lib jimgina to'xtashi mumkin
+_background_tasks: list[asyncio.Task] = []
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings.validate_runtime()
@@ -55,15 +61,20 @@ async def lifespan(app: FastAPI):
     await bootstrap_admin()
     ws_manager.set_snapshot_provider(build_snapshot)
     if settings.run_inline_workers:
-        asyncio.create_task(offline_detector())
-        asyncio.create_task(data_cleanup())
-        asyncio.create_task(test_device_cleanup_worker())
-        asyncio.create_task(alert_notification_worker())
-        asyncio.create_task(command_cleanup_worker())
-        asyncio.create_task(audit_cleanup_worker())
-        asyncio.create_task(analytics_worker())
-        asyncio.create_task(ota_batch_worker())
+        for worker in (
+            offline_detector,
+            data_cleanup,
+            test_device_cleanup_worker,
+            alert_notification_worker,
+            command_cleanup_worker,
+            audit_cleanup_worker,
+            analytics_worker,
+            ota_batch_worker,
+        ):
+            _background_tasks.append(asyncio.create_task(worker()))
     yield
+    for task in _background_tasks:
+        task.cancel()
 
 
 app = FastAPI(title=settings.app_name, version=settings.app_version, lifespan=lifespan)
@@ -101,6 +112,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 app.include_router(alerts_router)
 app.include_router(audit_router)
 app.include_router(backups_router)
+app.include_router(billing_router)
 app.include_router(buildings_router)
 app.include_router(devices_router)
 app.include_router(commands_router)
@@ -132,6 +144,9 @@ async def workbox_kill(rest: str):
 # SPA catch-all — barcha /api/* dan tashqari yo'llar index.html qaytaradi
 @app.get("/{full_path:path}", response_class=HTMLResponse)
 async def spa_fallback(full_path: str):
+    # Mavjud bo'lmagan API yo'llari HTML emas, 404 qaytarsin
+    if full_path.startswith("api/") or full_path == "api":
+        return JSONResponse({"detail": "Endpoint topilmadi"}, status_code=404)
     index_file = settings.static_dir / "index.html"
     if index_file.exists():
         return FileResponse(

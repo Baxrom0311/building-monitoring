@@ -24,6 +24,7 @@ import {
   PanelLeft,
   PanelTop,
 } from 'lucide-react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '@/contexts/AuthContext'
 import { useTheme } from '@/contexts/ThemeContext'
 import { useAlerts } from '@/hooks/queries'
@@ -150,6 +151,7 @@ function useNavigationGroups(openAlertCount: number, isAdmin: boolean, isViewer:
 
 export function Sidebar({ desktopMode, onDesktopModeChange }: NavigationProps) {
   const { user, logout, isAdmin, isViewer } = useAuth()
+  const queryClient = useQueryClient()
   const { toggleTheme, isDark } = useTheme()
   const { data: alerts } = useAlerts(false, 200)
   const [isOpen, setIsOpen] = useState(false)
@@ -410,6 +412,8 @@ export function Sidebar({ desktopMode, onDesktopModeChange }: NavigationProps) {
 
           <button
             onClick={() => {
+              // Logoutda kesh tozalanadi — boshqa akkaunt ma'lumotlari qolib ketmasligi uchun
+              queryClient.clear()
               logout()
               setIsOpen(false)
             }}
@@ -431,6 +435,7 @@ export function Sidebar({ desktopMode, onDesktopModeChange }: NavigationProps) {
 
 export function TopNavbar({ desktopMode, onDesktopModeChange }: NavigationProps) {
   const { user, logout, isAdmin, isViewer } = useAuth()
+  const queryClient = useQueryClient()
   const { toggleTheme, isDark } = useTheme()
   const { data: alerts } = useAlerts(false, 200)
   const location = useLocation()
@@ -526,7 +531,11 @@ export function TopNavbar({ desktopMode, onDesktopModeChange }: NavigationProps)
               <span className="max-w-24 truncate text-xs font-bold text-gray-700 dark:text-gray-250">{user?.username}</span>
             </div>
             <button
-              onClick={logout}
+              onClick={() => {
+                // Logoutda kesh tozalanadi — boshqa akkaunt ma'lumotlari qolib ketmasligi uchun
+                queryClient.clear()
+                logout()
+              }}
               className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-red-500/15 bg-red-500/10 text-red-500 hover:bg-red-500/15 transition"
               title={translations.common.logout}
             >

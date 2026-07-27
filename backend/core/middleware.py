@@ -15,12 +15,15 @@ logger = logging.getLogger("meter_monitor.access")
 
 
 def _client_ip(request: Request) -> str:
-    forwarded_for = request.headers.get("X-Forwarded-For")
-    if forwarded_for:
-        return forwarded_for.split(",", 1)[0].strip()
-    if request.client:
-        return request.client.host
-    return "unknown"
+    # XFF ni istalgan klient yozib yuborishi mumkin — faqat ishonchli proxy
+    # (nginx) dan kelgan so'rovda ishonamiz, aks holda rate-limit bypass bo'ladi
+    direct = request.client.host if request.client else "unknown"
+    if direct in settings.trusted_proxy_ips:
+        forwarded_for = request.headers.get("X-Forwarded-For")
+        if forwarded_for:
+            # Eng oxirgi qiymat proxy yozgani — client o'zi qo'shganiga ishonmaymiz
+            return forwarded_for.rsplit(",", 1)[-1].strip()
+    return direct
 
 
 def _route_path(request: Request) -> str:
@@ -71,14 +74,23 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 
 class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
+    # Excel billing hisobotlari 25MB dan katta bo'ladi (F3 ~28MB)
+    _LARGE_UPLOAD_PATHS = ("/api/billing/import",)
+    _LARGE_UPLOAD_LIMIT = 60 * 1024 * 1024
+
     async def dispatch(self, request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
         content_length = request.headers.get("Content-Length")
-        if content_length and settings.max_request_body_bytes > 0:
+        limit = (
+            self._LARGE_UPLOAD_LIMIT
+            if request.url.path in self._LARGE_UPLOAD_PATHS
+            else settings.max_request_body_bytes
+        )
+        if content_length and limit > 0:
             try:
                 size = int(content_length)
             except ValueError:
                 size = 0
-            if size > settings.max_request_body_bytes:
+            if size > limit:
                 return JSONResponse(
                     {"detail": "Request body juda katta"},
                     status_code=413,

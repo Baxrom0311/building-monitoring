@@ -192,8 +192,9 @@ export default function DeviceDetailPage() {
   // Chart data: convert historical readings to Recharts format
   const chartData = useMemo(() => {
     if (!chartHistoryData?.readings) return []
+    // API tartibiga bog'lanib qolmaslik uchun ts bo'yicha aniq o'sish tartibida saralaymiz
     return [...chartHistoryData.readings]
-      .reverse()
+      .sort((a, b) => a.ts - b.ts)
       .map((r) => ({
         timestamp: new Date(r.ts * 1000).toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' }),
         power: r.power_w ?? 0,

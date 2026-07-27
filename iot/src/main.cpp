@@ -15,7 +15,18 @@
 #define FW_VERSION "4.2.0"
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// ADS1115 TEST MODE
+// ADS1115 INDUSTRIAL PRESSURE MONITOR
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// Apparat:
+//   ESP32 + ADS1115 (I2C 0x48, SDA=21, SCL=22)
+//   HY-131 bosim uzatgich: 0–0.6 MPa, 4–20 mA
+//   Shunt rezistor: 165 Ω  →  0.66 V (4mA) .. 3.30 V (20mA)
+//   ADS1115 GAIN_ONE: ±4.096 V, 1 bit = 0.125 mV
+//
+// Kanallar:
+//   A0 = Suv bosimi (HY-131, 0–0.6 MPa)
+//   A1 = (kelajak) Gaz bosimi (0–16 mbar)
 // ═══════════════════════════════════════════════════════════════════════════════
 #ifdef ADS1115_TEST
 
@@ -23,48 +34,184 @@
 #include <Wire.h>
 #include <Adafruit_ADS1X15.h>
 
-#define ADS_SDA        21
-#define ADS_SCL        22
-#define ADS_ADDR       0x48
-#define SHUNT_OHM      100.0f
-#define SENSOR_MA_MIN   4.0f
-#define SENSOR_MA_MAX  20.0f
-#define SENSOR_MPA_MAX  0.6f
+// ─── Apparat konfiguratsiya ─────────────────────────────────────────────────
+#define ADS_SDA         21
+#define ADS_SCL         22
+#define ADS_ADDR        0x48
+#define SHUNT_OHM       165.0f    // Shunt rezistor (Ω)
+#define MV_PER_BIT      0.125f    // GAIN_ONE: 4.096V / 32768
 
+// ─── Sensor chegaralari ─────────────────────────────────────────────────────
+#define SENSOR_MA_MIN    4.0f     // 4 mA = 0 bosim
+#define SENSOR_MA_MAX   20.0f     // 20 mA = max bosim
+#define SENSOR_ERR_LO    3.6f     // < 3.6 mA = sim uzilgan / sensor xato
+#define SENSOR_ERR_HI   21.0f     // > 21 mA = qisqa tutashuv
+
+// ─── Bosim oralig'i ─────────────────────────────────────────────────────────
+#define PRESSURE_MPA_MAX  0.6f    // HY-131: 0–0.6 MPa
+#define MPA_TO_BAR       10.0f
+#define MPA_TO_KPA     1000.0f
+#define MPA_TO_PSI      145.038f
+#define MPA_TO_M_H2O    101.972f  // metr suv ustuni
+
+// ─── EMA filtri ─────────────────────────────────────────────────────────────
+#define EMA_ALPHA        0.15f    // Eksponensial o'rtacha — silliqlashtirish
+
+// ─── O'qish parametrlari ────────────────────────────────────────────────────
+#define ADC_OVERSAMPLE    16      // Hardware oversample soni
+#define READ_INTERVAL_MS 1000     // O'qish davri (ms)
+
+// ─── Kanal holati ───────────────────────────────────────────────────────────
+struct ChannelState {
+    uint8_t  channel;       // ADS1115 kanal (0–3)
+    const char* name;       // "WATER", "GAS", ...
+    float    mpa_max;       // Sensor max bosim (MPa)
+    float    ema_mA;        // EMA filtrdan o'tgan tok (mA)
+    float    ema_mpa;       // EMA filtrdan o'tgan bosim (MPa)
+    bool     initialized;   // Birinchi o'qish bo'ldimi
+    bool     error;         // Sensor xatosi
+    uint32_t err_count;     // Ketma-ket xatolar soni
+    uint32_t read_count;    // Jami o'qishlar
+};
+
+// ─── Global ─────────────────────────────────────────────────────────────────
 Adafruit_ADS1115 ads;
+ChannelState ch_water = { 0, "WATER", PRESSURE_MPA_MAX, 0, 0, false, false, 0, 0 };
 
+// ═════════════════════════════════════════════════════════════════════════════
+// Yordamchi funksiyalar
+// ═════════════════════════════════════════════════════════════════════════════
+
+/** ADC dan o'rtacha voltaj o'qish (V) */
+float readVoltage(uint8_t channel) {
+    int32_t sum = 0;
+    for (int i = 0; i < ADC_OVERSAMPLE; i++) {
+        sum += ads.readADC_SingleEnded(channel);
+        delayMicroseconds(500);
+    }
+    float raw_avg = (float)sum / ADC_OVERSAMPLE;
+    return raw_avg * MV_PER_BIT / 1000.0f;   // mV → V
+}
+
+/** Voltajdan tok hisoblash (mA).  I = V / R × 1000 */
+float readCurrent(float voltage_V) {
+    return (voltage_V / SHUNT_OHM) * 1000.0f;
+}
+
+/** Tokdan bosim hisoblash (MPa).  4–20 mA → 0–max MPa */
+float readPressure(float current_mA, float mpa_max) {
+    if (current_mA < SENSOR_MA_MIN) return 0.0f;
+    float mpa = (current_mA - SENSOR_MA_MIN) / (SENSOR_MA_MAX - SENSOR_MA_MIN) * mpa_max;
+    return constrain(mpa, 0.0f, mpa_max);
+}
+
+/** EMA filtr yordamida yangilash */
+void updateEMA(ChannelState& ch, float current_mA, float pressure_mpa) {
+    if (!ch.initialized) {
+        ch.ema_mA  = current_mA;
+        ch.ema_mpa = pressure_mpa;
+        ch.initialized = true;
+    } else {
+        ch.ema_mA  = EMA_ALPHA * current_mA  + (1.0f - EMA_ALPHA) * ch.ema_mA;
+        ch.ema_mpa = EMA_ALPHA * pressure_mpa + (1.0f - EMA_ALPHA) * ch.ema_mpa;
+    }
+}
+
+/** Sensor xatosini tekshirish */
+bool checkSensorError(ChannelState& ch, float current_mA) {
+    if (current_mA < SENSOR_ERR_LO || current_mA > SENSOR_ERR_HI) {
+        ch.error = true;
+        ch.err_count++;
+        return true;
+    }
+    ch.error = false;
+    ch.err_count = 0;
+    return false;
+}
+
+/** Natijani serial ga chiqarish */
+void printData(const ChannelState& ch, float voltage_V, float current_mA, float mpa_raw) {
+    if (ch.error) {
+        Serial.printf("[%s] XATO! Tok: %.2f mA ", ch.name, current_mA);
+        if (current_mA < SENSOR_ERR_LO)
+            Serial.printf("(< %.1f mA — sim uzilgan yoki sensor yo'q)\n", SENSOR_ERR_LO);
+        else
+            Serial.printf("(> %.1f mA — qisqa tutashuv)\n", SENSOR_ERR_HI);
+        return;
+    }
+
+    Serial.printf("[%s] V=%.4f  I=%.2f mA  |  "
+                  "Raw: %.4f MPa (%.2f bar)  |  "
+                  "EMA: %.4f MPa (%.2f bar)  %.1f kPa  %.1f m.s.u.\n",
+                  ch.name,
+                  voltage_V,
+                  current_mA,
+                  mpa_raw,
+                  mpa_raw * MPA_TO_BAR,
+                  ch.ema_mpa,
+                  ch.ema_mpa * MPA_TO_BAR,
+                  ch.ema_mpa * MPA_TO_KPA,
+                  ch.ema_mpa * MPA_TO_M_H2O);
+}
+
+/** Bitta kanalni to'liq o'qish + filtr + chiqarish */
+void processChannel(ChannelState& ch) {
+    ch.read_count++;
+    float voltage = readVoltage(ch.channel);
+    float current = readCurrent(voltage);
+
+    bool err = checkSensorError(ch, current);
+    float pressure = err ? 0.0f : readPressure(current, ch.mpa_max);
+    if (!err) updateEMA(ch, current, pressure);
+
+    printData(ch, voltage, current, pressure);
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Setup
+// ═════════════════════════════════════════════════════════════════════════════
 void setup() {
     Serial.begin(115200);
-    unsigned long t = millis(); while (millis() - t < 500) yield();
-    Serial.println("\n=== ADS1115 + HY-131 Test ===\n");
+    delay(500);
+
+    Serial.println();
+    Serial.println("╔══════════════════════════════════════════════════════════╗");
+    Serial.println("║  ADS1115 + HY-131 Industrial Pressure Monitor v2.0     ║");
+    Serial.println("╠══════════════════════════════════════════════════════════╣");
+    Serial.printf( "║  Shunt: %d Ω  |  Range: 0–%.1f MPa (0–%.0f bar)       ║\n",
+                   (int)SHUNT_OHM, PRESSURE_MPA_MAX, PRESSURE_MPA_MAX * MPA_TO_BAR);
+    Serial.printf( "║  ADC: GAIN_ONE (±4.096V)  |  %.3f mV/bit              ║\n", MV_PER_BIT);
+    Serial.printf( "║  EMA α=%.2f  |  Oversample: %dx  |  Interval: %dms    ║\n",
+                   EMA_ALPHA, ADC_OVERSAMPLE, READ_INTERVAL_MS);
+    Serial.println("╚══════════════════════════════════════════════════════════╝");
+    Serial.println();
 
     Wire.begin(ADS_SDA, ADS_SCL);
     if (!ads.begin(ADS_ADDR)) {
-        Serial.println("XATO: ADS1115 topilmadi!");
-        while (true) yield();
+        Serial.println("XATO: ADS1115 topilmadi (0x48)! Ulanishni tekshiring:");
+        Serial.println("  SDA → GPIO21,  SCL → GPIO22,  VDD → 3.3V,  GND → GND");
+        while (true) { delay(1000); }
     }
-    ads.setGain(GAIN_TWO);
+    ads.setGain(GAIN_ONE);
     ads.setDataRate(RATE_ADS1115_128SPS);
-    Serial.printf("%-8s  %-9s  %-9s  %-10s  %-8s\n", "Raw", "V", "mA", "MPa", "bar");
+
+    Serial.println("ADS1115 tayyor ✓");
+    Serial.printf("Tokni kutish:  %.1f–%.1f mA (normal),  "
+                  "< %.1f mA (xato),  > %.1f mA (xato)\n\n",
+                  SENSOR_MA_MIN, SENSOR_MA_MAX, SENSOR_ERR_LO, SENSOR_ERR_HI);
 }
 
+// ═════════════════════════════════════════════════════════════════════════════
+// Loop
+// ═════════════════════════════════════════════════════════════════════════════
+static unsigned long last_ms = 0;
+
 void loop() {
-    long sum = 0;
-    for (int i = 0; i < 8; i++) {
-        sum += ads.readADC_SingleEnded(0);
-        unsigned long t = millis(); while (millis() - t < 10) yield();
-    }
-    int16_t raw = (int16_t)(sum / 8);
-    float voltage = raw * 0.0000625f;
-    float current_mA = voltage / (SHUNT_OHM / 1000.0f);
-    float pressure_MPa = 0.0f;
-    if (current_mA >= SENSOR_MA_MIN) {
-        pressure_MPa = (current_mA - SENSOR_MA_MIN) / (SENSOR_MA_MAX - SENSOR_MA_MIN) * SENSOR_MPA_MAX;
-        pressure_MPa = constrain(pressure_MPa, 0.0f, SENSOR_MPA_MAX);
-    }
-    Serial.printf("%-8d  %-9.4f  %-9.3f  %-10.4f  %-8.3f\n",
-                  raw, voltage, current_mA, pressure_MPa, pressure_MPa * 10.0f);
-    unsigned long t = millis(); while (millis() - t < 1000) yield();
+    unsigned long now = millis();
+    if (now - last_ms < READ_INTERVAL_MS && last_ms != 0) return;
+    last_ms = now;
+
+    processChannel(ch_water);
 }
 
 #elif defined(LORA_NODE)
@@ -114,8 +261,14 @@ void loop() {
 #endif
 
 // ─── Konstantalar ────────────────────────────────────────────────────────────
-#define WIFI_AP_NAME     "Bakhromdev"
-#define WIFI_AP_PASS     "998935580311"
+// Sozlash portali AP nomi/paroli — build flag bilan almashtirish mumkin:
+//   '-DWIFI_AP_NAME="MeningAP"' '-DWIFI_AP_PASS="parol123"'
+#ifndef WIFI_AP_NAME
+  #define WIFI_AP_NAME   "Bakhromdev"
+#endif
+#ifndef WIFI_AP_PASS
+  #define WIFI_AP_PASS   "998935580311"
+#endif
 #ifndef READ_INTERVAL_MS
   #define READ_INTERVAL_MS  30000UL
 #endif
@@ -242,8 +395,15 @@ void setup() {
 #ifndef DEFAULT_WIFI_PASS
   #define DEFAULT_WIFI_PASS "12345678"
 #endif
-    wifi_quick(DEFAULT_WIFI_SSID, DEFAULT_WIFI_PASS);
-    wifi_setup(WIFI_AP_NAME, WIFI_AP_PASS, device_id, g_cfg.meter_serial);
+    // Portal FAQAT sozlanmagan qurilmada ochiladi (yoki BOOT tugma → reset →
+    // keyingi bootda ochiladi). Router o'chiq bo'lsa ≤16s da ishga tushib,
+    // fonda qayta ulanadi — 3 daqiqa portalda qotib turish yo'q.
+    {
+        bool first_boot = !wifi_has_saved_creds();
+        bool wifi_ok = wifi_connect_boot(DEFAULT_WIFI_SSID, DEFAULT_WIFI_PASS);
+        if (!wifi_ok && first_boot)
+            wifi_portal(WIFI_AP_NAME, WIFI_AP_PASS, device_id, g_cfg.meter_serial);
+    }
 
     // NTP vaqt sinxronlash (WiFi ulangandan keyin)
     if (WiFi.status() == WL_CONNECTED) ntp_init();
@@ -357,7 +517,9 @@ void loop() {
                 return;
             }
             meter_fail_count = 0;
-            meter_retry_ms   = READ_INTERVAL_MS;
+            // Backend set_interval bilan o'zgartirgan qiymat ishlatilsin
+            // (READ_INTERVAL_MS compile-time default edi)
+            meter_retry_ms   = g_cfg.read_interval_ms;
             if (!g_sensor_meta.meter_serial[0])
                 dlms_get_string(1, OBIS_SERIAL, 2,
                                 g_sensor_meta.meter_serial,
@@ -451,9 +613,9 @@ void loop() {
         now - last_cmd_ms >= CMD_POLL_MS) {
         last_cmd_ms = now;
 #ifdef SENSOR_ELECTRICITY
-        app_poll_commands(device_id, &pending_relay);
+        app_poll_commands(device_id, &pending_relay, FW_VERSION);
 #else
-        app_poll_commands(device_id, nullptr);
+        app_poll_commands(device_id, nullptr, FW_VERSION);
 #endif
         app_send_status(device_id, FW_VERSION);
     }

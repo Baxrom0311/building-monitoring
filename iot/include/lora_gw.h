@@ -17,6 +17,7 @@
 // common.h main.cpp da LORA_GATEWAY blokida include qilinadi
 // lora_packet.h ham u yerda include qilinadi
 #include <ArduinoJson.h>
+#include "lora_mesh.h"
 
 // ─── LCD 16x2 I2C (ixtiyoriy) ────────────────────────────────────────────────
 #ifdef HAVE_LCD
@@ -58,7 +59,7 @@ static void gw_lcd_show(uint8_t, const char*) {}
 #define GW_CMD_POLL_MS    30000UL   // Har 30s da command poll
 #define GW_STATUS_MS      60000UL   // Har 60s da status yuborish
 #define GW_HEALTH_MS      60000UL   // Har 60s da server health check
-#define GW_MAX_NODES           8    // Bir vaqtda kuzatiladigan max node soni
+#define GW_MAX_NODES          16    // Bir vaqtda kuzatiladigan max node soni
 #define GW_BUF_SIZE            8    // Yuborish buferi hajmi
 #define GW_BUF_FLUSH_MS    3000UL   // Bufer flush interval (ms)
 
@@ -68,6 +69,7 @@ struct NodeState {
     char     device_id[20];   // "AABBCCDDEEFF"
     bool     registered;
     uint8_t  pending_relay;   // 0=yo'q, 1=off, 2=on
+    uint32_t dl_seq;          // Oxirgi yuborilgan downlink seq (ACK matching)
     unsigned long last_seen;
 };
 
@@ -82,53 +84,8 @@ static unsigned long gw_last_hlth_ms = 0;
 static unsigned long gw_last_stat_ms = 0;
 static unsigned long gw_last_flush_ms = 0;
 
-// ─── Mesh deduplication (relay tufayli duplikatlarni filtrlash) ───────────────
-#define GW_DEDUP_SIZE     16      // Oxirgi 16 ta paket hash
-#define GW_DEDUP_TTL_MS   30000   // 30s ichida kelgan duplikat → o'tkazib yuborish
-
-struct GwDedupEntry {
-    uint32_t hash;
-    unsigned long time_ms;
-};
-
-static GwDedupEntry gw_dedup[GW_DEDUP_SIZE];
-static int gw_dedup_idx = 0;
-
-// FNV-1a hash (MAC + payload dan)
-static uint32_t _gw_pkt_hash(const uint8_t* buf, size_t len) {
-    uint32_t h = 2166136261u;
-    for (size_t i = 0; i < len; i++) {
-        h ^= buf[i];
-        h *= 16777619u;
-    }
-    return h;
-}
-
-// true = yangi paket, false = duplikat (o'tkazib yuborish kerak)
-static bool gw_dedup_check(const uint8_t* buf, size_t len) {
-    // TTL ni nollab hash olish — TTL farqi bilan kelgan bir xil paketlar duplikat
-    uint8_t tmp[64];
-    if (len > sizeof(tmp)) return true;  // juda katta = noma'lum, o'tkazish
-    memcpy(tmp, buf, len);
-    tmp[7] &= ~LORA_TTL_MASK;  // TTL ni 0 qilish (hash uchun)
-
-    uint32_t h = _gw_pkt_hash(tmp, len);
-    unsigned long now = millis();
-
-    // Duplikat bormi?
-    for (int i = 0; i < GW_DEDUP_SIZE; i++) {
-        if (gw_dedup[i].hash == h && (now - gw_dedup[i].time_ms) < GW_DEDUP_TTL_MS) {
-            LOG_PRINTLN("GW: duplikat paket — mesh relay filtrlandi");
-            return false;
-        }
-    }
-
-    // Yangi hash qo'shish
-    gw_dedup[gw_dedup_idx].hash    = h;
-    gw_dedup[gw_dedup_idx].time_ms = now;
-    gw_dedup_idx = (gw_dedup_idx + 1) % GW_DEDUP_SIZE;
-    return true;
-}
+// Dedup endi lora_mesh.h da: (pkt_type, mac, seq) bo'yicha, ochiq header
+// orqali — hash ham, deshifrlash ham kerak emas.
 
 // ─── Yuborish buferi (HTTP blocking vaqtida LoRa RX yo'qolmasin) ─────────────
 struct GwBufEntry {
@@ -137,6 +94,7 @@ struct GwBufEntry {
     uint8_t mac[6];          // register uchun node MAC
     LoRaUplink reg_pkt;      // register uchun paket (faqat elektr)
     uint8_t entry_type;      // 0=electricity, 1=soil, 2=sound, 3=water, 4=gas
+    uint8_t tries;           // POST urinishlari (poison entry queue ni bloklamasin)
 };
 
 static GwBufEntry gw_buf[GW_BUF_SIZE];
@@ -147,14 +105,16 @@ static int gw_buf_count = 0;
 static bool gw_buf_push(const String& json, bool needs_reg, const uint8_t* mac,
                          const LoRaUplink* reg_pkt, uint8_t etype) {
     if (gw_buf_count >= GW_BUF_SIZE) {
-        LOG_PRINTLN("GW BUF: to'ldi! Eski yozuv ustiga yozildi");
-        gw_buf_tail = (gw_buf_tail + 1) % GW_BUF_SIZE;
-        gw_buf_count--;
+        // To'la — QABUL QILMAYMIZ (ACK ham yubormaymiz): node o'zida saqlaydi
+        // yoki boshqa gateway qabul qiladi. Eski ma'lumot yo'qolmaydi.
+        LOG_PRINTLN("GW BUF: to'la — paket qabul qilinmadi (node qayta yuboradi)");
+        return false;
     }
     GwBufEntry& e = gw_buf[gw_buf_head];
     e.json = json;
     e.needs_register = needs_reg;
     e.entry_type = etype;
+    e.tries = 0;
     if (mac) memcpy(e.mac, mac, 6);
     if (reg_pkt) e.reg_pkt = *reg_pkt;
     gw_buf_head = (gw_buf_head + 1) % GW_BUF_SIZE;
@@ -244,8 +204,11 @@ static void gw_register_simple_node(NodeState* n, const char* utility,
 }
 
 // ─── Buferdagi yozuvlarni HTTP orqali yuborish ───────────────────────────────
+#define GW_BUF_MAX_TRIES  5   // shundan keyin yozuv tashlanadi (poison himoya)
+
 static void gw_buf_flush() {
     while (gw_buf_count > 0) {
+        wdt_feed();  // entrylar × (register + POST) 5s timeout bilan TWDT dan oshishi mumkin
         GwBufEntry& e = gw_buf[gw_buf_tail];
         if (e.needs_register) {
             NodeState* n = gw_find_node(e.mac);
@@ -254,13 +217,24 @@ static void gw_buf_flush() {
                     case 0: gw_register_electricity_node(n, e.reg_pkt); break;
                     case 1: gw_register_simple_node(n, "soil", "capacitive_soil_moisture"); break;
                     case 2: gw_register_simple_node(n, "sound", "microphone"); break;
-                    case 3: gw_register_simple_node(n, "water", "water_pulse_flow"); break;
+                    case 3: gw_register_simple_node(n, "water", "ads1115_hy131"); break;
                     case 4: gw_register_simple_node(n, "gas", "gas_pulse_flow"); break;
                 }
             }
         }
         bool ok = http_post("/api/readings", e.json);
-        LOG_PRINTF("GW BUF: readings → %s (%d qoldi)\n", ok ? "OK" : "XATO", gw_buf_count - 1);
+        if (!ok) {
+            e.tries++;
+            if (e.tries < GW_BUF_MAX_TRIES) {
+                // Server hozircha javob bermadi — yozuvni SAQLAB keyinroq urinamiz
+                LOG_PRINTF("GW BUF: POST xato (urinish %d/%d) — keyinroq\n",
+                           e.tries, GW_BUF_MAX_TRIES);
+                return;
+            }
+            LOG_PRINTLN("GW BUF: yozuv tashlab yuborildi (limit)");
+        } else {
+            LOG_PRINTF("GW BUF: readings -> OK (%d qoldi)\n", gw_buf_count - 1);
+        }
         e.json = "";
         gw_buf_tail = (gw_buf_tail + 1) % GW_BUF_SIZE;
         gw_buf_count--;
@@ -268,9 +242,10 @@ static void gw_buf_flush() {
 }
 
 // ─── Elektr uplink qabul → buferga yozish (HTTP blokirovka qilmaydi) ─────────
-static void gw_handle_uplink(const LoRaUplink& pkt, int rssi) {
+// true = qabul qilindi (ACK yuboriladi), false = joy yo'q (node qayta yuboradi)
+static bool gw_handle_uplink(const LoRaUplink& pkt, int rssi) {
     NodeState* node = gw_get_node(pkt.mac);
-    if (!node) return;
+    if (!node) return false;
     node->last_seen = millis();
 
     bool is_te73 = (pkt.flags & 0x01) != 0;
@@ -297,16 +272,19 @@ static void gw_handle_uplink(const LoRaUplink& pkt, int rssi) {
         gw_lcd_show(1, _r1);
     }
 
-    if (!gw_server_ok) { LOG_PRINTLN("GW: server offline — buferga yozilmadi"); return; }
-
     // JSON tayyorlash (elektr: ~450 bayt serializatsiya, 640 xavfsiz)
+    // server_ok tekshirilmaydi — bufer store-and-forward vazifasini bajaradi
     StaticJsonDocument<640> doc;
     doc["device_id"]    = node->device_id;
+    char _rid[32];
+    snprintf(_rid, sizeof(_rid), "%s-%lu", node->device_id, (unsigned long)pkt.seq);
+    doc["reading_id"]   = _rid;  // backend duplikatlarni shu orqali tashlaydi
     doc["utility_type"] = "electricity";
     doc["sensor_type"]  = is_te73 ? "te73" : "te71";
     doc["meter_serial"] = pkt.meter_serial;
     doc["fw_version"]   = FW_VERSION;
     doc["lora_rssi"]    = rssi;
+    if (pkt.flags & 0x02) doc["is_test_device"] = true;  // elektr: bit1=test_mode
 
     if (pkt.v_l1 != 0) doc["voltage_l1"] = serialized(String(v_l1, 2));
     if (pkt.i_l1 != 0) doc["current_l1"] = serialized(String(i_l1, 3));
@@ -328,28 +306,31 @@ static void gw_handle_uplink(const LoRaUplink& pkt, int rssi) {
 
     // Buferga push (HTTP keyinroq yuboriladi)
     bool needs_reg = !node->registered;
-    gw_buf_push(body, needs_reg, pkt.mac, &pkt, 0);
-    LOG_PRINTF("GW: buferga yozildi (%d/%d)\n", gw_buf_count, GW_BUF_SIZE);
+    bool ok = gw_buf_push(body, needs_reg, pkt.mac, &pkt, 0);
+    if (ok) LOG_PRINTF("GW: buferga yozildi (%d/%d)\n", gw_buf_count, GW_BUF_SIZE);
+    return ok;
 }
 
 // ─── Tuproq uplink qabul → buferga yozish ────────────────────────────────────
-static void gw_handle_soil_uplink(const LoRaSoilUplink& pkt, int rssi) {
+static bool gw_handle_soil_uplink(const LoRaSoilUplink& pkt, int rssi) {
     NodeState* node = gw_get_node(pkt.mac);
-    if (!node) return;
+    if (!node) return false;
     node->last_seen = millis();
 
     float humidity = pkt.humidity / 100.0f;
-    LOG_PRINTF("GW RX ← [%s] RSSI=%ddBm namlik=%.1f%%\n",
+    LOG_PRINTF("GW RX <- [%s] RSSI=%ddBm namlik=%.1f%%\n",
                node->device_id, rssi, humidity);
-
-    if (!gw_server_ok) { LOG_PRINTLN("GW: server offline — buferga yozilmadi"); return; }
 
     StaticJsonDocument<256> doc;
     doc["device_id"]    = node->device_id;
+    char _rid[32];
+    snprintf(_rid, sizeof(_rid), "%s-%lu", node->device_id, (unsigned long)pkt.seq);
+    doc["reading_id"]   = _rid;
     doc["utility_type"] = "soil";
     doc["sensor_type"]  = "capacitive_soil_moisture";
     doc["fw_version"]   = FW_VERSION;
     doc["lora_rssi"]    = rssi;
+    if (pkt.flags & 0x01) doc["is_test_device"] = true;  // bit0=test_mode
     doc["humidity"]     = serialized(String(humidity, 1));
 
     char _ts[25];
@@ -357,43 +338,46 @@ static void gw_handle_soil_uplink(const LoRaSoilUplink& pkt, int rssi) {
 
     String body; serializeJson(doc, body);
 
-    bool needs_reg = !node->registered;
-    gw_buf_push(body, needs_reg, pkt.mac, nullptr, 1);
-    LOG_PRINTF("GW: soil buferga yozildi (%d/%d)\n", gw_buf_count, GW_BUF_SIZE);
+    bool ok = gw_buf_push(body, !node->registered, pkt.mac, nullptr, 1);
+    if (ok) LOG_PRINTF("GW: soil buferga yozildi (%d/%d)\n", gw_buf_count, GW_BUF_SIZE);
+    return ok;
 }
 
 // ─── Ovoz uplink qabul → buferga yozish ──────────────────────────────────────
-static void gw_handle_sound_uplink(const LoRaSoundUplink& pkt, int rssi) {
+static bool gw_handle_sound_uplink(const LoRaSoundUplink& pkt, int rssi) {
     NodeState* node = gw_get_node(pkt.mac);
-    if (!node) return;
+    if (!node) return false;
     node->last_seen = millis();
 
     float level = pkt.level / 100.0f;
     LOG_PRINTF("GW RX <- [%s] RSSI=%ddBm ovoz=%.1f%%\n",
                node->device_id, rssi, level);
 
-    if (!gw_server_ok) { LOG_PRINTLN("GW: server offline"); return; }
-
     StaticJsonDocument<256> doc;
     doc["device_id"]    = node->device_id;
+    char _rid[32];
+    snprintf(_rid, sizeof(_rid), "%s-%lu", node->device_id, (unsigned long)pkt.seq);
+    doc["reading_id"]   = _rid;
     doc["utility_type"] = "sound";
     doc["sensor_type"]  = "microphone";
     doc["fw_version"]   = FW_VERSION;
     doc["lora_rssi"]    = rssi;
+    if (pkt.flags & 0x01) doc["is_test_device"] = true;  // bit0=test_mode
     if (pkt.level != 0) doc["level"] = serialized(String(level, 1));
 
     char _ts[25];
     if (diag_timestamp(_ts, sizeof(_ts))) doc["timestamp"] = _ts;
 
     String body; serializeJson(doc, body);
-    gw_buf_push(body, !node->registered, pkt.mac, nullptr, 2);
-    LOG_PRINTF("GW: sound buferga yozildi (%d/%d)\n", gw_buf_count, GW_BUF_SIZE);
+    bool ok = gw_buf_push(body, !node->registered, pkt.mac, nullptr, 2);
+    if (ok) LOG_PRINTF("GW: sound buferga yozildi (%d/%d)\n", gw_buf_count, GW_BUF_SIZE);
+    return ok;
 }
 
 // ─── Suv uplink qabul → buferga yozish ───────────────────────────────────────
-static void gw_handle_water_uplink(const LoRaWaterUplink& pkt, int rssi) {
+static bool gw_handle_water_uplink(const LoRaWaterUplink& pkt, int rssi) {
     NodeState* node = gw_get_node(pkt.mac);
-    if (!node) return;
+    if (!node) return false;
     node->last_seen = millis();
 
     float p_bottom = pkt.p_bottom / 1000.0f;
@@ -405,14 +389,16 @@ static void gw_handle_water_uplink(const LoRaWaterUplink& pkt, int rssi) {
     LOG_PRINTF("GW RX <- [%s] RSSI=%ddBm suv p=%.3f/%.3f oqim=%.1f hajm=%.3f\n",
                node->device_id, rssi, p_bottom, p_top, flow, volume);
 
-    if (!gw_server_ok) { LOG_PRINTLN("GW: server offline"); return; }
-
     StaticJsonDocument<384> doc;
     doc["device_id"]    = node->device_id;
+    char _rid[32];
+    snprintf(_rid, sizeof(_rid), "%s-%lu", node->device_id, (unsigned long)pkt.seq);
+    doc["reading_id"]   = _rid;
     doc["utility_type"] = "water";
-    doc["sensor_type"]  = "water_pulse_flow";
+    doc["sensor_type"]  = "ads1115_hy131";
     doc["fw_version"]   = FW_VERSION;
     doc["lora_rssi"]    = rssi;
+    if (pkt.flags & 0x01) doc["is_test_device"] = true;  // bit0=test_mode
 
     if (pkt.p_bottom != 0) doc["pressure_bottom_bar"] = serialized(String(p_bottom, 3));
     if (pkt.p_top    != 0) doc["pressure_top_bar"]    = serialized(String(p_top, 3));
@@ -424,14 +410,15 @@ static void gw_handle_water_uplink(const LoRaWaterUplink& pkt, int rssi) {
     if (diag_timestamp(_ts, sizeof(_ts))) doc["timestamp"] = _ts;
 
     String body; serializeJson(doc, body);
-    gw_buf_push(body, !node->registered, pkt.mac, nullptr, 3);
-    LOG_PRINTF("GW: water buferga yozildi (%d/%d)\n", gw_buf_count, GW_BUF_SIZE);
+    bool ok = gw_buf_push(body, !node->registered, pkt.mac, nullptr, 3);
+    if (ok) LOG_PRINTF("GW: water buferga yozildi (%d/%d)\n", gw_buf_count, GW_BUF_SIZE);
+    return ok;
 }
 
 // ─── Gaz uplink qabul → buferga yozish ───────────────────────────────────────
-static void gw_handle_gas_uplink(const LoRaGasUplink& pkt, int rssi) {
+static bool gw_handle_gas_uplink(const LoRaGasUplink& pkt, int rssi) {
     NodeState* node = gw_get_node(pkt.mac);
-    if (!node) return;
+    if (!node) return false;
     node->last_seen = millis();
 
     float pressure = pkt.pressure / 1000.0f;
@@ -442,14 +429,16 @@ static void gw_handle_gas_uplink(const LoRaGasUplink& pkt, int rssi) {
     LOG_PRINTF("GW RX <- [%s] RSSI=%ddBm gaz p=%.3f oqim=%.3f hajm=%.3f\n",
                node->device_id, rssi, pressure, flow, volume);
 
-    if (!gw_server_ok) { LOG_PRINTLN("GW: server offline"); return; }
-
     StaticJsonDocument<384> doc;
     doc["device_id"]    = node->device_id;
+    char _rid[32];
+    snprintf(_rid, sizeof(_rid), "%s-%lu", node->device_id, (unsigned long)pkt.seq);
+    doc["reading_id"]   = _rid;
     doc["utility_type"] = "gas";
     doc["sensor_type"]  = "gas_pulse_flow";
     doc["fw_version"]   = FW_VERSION;
     doc["lora_rssi"]    = rssi;
+    if (pkt.flags & 0x01) doc["is_test_device"] = true;  // bit0=test_mode
 
     if (pkt.pressure != 0) doc["pressure_bar"]  = serialized(String(pressure, 3));
     if (pkt.flow     != 0) doc["flow_rate"]     = serialized(String(flow, 3));
@@ -460,13 +449,15 @@ static void gw_handle_gas_uplink(const LoRaGasUplink& pkt, int rssi) {
     if (diag_timestamp(_ts, sizeof(_ts))) doc["timestamp"] = _ts;
 
     String body; serializeJson(doc, body);
-    gw_buf_push(body, !node->registered, pkt.mac, nullptr, 4);
-    LOG_PRINTF("GW: gas buferga yozildi (%d/%d)\n", gw_buf_count, GW_BUF_SIZE);
+    bool ok = gw_buf_push(body, !node->registered, pkt.mac, nullptr, 4);
+    if (ok) LOG_PRINTF("GW: gas buferga yozildi (%d/%d)\n", gw_buf_count, GW_BUF_SIZE);
+    return ok;
 }
 
 // ─── Backend command poll → pending_relay ────────────────────────────────────
 static void gw_poll_commands() {
     for (int i = 0; i < gw_node_count; i++) {
+        wdt_feed();  // 8 node × 5s GET = 40s — TWDT (30s) dan oshadi
         NodeState* n = &gw_nodes[i];
         char path[80];
         snprintf(path, sizeof(path), "/api/commands/%s", n->device_id);
@@ -503,29 +494,31 @@ static void gw_poll_commands() {
     }
 }
 
-// ─── Pending relay buyruqlarni LoRa downlink orqali yuborish ─────────────────
-static void gw_send_downlinks() {
-    for (int i = 0; i < gw_node_count; i++) {
-        NodeState* n = &gw_nodes[i];
-        if (n->pending_relay == 0) continue;
+// ─── Pending relay buyruqni LoRa downlink orqali yuborish ────────────────────
+// Faqat hozirgina uplink yuborgan node ga — node radio o'z TX idan keyingi
+// oynada tinglaydi. pending_relay TX da EMAS, node ACKi kelganda o'chiriladi —
+// yetkazilmagan buyruq yo'qolmaydi, keyingi uplinkda qayta yuboriladi.
+static void gw_send_downlink_to(NodeState* n) {
+    if (!n || n->pending_relay == 0) return;
 
-        LoRaDownlink dl;
-        dl.pkt_type  = PKT_DOWNLINK;
-        memcpy(dl.mac, n->mac, 6);
-        dl.relay_cmd = n->pending_relay;
-        lora_encrypt_pkt((uint8_t*)&dl, sizeof(dl));
+    LoRaDownlink dl;
+    memset(&dl, 0, sizeof(dl));
+    dl.pkt_type  = PKT_DOWNLINK;
+    memcpy(dl.mac, n->mac, 6);
+    dl.flags     = LORA_TTL_DEFAULT << LORA_TTL_SHIFT;
+    dl.seq       = mesh_next_seq();
+    dl.relay_cmd = n->pending_relay;
+    n->dl_seq    = dl.seq;
+    lora_encrypt_pkt((uint8_t*)&dl, sizeof(dl));
+    // O'z downlinkimiz relaylardan qaytib kelsa qayta ishlamaslik uchun
+    mesh_dedup_record((uint8_t*)&dl, sizeof(dl));
 
-        LoRa.beginPacket();
-        LoRa.write((uint8_t*)&dl, sizeof(dl));
-        bool ok = LoRa.endPacket();
-        LOG_PRINTF("GW DL → [%s] relay_%s: %s\n",
-                   n->device_id,
-                   n->pending_relay == 2 ? "ON" : "OFF",
-                   ok ? "OK" : "XATO");
-        if (ok) n->pending_relay = 0;
-    }
-    // TX tugagach RX rejimiga qaytish
-    LoRa.receive();
+    bool ok = mesh_tx_raw((uint8_t*)&dl, sizeof(dl));
+    LOG_PRINTF("GW DL -> [%s] relay_%s seq=%lu: %s (ACK kutiladi)\n",
+               n->device_id,
+               n->pending_relay == 2 ? "ON" : "OFF",
+               (unsigned long)dl.seq,
+               ok ? "OK" : "XATO");
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -541,6 +534,7 @@ void setup() {
     esp_read_mac(mac, ESP_MAC_WIFI_STA);
     snprintf(gw_id, sizeof(gw_id), "%02X%02X%02X%02X%02X%02X",
              mac[0],mac[1],mac[2],mac[3],mac[4],mac[5]);
+    mesh_init(mac);  // seq hisoblagich + dedup jadvali
 
     LOG_PRINTLN();
     LOG_PRINTLN("╔══════════════════════════════════════════╗");
@@ -566,15 +560,27 @@ void setup() {
         }
     }
 
-    // WiFi ulanish
+    // WiFi ulanish — portal FAQAT sozlanmagan gatewayda ochiladi.
+    // Router o'chiq bo'lsa ≤16s da davom etadi: LoRa qabul (mesh) WiFi siz ham
+    // ishlashi shart — readinglar buferda to'planib, server qaytganda ketadi.
 #ifndef DEFAULT_WIFI_SSID
   #define DEFAULT_WIFI_SSID "12"
 #endif
 #ifndef DEFAULT_WIFI_PASS
   #define DEFAULT_WIFI_PASS "12345678"
 #endif
-    wifi_quick(DEFAULT_WIFI_SSID, DEFAULT_WIFI_PASS);
-    wifi_setup("Bakhromdev", "998935580311", gw_id, "LoRa Gateway");
+#ifndef WIFI_AP_NAME
+  #define WIFI_AP_NAME   "Bakhromdev"
+#endif
+#ifndef WIFI_AP_PASS
+  #define WIFI_AP_PASS   "998935580311"
+#endif
+    {
+        bool first_boot = !wifi_has_saved_creds();
+        bool wifi_ok = wifi_connect_boot(DEFAULT_WIFI_SSID, DEFAULT_WIFI_PASS);
+        if (!wifi_ok && first_boot)
+            wifi_portal(WIFI_AP_NAME, WIFI_AP_PASS, gw_id, "LoRa Gateway");
+    }
 
     // Server + OTA
     gw_server_ok = server_check();
@@ -628,41 +634,84 @@ void loop() {
     if (pkt_size > 0) {
         int rssi = LoRa.packetRssi();
 
-        // ── Umumiy o'qish va deshifrlash ─────────────────────────────────────
         uint8_t rxbuf[64];
-        if (pkt_size > (int)sizeof(rxbuf)) {
+        if (pkt_size < (int)(LORA_HDR_LEN + 2) || pkt_size > (int)sizeof(rxbuf)) {
             while (LoRa.available()) LoRa.read();
-            LOG_PRINTF("GW: paket juda katta (%d)\n", pkt_size);
+            LOG_PRINTF("GW: yaroqsiz paket hajmi (%d)\n", pkt_size);
         } else {
             LoRa.readBytes(rxbuf, pkt_size);
+            uint8_t ptype = rxbuf[0];
 
-            // Deshifrlash + CRC tekshirish
-            if (!lora_decrypt_pkt(rxbuf, pkt_size)) {
-                LOG_PRINTLN("GW: deshifrlash/CRC xato");
+            // ── ACK (node → gateway: downlink tasdiqlari; yoki boshqa GW ACKi) ──
+            if (ptype == PKT_ACK && pkt_size == (int)sizeof(LoRaAck)) {
+                if (!mesh_dedup_seen(rxbuf, pkt_size)) {
+                    LoRaAck ack; memcpy(&ack, rxbuf, sizeof(ack));
+                    uint8_t raw[sizeof(LoRaAck)]; memcpy(raw, rxbuf, sizeof(raw));
+                    if (lora_decrypt_pkt((uint8_t*)&ack, sizeof(ack))) {
+                        mesh_dedup_record(raw, sizeof(raw));
+                        if (ack.ack_type == PKT_DOWNLINK) {
+                            NodeState* n = gw_find_node(ack.mac);
+                            if (n && n->pending_relay && ack.seq == n->dl_seq) {
+                                n->pending_relay = 0;
+                                LOG_PRINTF("GW: downlink yetkazildi [%s]\n", n->device_id);
+                            }
+                        } else {
+                            // Boshqa gateway ACKi — mesh davom etsin (nodega yetsin)
+                            mesh_relay(raw, sizeof(raw));
+                        }
+                    }
+                }
             }
-            // Mesh dedup — duplikat paketni filtrlash
-            else if (!gw_dedup_check(rxbuf, pkt_size)) {
-                // duplikat — o'tkazib yuborildi (log dedup ichida)
+            // ── Takror uplink — avval qabul qilingan, node ACKni olmagan ────────
+            else if (mesh_dedup_seen(rxbuf, pkt_size)) {
+                if (ptype == PKT_UPLINK || (ptype >= PKT_UPLINK_SOIL && ptype <= PKT_UPLINK_GAS)) {
+                    LOG_PRINTLN("GW: takror uplink — ACK qayta yuborildi");
+                    mesh_send_ack(rxbuf + 1, lora_hdr_seq(rxbuf), ptype);
+                }
             }
-            // ─ Routing ─
-            else if (pkt_size == (int)sizeof(LoRaUplink) && rxbuf[0] == PKT_UPLINK) {
-                gw_handle_uplink(*(const LoRaUplink*)rxbuf, rssi);
-                gw_send_downlinks();
-            }
-            else if (pkt_size == (int)sizeof(LoRaWaterUplink) && rxbuf[0] == PKT_UPLINK_WATER) {
-                gw_handle_water_uplink(*(const LoRaWaterUplink*)rxbuf, rssi);
-            }
-            else if (pkt_size == (int)sizeof(LoRaGasUplink) && rxbuf[0] == PKT_UPLINK_GAS) {
-                gw_handle_gas_uplink(*(const LoRaGasUplink*)rxbuf, rssi);
-            }
-            else if (pkt_size == (int)sizeof(LoRaSoilUplink) && rxbuf[0] == PKT_UPLINK_SOIL) {
-                gw_handle_soil_uplink(*(const LoRaSoilUplink*)rxbuf, rssi);
-            }
-            else if (pkt_size == (int)sizeof(LoRaSoundUplink) && rxbuf[0] == PKT_UPLINK_SOUND) {
-                gw_handle_sound_uplink(*(const LoRaSoundUplink*)rxbuf, rssi);
-            }
+            // ── Yangi paket ─────────────────────────────────────────────────────
             else {
-                LOG_PRINTF("GW: noma'lum paket (hajm=%d, type=0x%02X)\n", pkt_size, rxbuf[0]);
+                // Deshifrlangan nusxa bilan ishlaymiz; rxbuf (shifrlangan)
+                // relay uchun o'z holicha qoladi
+                uint8_t dec[64]; memcpy(dec, rxbuf, pkt_size);
+                if (!lora_decrypt_pkt(dec, pkt_size)) {
+                    LOG_PRINTLN("GW: deshifrlash/CRC xato");
+                } else {
+                    bool accepted = false;
+                    bool known    = true;
+                    if (pkt_size == (int)sizeof(LoRaUplink) && ptype == PKT_UPLINK) {
+                        accepted = gw_handle_uplink(*(const LoRaUplink*)dec, rssi);
+                    } else if (pkt_size == (int)sizeof(LoRaWaterUplink) && ptype == PKT_UPLINK_WATER) {
+                        accepted = gw_handle_water_uplink(*(const LoRaWaterUplink*)dec, rssi);
+                    } else if (pkt_size == (int)sizeof(LoRaGasUplink) && ptype == PKT_UPLINK_GAS) {
+                        accepted = gw_handle_gas_uplink(*(const LoRaGasUplink*)dec, rssi);
+                    } else if (pkt_size == (int)sizeof(LoRaSoilUplink) && ptype == PKT_UPLINK_SOIL) {
+                        accepted = gw_handle_soil_uplink(*(const LoRaSoilUplink*)dec, rssi);
+                    } else if (pkt_size == (int)sizeof(LoRaSoundUplink) && ptype == PKT_UPLINK_SOUND) {
+                        accepted = gw_handle_sound_uplink(*(const LoRaSoundUplink*)dec, rssi);
+                    } else if (pkt_size == (int)sizeof(LoRaDownlink) && ptype == PKT_DOWNLINK) {
+                        // Boshqa gateway downlinki — mesh uchun relay
+                        mesh_dedup_record(rxbuf, pkt_size);
+                        mesh_relay(rxbuf, pkt_size);
+                    } else {
+                        known = false;
+                        LOG_PRINTF("GW: noma'lum paket (hajm=%d, type=0x%02X)\n",
+                                   pkt_size, ptype);
+                    }
+
+                    if (accepted) {
+                        // Qabul qilindi: dedup + ACK + shu nodega pending downlink
+                        mesh_dedup_record(rxbuf, pkt_size);
+                        mesh_send_ack(rxbuf + 1, lora_hdr_seq(rxbuf), ptype);
+                        NodeState* n = gw_find_node(rxbuf + 1);
+                        if (n && n->pending_relay) gw_send_downlink_to(n);
+                    } else if (known && ptype != PKT_DOWNLINK) {
+                        // Qabul qilolmadik (bufer to'la / node limiti) —
+                        // boshqa gateway eshitishi uchun relay qilamiz.
+                        // Dedup YOZILMAYDI: node retry sini keyin qabul qila olamiz.
+                        mesh_relay(rxbuf, pkt_size);
+                    }
+                }
             }
         }
         LoRa.receive();

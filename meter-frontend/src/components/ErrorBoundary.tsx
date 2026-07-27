@@ -1,6 +1,6 @@
 import React, { ReactNode } from 'react'
 import { AlertTriangle, RefreshCw } from 'lucide-react'
-import { isChunkLoadError } from '@/lib/appReload'
+import { isChunkLoadError, reloadAppFresh } from '@/lib/appReload'
 
 interface Props {
   children: ReactNode
@@ -24,7 +24,9 @@ export class ErrorBoundary extends React.Component<Props, State> {
 
   componentDidCatch(error: Error) {
     if (isChunkLoadError(error)) {
-      this.setState({ hasError: false, error: null })
+      // State reset qilinsa React.lazy keshlangan rejection tufayli cheksiz loop bo'ladi —
+      // buning o'rniga cache tozalab sahifani yangidan yuklaymiz
+      void reloadAppFresh('chunk')
       return
     }
     console.error('[ErrorBoundary]', error)
@@ -37,7 +39,11 @@ export class ErrorBoundary extends React.Component<Props, State> {
   }
 
   render() {
-    if (this.state.hasError && !isChunkLoadError(this.state.error)) {
+    if (this.state.hasError && isChunkLoadError(this.state.error)) {
+      // reloadAppFresh ishga tushgan — reload kutilayotganda hech narsa chizmaymiz
+      return null
+    }
+    if (this.state.hasError) {
       const message = this.state.error?.message ?? "Noma'lum xatolik"
       return (
         <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center p-6">

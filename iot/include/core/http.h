@@ -28,29 +28,28 @@ WhcNMzUwNjA0MTEwNDM4WjBPMQswCQYDVQQGEwJVUzEpMCcGA1UEChMgSW50ZXJu
 ZXQgU2VjdXJpdHkgUmVzZWFyY2ggR3JvdXAxFTATBgNVBAMTDElTUkcgUm9vdCBY
 MTCCAiIwDQYJKoZIhvcNAQEBBQADggIPADCCAgoCggIBAK3oJHP0FDfzm54rVygc
 h77ct984kIxuPOZXoHj3dcKi/vVqbvYATyjb3miGbESTtrFj/RQSa78f0uoxmyF+
-0TM8ukj13Xnfs7j/EvEhmkvBioZxaUpmZmyPfjxwv60pIgbz5MDmgK7iS4+3mX6
-UA5/TR5d8mUgjU+g4rk8Kb4Mu0UlXjIB0ttov0DiNewNwIRt18jA8+o+u3dpjq+s
-WT8KOEUt+zwvo/7V3LvSye0rgTBIlDHCNAymg4VMk7BPZ7hm/ELNKjD+Jo2FR3qy
-HB5T0Y3HsLuJvW5iB4YlcNHlsdu87kGJ55tukmi8mxdAQ4Q7e2RCOFvu396j3x+U
-CvdHEaJ6JSrjkMzMIkBjUMhKdH+BuRCObFy2yDDoDkjn/33m/aMyCyAM1PVHPhIE
-vGP7w26fJoIEdp9O7KpXf1Jjj+O9v2p4EFyMp0WaWc+4HPBpblXn/7y/rkX/AoT+
-/kUJe+SZIF7VIrZ4XvJRxCJaGiUyFqrZ5H7hFDcOFPJgKyOavXGvZbCIFbVODqGe
-j/qh+86ntjjdh/p3RjTvql+3NVf2kG3aNj/TtHPhvCVlRALNs25Dk5P0PSPeA9k5
-e8V4RFVWBG4tCdp2+rSZEBLxOhXPQcfX3K32SCRRSk1oAYi4vO2KraCxMpxkLsab
-7HyNzLcnKjFmKFhwH+JPOSP0wNXLAgMBAAGjQjBAMA4GA1UdDwEB/wQEAwIBBjAP
-BgNVHRMBAf8EBTADAQH/MB0GA1UdDgQWBBR5tFnme7bl5AFzgAiIyBpY9umbbjAN
-BgkqhkiG9w0BAQsFAAOCAgEAVR9YqbyyqFDQDLHYGmkgJykIrGF1XIpu+ILlaS/V
-9lZLubhzEFnTIZd+50xx+7LSYK05qAvqFyFWhfFQDlnrzuBZ6brJFe+GnY+EgPbk
-6ZGQ3BebYhtF8GaV0nxvwuo77x/Py9auJ/GpsMiu/X1+mvoiBOv/2X/qkSsisRcO
-j/KKNFtY2PwByVS5uCbMiogZiUvsNm+K+PY/2jUBhK9CuOK1bZCBxSIpwfHnL3r/
-GVTskbYuOP6san1jUEsmp3vtuMIv/zEjZ3hyAr/0lmluAXSwLw3RQFRkXV9MzLTnf
-N7TQLY8lBMpmHuEOnTRkfp6Dw+p7WoL4NMM/LxVQJBjOxhGKx9/qB0BO0ODB5nx
-BNHBH6ozmYHo3aZPjPHaXJtFC2jbNUG+gg6Mo3bwU+hA9gCa9FuK8EBxPyL2JOH0
-Jlk/Pl6UMR8CUBKEbNQ2jI2C/u1DOdcl3v6D9sj5p0UGe2oHYA4TwXpK8w6VjJHF
-MXuKTCOhQWFW+kQ7MAfqaBcixS6YH3dg2JN1sXpHOqHlRI7mIFVLMfVl4/9stSe/
-sFzLel0pUg//clO5aCJ3JZ5yiUt5qP3zEvFcpHE15CWkPTNSl0wQaDclGQRH5dVN
-+VbDaYmFKGBu0HVQz9xSf7ACZA0MSOH4P/sftaXTbH/v3vlDQnY5j/j1Bqasbfb
-OW0=
+0TM8ukj13Xnfs7j/EvEhmkvBioZxaUpmZmyPfjxwv60pIgbz5MDmgK7iS4+3mX6U
+A5/TR5d8mUgjU+g4rk8Kb4Mu0UlXjIB0ttov0DiNewNwIRt18jA8+o+u3dpjq+sW
+T8KOEUt+zwvo/7V3LvSye0rgTBIlDHCNAymg4VMk7BPZ7hm/ELNKjD+Jo2FR3qyH
+B5T0Y3HsLuJvW5iB4YlcNHlsdu87kGJ55tukmi8mxdAQ4Q7e2RCOFvu396j3x+UC
+B5iPNgiV5+I3lg02dZ77DnKxHZu8A/lJBdiB3QW0KtZB6awBdpUKD9jf1b0SHzUv
+KBds0pjBqAlkd25HN7rOrFleaJ1/ctaJxQZBKT5ZPt0m9STJEadao0xAH0ahmbWn
+OlFuhjuefXKnEgV4We0+UXgVCwOPjdAvBbI+e0ocS3MFEvzG6uBQE3xDk3SzynTn
+jh8BCNAw1FtxNrQHusEwMFxIt4I7mKZ9YIqioymCzLq9gwQbooMDQaHWBfEbwrbw
+qHyGO0aoSCqI3Haadr8faqU9GY/rOPNk3sgrDQoo//fb4hVC1CLQJ13hef4Y53CI
+rU7m2Ys6xt0nUW7/vGT1M0NPAgMBAAGjQjBAMA4GA1UdDwEB/wQEAwIBBjAPBgNV
+HRMBAf8EBTADAQH/MB0GA1UdDgQWBBR5tFnme7bl5AFzgAiIyBpY9umbbjANBgkq
+hkiG9w0BAQsFAAOCAgEAVR9YqbyyqFDQDLHYGmkgJykIrGF1XIpu+ILlaS/V9lZL
+ubhzEFnTIZd+50xx+7LSYK05qAvqFyFWhfFQDlnrzuBZ6brJFe+GnY+EgPbk6ZGQ
+3BebYhtF8GaV0nxvwuo77x/Py9auJ/GpsMiu/X1+mvoiBOv/2X/qkSsisRcOj/KK
+NFtY2PwByVS5uCbMiogziUwthDyC3+6WVwW6LLv3xLfHTjuCvjHIInNzktHCgKQ5
+ORAzI4JMPJ+GslWYHb4phowim57iaztXOoJwTdwJx4nLCgdNbOhdjsnvzqvHu7Ur
+TkXWStAmzOVyyghqpZXjFaH3pO3JLF+l+/+sKAIuvtd7u+Nxe5AW0wdeRlN8NwdC
+jNPElpzVmbUq4JUagEiuTDkHzsxHpFKVK7q4+63SM1N95R1NbdWhscdCb+ZAJzVc
+oyi3B43njTOQ5yOf+1CceWxG1bQVs5ZufpsMljq4Ui0/1lvh+wjChP4kqKOJ2qxq
+4RgqsahDYVvTH9w7jXbyLeiNdd8XM2w9U/t7y0Ff/9yi0GE44Za4rF2LN9d11TPA
+mRGunUHBcnWEvgJBQl9nJEiU0Zsnvgc/ubhPgXRR4Xq37Z0j4r7g1SgEEzwxA57d
+emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=
 -----END CERTIFICATE-----
 )EOF";
 #endif  // TLS_INSECURE
@@ -148,7 +147,36 @@ static bool server_check() {
     return code >= 200 && code < 300;
 }
 
+// OTA natijasini backendga xabar qilish (/api/ota/report) — batch monitoring uchun
+static void ota_send_report(const char* device_id, const char* status,
+                            const char* target_version, const char* from_version) {
+    StaticJsonDocument<256> doc;
+    doc["device_id"] = device_id;
+    doc["status"]    = status;
+    if (target_version && target_version[0]) doc["target_version"] = target_version;
+    if (from_version && from_version[0])     doc["from_version"]   = from_version;
+    String body; serializeJson(doc, body);
+    http_post("/api/ota/report", body);
+}
+
 static void ota_check(const char* device_id, const char* fw_version) {
+    // Oldingi OTA natijasi (reboot dan keyin): NVS da saqlangan target versiya
+    // hozirgi FW_VERSION bilan mos bo'lsa — success, aks holda failed
+    {
+        g_prefs.begin("app", false);
+        String tgt = g_prefs.getString("ota_tgt", "");
+        if (tgt.length()) {
+            g_prefs.remove("ota_tgt");
+            g_prefs.end();
+            bool ok = (tgt == fw_version);
+            ota_send_report(device_id, ok ? "success" : "failed", tgt.c_str(), nullptr);
+            LOG_PRINTF("OTA natija: %s (target=%s, joriy=%s)\n",
+                       ok ? "success" : "failed", tgt.c_str(), fw_version);
+        } else {
+            g_prefs.end();
+        }
+    }
+
     HTTPClient http;
     char url[220];
     snprintf(url, sizeof(url), "%s/api/ota/check/%s?current_version=%s",
@@ -165,8 +193,15 @@ static void ota_check(const char* device_id, const char* fw_version) {
     if (ota_resp.isEmpty() || deserializeJson(doc, ota_resp)) { http.end(); return; }
     http.end();
     if (!doc["update"].as<bool>()) return;
-    String fw_url = String(g_cfg.server_url) + doc["url"].as<String>();
-    LOG_PRINTF("OTA: v%s yuklanmoqda...\n", doc["version"].as<const char*>());
+    String fw_url  = String(g_cfg.server_url) + doc["url"].as<String>();
+    String new_ver = doc["version"].as<String>();
+    LOG_PRINTF("OTA: v%s yuklanmoqda...\n", new_ver.c_str());
+
+    // Target versiyani NVS ga yozamiz — reboot dan keyin success/failed xabari uchun
+    g_prefs.begin("app", false);
+    g_prefs.putString("ota_tgt", new_ver);
+    g_prefs.end();
+    ota_send_report(device_id, "started", new_ver.c_str(), fw_version);
 
     // Watchdog to'xtatish (OTA uzoq davom etishi mumkin)
     wdt_pause();
@@ -187,5 +222,9 @@ static void ota_check(const char* device_id, const char* fw_version) {
 
     // OTA muvaffaqiyatsiz bo'ldi — watchdog qaytarish
     LOG_PRINTLN("OTA: yuklash xato!");
+    ota_send_report(device_id, "failed", new_ver.c_str(), fw_version);
+    g_prefs.begin("app", false);
+    g_prefs.remove("ota_tgt");
+    g_prefs.end();
     wdt_resume();
 }

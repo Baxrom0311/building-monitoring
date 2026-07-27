@@ -13,7 +13,7 @@ import apiClient from '@/lib/api'
 import { Device, Firmware, OtaBatch, ProvisioningToken } from '@/types/api'
 import { EmptyBlock, ErrorBlock, LoadingBlock } from '@/components/StateBlock'
 import { getApiErrorMessage } from '@/lib/errors'
-import { notifySuccess } from '@/lib/toast'
+import { notifyError, notifySuccess } from '@/lib/toast'
 
 function formatTs(ts: number | null | undefined) {
   if (!ts) return '-'
@@ -197,6 +197,8 @@ export default function FirmwarePage() {
       await apiClient.post(`/api/ota/batches/${batchId}/process`)
       await queryClient.invalidateQueries({ queryKey: qk.otaBatches() })
       notifySuccess('OTA batch ishga tushdi')
+    } catch (err) {
+      notifyError('OTA batchni ishga tushirib bo\'lmadi', getApiErrorMessage(err))
     } finally {
       setWorkingBatchId(null)
     }
@@ -208,6 +210,8 @@ export default function FirmwarePage() {
       await apiClient.post(`/api/ota/batches/${batchId}/cancel`)
       await queryClient.invalidateQueries({ queryKey: qk.otaBatches() })
       notifySuccess('OTA batch bekor qilindi')
+    } catch (err) {
+      notifyError('OTA batchni bekor qilib bo\'lmadi', getApiErrorMessage(err))
     } finally {
       setWorkingBatchId(null)
     }

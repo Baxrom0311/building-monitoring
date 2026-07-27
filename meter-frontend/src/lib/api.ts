@@ -28,7 +28,9 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     const status = error.response?.status
-    if (status === 401) {
+    // Login so'rovining o'zi 401 qaytarsa bu "sessiya tugadi" emas — LoginPage o'zi xatoni ko'rsatadi
+    const isLoginRequest = typeof error.config?.url === 'string' && error.config.url.includes('/api/auth/login')
+    if (status === 401 && !isLoginRequest) {
       removeTokenFromStorage()
       window.sessionStorage.setItem(
         'meter-toast',

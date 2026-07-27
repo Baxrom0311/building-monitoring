@@ -34,6 +34,9 @@ class FirmwareRepository(BaseRepository[Firmware]):
             ).all()
         )
 
+    async def by_filename(self, filename: str) -> Firmware | None:
+        return await self.session.scalar(select(Firmware).where(Firmware.filename == filename).limit(1))
+
     async def active_for_device(self, firmware_mode: str, hardware_version: str | None) -> Firmware | None:
         return await self.session.scalar(
             select(Firmware)

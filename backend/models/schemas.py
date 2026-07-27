@@ -325,10 +325,11 @@ class DeviceRegister(BaseModel):
     device_id: str
     provisioning_token: Optional[str] = None
     name: Optional[str] = None
-    utility_type: UtilityType = UtilityType.electricity
+    utility_type: Optional[UtilityType] = None
     device_role: Optional[DeviceRole] = None
     firmware_mode: FirmwareMode = FirmwareMode.auto
-    meter_type: Optional[str] = "unknown"
+    meter_type: Optional[str] = None
+    sensor_type: Optional[str] = None
     meter_serial: Optional[str] = None
     is_test_device: Optional[bool] = None
     serial_number: Optional[str] = None
@@ -911,13 +912,19 @@ class MeterReading(BaseModel):
     sequence_no: Optional[int] = None
     building_id: Optional[int] = None
     point_id: Optional[int] = None
-    utility_type: UtilityType = UtilityType.electricity
+    # None = qurilmaning DB dagi utility_type i ishlatiladi (default electricity
+    # bo'lsa, faqat status ping yuborgan water/gas qurilma electricity ga aylanib qolardi)
+    utility_type: Optional[UtilityType] = None
     sensor_type: Optional[str] = None
     meter_serial: Optional[str] = None
     is_test_device: Optional[bool] = None
     fw_version: Optional[str] = None
     software_version: Optional[str] = None
     hardware_version: Optional[str] = None
+    # Firmware NTP vaqti (ISO-8601 yoki epoch) — offline buferdan kelgan
+    # readinglar server vaqti bilan emas, o'z vaqti bilan saqlanishi uchun
+    timestamp: Optional[str | int] = None
+    lora_rssi: Optional[int] = None
 
     voltage_l1: Optional[float] = None
     voltage_l2: Optional[float] = None
@@ -1151,6 +1158,13 @@ class DeviceStatus(BaseModel):
     software_version: Optional[str] = None
     firmware_mode: Optional[FirmwareMode] = None
     build_number: Optional[str] = None
+    # Firmware diagnostika (core/api.h yuboradi — ilgari jimgina tashlab yuborilardi)
+    heap_free: Optional[int] = None
+    uptime_s: Optional[int] = None
+    sensor_errors: Optional[int] = None
+    wifi_drops: Optional[int] = None
+    read_interval_ms: Optional[int] = None
+    last_error: Optional[str] = None
 
 
 class RelayCommand(BaseModel):
@@ -1172,6 +1186,8 @@ class PendingCommandResponse(BaseModel):
     id: int
     action: str
     param: Optional[str] = None
+    # Firmware `params` obyektini o'qiydi (param JSON-string edi — mos emas edi)
+    params: Optional[dict] = None
     expires_at: Optional[int] = None
     attempts: int
     max_attempts: int

@@ -2,11 +2,16 @@
 /**
  * core/wifi.h — WiFi boshqaruvi (non-blocking)
  *
- * wifi_quick()   — Setup: tez ulanish
- * wifi_setup()   — Setup: WiFiManager portal
- * wifi_loop()    — Loop: non-blocking qayta ulanish
- * wifi_pause()   — RS-485 uchun radio to'xtatish
- * wifi_resume()  — Radio qayta yoqish
+ * Falsafa: portal FAQAT sozlanmagan qurilmada (yoki BOOT tugma bilan) ochiladi.
+ * Router vaqtincha o'chiq bo'lsa qurilma 3 daqiqa portalda QOTIB TURMAYDI —
+ * ≤16s urinib, ishga tushadi va fonda har 15s qayta ulanadi.
+ *
+ * wifi_has_saved_creds() — NVS da saqlangan SSID bormi
+ * wifi_connect_boot()    — Setup: tez, portalsiz ulanish (≤16s)
+ * wifi_portal()          — WiFiManager sozlash portali (birinchi yoqish/BOOT)
+ * wifi_loop()            — Loop: non-blocking qayta ulanish
+ * wifi_pause()           — RS-485 uchun radio to'xtatish
+ * wifi_resume()          — Radio qayta yoqish
  */
 
 #include <Arduino.h>
@@ -16,21 +21,55 @@
 #include "core/log.h"
 #include "core/config.h"
 
-#define WIFI_RECONNECT_MS  15000UL
+#define WIFI_RECONNECT_MS     15000UL
+#define WIFI_BOOT_TIMEOUT_MS   8000UL
+#define WIFI_PORTAL_TIMEOUT_S    120
 
 static unsigned long _wifi_reconnect_ms = 0;
 
-static void wifi_quick(const char* ssid, const char* pass) {
+// NVS da saqlangan WiFi SSID bormi (birinchi yoqishni aniqlash uchun)
+static bool wifi_has_saved_creds() {
+    WiFi.mode(WIFI_STA);  // driver init — idempotent
+    wifi_config_t conf;
+    if (esp_wifi_get_config(WIFI_IF_STA, &conf) != ESP_OK) return false;
+    return conf.sta.ssid[0] != 0;
+}
+
+// Setup: portalsiz tez ulanish. Saqlangan creds → keyin default (bo'lsa).
+static bool wifi_connect_boot(const char* def_ssid, const char* def_pass) {
     WiFi.mode(WIFI_STA);
-    WiFi.begin();
+    WiFi.setSleep(false);
+
+    bool saved = wifi_has_saved_creds();
+    if (saved) {
+        WiFi.begin();  // saqlangan creds bilan
+    } else if (def_ssid && def_ssid[0]) {
+        WiFi.begin(def_ssid, def_pass);
+    } else {
+        return false;  // hech qanday ma'lumot yo'q — portal kerak
+    }
+
     unsigned long t = millis();
-    while (WiFi.status() != WL_CONNECTED && millis() - t < 6000) yield();
-    if (WiFi.status() == WL_CONNECTED) return;
-    WiFi.disconnect(true);
-    t = millis(); while (millis() - t < 300) yield();
-    WiFi.begin(ssid, pass);
-    t = millis();
-    while (WiFi.status() != WL_CONNECTED && millis() - t < 10000) yield();
+    while (WiFi.status() != WL_CONNECTED && millis() - t < WIFI_BOOT_TIMEOUT_MS)
+        yield();
+
+    // Saqlangan creds eskirgan bo'lishi mumkin — default bilan bitta urinish
+    if (WiFi.status() != WL_CONNECTED && saved && def_ssid && def_ssid[0]) {
+        WiFi.disconnect(true);
+        t = millis(); while (millis() - t < 300) yield();
+        WiFi.begin(def_ssid, def_pass);
+        t = millis();
+        while (WiFi.status() != WL_CONNECTED && millis() - t < WIFI_BOOT_TIMEOUT_MS)
+            yield();
+    }
+
+    if (WiFi.status() == WL_CONNECTED) {
+        LOG_PRINTF("WiFi: %s (%ddBm)\n",
+                   WiFi.localIP().toString().c_str(), WiFi.RSSI());
+        return true;
+    }
+    LOG_PRINTLN("WiFi: hozircha offline — fonda qayta ulanadi");
+    return false;
 }
 
 // Non-blocking — faqat reconnect buyrug'i, blokirovka yo'q
@@ -57,9 +96,11 @@ static bool wifi_resume() {
     return WiFi.status() == WL_CONNECTED;
 }
 
-static void wifi_setup(const char* ap_name, const char* ap_pass,
-                       const char* device_mac = "",
-                       const char* meter_serial = "") {
+// Sozlash portali — FAQAT birinchi yoqilishda yoki BOOT tugma bilan chaqiriladi.
+// 120s ichida sozlanmasa qurilma ishga tushib ketadi (keyin BOOT bilan qayta ochish mumkin).
+static void wifi_portal(const char* ap_name, const char* ap_pass,
+                        const char* device_mac = "",
+                        const char* meter_serial = "") {
     char info_html[320];
     snprintf(info_html, sizeof(info_html),
         "<p style='background:#1e293b;border:1px solid #334155;border-radius:8px;"
@@ -86,7 +127,7 @@ static void wifi_setup(const char* ap_name, const char* ap_pass,
     wm.addParameter(&p_prov);
     wm.addParameter(&p_mode);
     wm.setConnectTimeout(20);
-    wm.setConfigPortalTimeout(180);
+    wm.setConfigPortalTimeout(WIFI_PORTAL_TIMEOUT_S);
     wm.setSaveConfigCallback([&]() {
         cfg_save(p_srv.getValue(), p_tok.getValue(),
                  p_mode.getValue(), p_prov.getValue());
@@ -99,12 +140,21 @@ static void wifi_setup(const char* ap_name, const char* ap_pass,
         "button{background:#3b82f6!important}</style>"
     );
 
-    wm.autoConnect(ap_name, ap_pass);
+    LOG_PRINTF("WiFi: sozlash portali ochildi — AP '%s' (%ds)\n",
+               ap_name, WIFI_PORTAL_TIMEOUT_S);
+    wm.startConfigPortal(ap_name, ap_pass);
 
     if (WiFi.status() == WL_CONNECTED) {
         WiFi.setSleep(false);
         LOG_PRINTF("WiFi: %s (%ddBm)\n", WiFi.localIP().toString().c_str(), WiFi.RSSI());
     } else {
-        LOG_PRINTLN("WiFi: offline");
+        LOG_PRINTLN("WiFi: portal yopildi, offline — fonda qayta ulanadi");
     }
+}
+
+// Eski nom bilan moslik (chaqiruvchi kod bosqichma-bosqich yangilanadi)
+static void wifi_setup(const char* ap_name, const char* ap_pass,
+                       const char* device_mac = "",
+                       const char* meter_serial = "") {
+    wifi_portal(ap_name, ap_pass, device_mac, meter_serial);
 }

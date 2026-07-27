@@ -3,6 +3,7 @@
 Toshelectroapparat loyihasi uchun ESP32 mikrokontrollerlariga firmware
 yuklash, serial monitoring va LoRa paket tahlili dasturi.
 """
+import html
 import os
 import sys
 import tempfile
@@ -35,7 +36,6 @@ SENSOR_TYPES = [
 ]
 
 DEFAULT_SERVER = "https://ss.boos.uz"
-DEFAULT_TOKEN = "T30gwzZJ6YTvQeLRMCZyTi-GBAYogsQV"
 
 
 class ESP32StudioWindow(QMainWindow):
@@ -56,8 +56,7 @@ class ESP32StudioWindow(QMainWindow):
 
         # API Client
         server = self.settings.value("server_url", DEFAULT_SERVER)
-        token = self.settings.value("device_token", DEFAULT_TOKEN)
-        self.api = ApiClient(server, token)
+        self.api = ApiClient(server)
 
         # Firmware cache directory
         self._cache_dir = os.path.join(tempfile.gettempdir(), "esp32studio_fw")
@@ -66,8 +65,11 @@ class ESP32StudioWindow(QMainWindow):
         self._setup_ui()
         self._refresh_ports()
 
-        # Auto-fetch firmware list
-        QTimer.singleShot(500, self._fetch_firmware_list)
+        # Auto-login if credentials saved
+        saved_user = self.settings.value("login_username", "")
+        saved_pass = self.settings.value("login_password", "")
+        if saved_user and saved_pass:
+            QTimer.singleShot(300, lambda: self._do_login(saved_user, saved_pass))
 
     # ══════════════════════════════════════════════════════════════════════
     # UI Setup
@@ -219,7 +221,7 @@ class ESP32StudioWindow(QMainWindow):
         self.combo_baud.addItems(["460800", "921600", "230400", "115200"])
         left_layout.addWidget(self.combo_baud)
 
-        self.chk_erase = QCheckBox("Oldin xotirani tozalash (Erase Flash)")
+        self.chk_erase = QCheckBox("Oldin sozlamalarni tozalash (NVS)")
         left_layout.addWidget(self.chk_erase)
 
         left_layout.addStretch()
@@ -243,10 +245,10 @@ class ESP32StudioWindow(QMainWindow):
         self.btn_flash.clicked.connect(self._on_flash)
         left_layout.addWidget(self.btn_flash)
 
-        btn_erase = QPushButton("Faqat xotirani tozalash")
-        btn_erase.setObjectName("btnDanger")
-        btn_erase.clicked.connect(self._on_erase_only)
-        left_layout.addWidget(btn_erase)
+        self.btn_erase = QPushButton("Sozlamalarni tozalash (NVS)")
+        self.btn_erase.setObjectName("btnDanger")
+        self.btn_erase.clicked.connect(self._on_erase_only)
+        left_layout.addWidget(self.btn_erase)
 
         layout.addWidget(left)
 
@@ -474,42 +476,68 @@ class ESP32StudioWindow(QMainWindow):
         layout.setContentsMargins(6, 6, 6, 6)
         layout.setSpacing(10)
 
-        card = QFrame()
-        card.setObjectName("card")
-        card.setMaximumWidth(600)
-        c = QVBoxLayout(card)
-        c.setContentsMargins(20, 20, 20, 20)
-        c.setSpacing(12)
+        # ── Login kartasi ──
+        login_card = QFrame()
+        login_card.setObjectName("card")
+        login_card.setMaximumWidth(500)
+        lc = QVBoxLayout(login_card)
+        lc.setContentsMargins(20, 20, 20, 20)
+        lc.setSpacing(10)
 
-        c.addWidget(self._section("Server sozlamalari"))
+        lc.addWidget(self._section("Server ulanishi"))
 
-        c.addWidget(self._small_label("Backend Server URL:"))
+        lc.addWidget(self._small_label("Server URL:"))
         self.edit_server = QLineEdit(self.settings.value("server_url", DEFAULT_SERVER))
-        self.edit_server.textEdited.connect(lambda v: self._save_setting("server_url", v.strip()))
-        c.addWidget(self.edit_server)
+        lc.addWidget(self.edit_server)
 
-        c.addWidget(self._small_label("Device Token:"))
-        self.edit_token = QLineEdit(self.settings.value("device_token", DEFAULT_TOKEN))
-        self.edit_token.textEdited.connect(lambda v: self._save_setting("device_token", v.strip()))
-        c.addWidget(self.edit_token)
+        lc.addWidget(self._small_label("Login:"))
+        self.edit_username = QLineEdit(self.settings.value("login_username", ""))
+        self.edit_username.setPlaceholderText("Foydalanuvchi nomi")
+        lc.addWidget(self.edit_username)
 
-        btn_apply = QPushButton("Saqlash va qayta ulanish")
-        btn_apply.setObjectName("btnPrimary")
-        btn_apply.clicked.connect(self._apply_server_settings)
-        c.addWidget(btn_apply)
+        lc.addWidget(self._small_label("Parol:"))
+        self.edit_password = QLineEdit(self.settings.value("login_password", ""))
+        self.edit_password.setPlaceholderText("Parol")
+        self.edit_password.setEchoMode(QLineEdit.EchoMode.Password)
+        lc.addWidget(self.edit_password)
 
-        c.addWidget(self._section("PlatformIO"))
+        self.chk_show_pass = QCheckBox("Parolni ko'rsatish")
+        self.chk_show_pass.toggled.connect(
+            lambda v: self.edit_password.setEchoMode(
+                QLineEdit.EchoMode.Normal if v else QLineEdit.EchoMode.Password
+            )
+        )
+        lc.addWidget(self.chk_show_pass)
+
+        self.lbl_login_status = QLabel("")
+        self.lbl_login_status.setStyleSheet("font-size: 12px; font-weight: 600;")
+        lc.addWidget(self.lbl_login_status)
+
+        btn_login = QPushButton("Kirish va firmware ro'yxatini yuklash")
+        btn_login.setObjectName("btnPrimary")
+        btn_login.setMinimumHeight(40)
+        btn_login.clicked.connect(self._on_login_clicked)
+        lc.addWidget(btn_login)
+
+        lc.addStretch()
+        layout.addWidget(login_card)
+
+        # ── Tizim ma'lumotlari ──
+        info_card = QFrame()
+        info_card.setObjectName("card")
+        info_card.setMaximumWidth(500)
+        ic = QVBoxLayout(info_card)
+        ic.setContentsMargins(20, 20, 20, 20)
+        ic.setSpacing(8)
+
+        ic.addWidget(self._section("Tizim"))
         pio_text = self.controller.pio_path or "Topilmadi"
         proj_text = self.controller.project_root or "Topilmadi"
-        lbl_pio = QLabel(f"PIO CLI: {pio_text}")
-        lbl_pio.setStyleSheet("color: #64748b; font-size: 12px;")
-        lbl_proj = QLabel(f"Loyiha: {proj_text}")
-        lbl_proj.setStyleSheet("color: #64748b; font-size: 12px;")
-        c.addWidget(lbl_pio)
-        c.addWidget(lbl_proj)
+        ic.addWidget(self._small_label(f"PlatformIO: {pio_text}"))
+        ic.addWidget(self._small_label(f"Loyiha: {proj_text}"))
+        ic.addWidget(self._small_label(f"Firmware kesh: {self._cache_dir}"))
 
-        c.addStretch()
-        layout.addWidget(card)
+        layout.addWidget(info_card)
         layout.addStretch()
         return widget
 
@@ -562,14 +590,49 @@ class ESP32StudioWindow(QMainWindow):
     # Server / Firmware
     # ══════════════════════════════════════════════════════════════════════
 
-    def _apply_server_settings(self):
-        server = self.edit_server.text().strip()
-        token = self.edit_token.text().strip()
+    def _on_login_clicked(self):
+        server = self.edit_server.text().strip() or DEFAULT_SERVER
+        username = self.edit_username.text().strip()
+        password = self.edit_password.text()
+        if not username or not password:
+            QMessageBox.warning(self, "Xato", "Login va parolni kiriting!")
+            return
         self.settings.setValue("server_url", server)
-        self.settings.setValue("device_token", token)
-        self.api = ApiClient(server, token)
+        self.settings.setValue("login_username", username)
+        self.settings.setValue("login_password", password)
+        self.api = ApiClient(server)
+        self._do_login(username, password)
+
+    def _do_login(self, username: str, password: str):
+        self.lbl_server.setText("Server: kirilmoqda...")
+        self.lbl_server.setStyleSheet("color: #fbbf24; font-weight: 600; font-size: 12px;")
+        if hasattr(self, "lbl_login_status"):
+            self.lbl_login_status.setText("Kirilmoqda...")
+            self.lbl_login_status.setStyleSheet("color: #fbbf24; font-size: 12px; font-weight: 600;")
+
+        self.controller.login(
+            self.api, username, password,
+            success_cb=self._on_login_success,
+            error_cb=self._on_login_error,
+        )
+
+    def _on_login_success(self, data: dict):
+        user = data.get("user", {})
+        name = user.get("username", "?")
+        role = user.get("role", "?")
+        if hasattr(self, "lbl_login_status"):
+            self.lbl_login_status.setText(f"Kirildi: {name} ({role})")
+            self.lbl_login_status.setStyleSheet("color: #4ade80; font-size: 12px; font-weight: 600;")
+        self.lbl_server.setText(f"Server: {name}")
+        self.lbl_server.setStyleSheet("color: #4ade80; font-weight: 600; font-size: 12px;")
         self._fetch_firmware_list()
-        QMessageBox.information(self, "Saqlandi", "Server sozlamalari saqlandi.")
+
+    def _on_login_error(self, err: str):
+        if hasattr(self, "lbl_login_status"):
+            self.lbl_login_status.setText(f"Xato: {err}")
+            self.lbl_login_status.setStyleSheet("color: #f87171; font-size: 12px; font-weight: 600;")
+        self.lbl_server.setText("Server: kirib bo'lmadi")
+        self.lbl_server.setStyleSheet("color: #f87171; font-weight: 600; font-size: 12px;")
 
     def _fetch_firmware_list(self):
         self.lbl_server.setText("Server: yuklanmoqda...")
@@ -663,7 +726,7 @@ class ESP32StudioWindow(QMainWindow):
         size_str = f"{size / 1024:.0f} KB" if size else "?"
         utility = fw.get("utility_type", "?")
         role = fw.get("device_role", "—") or "—"
-        sha = fw.get("sha256", "")[:16]
+        sha = (fw.get("sha256") or "")[:16]
         notes = fw.get("release_notes") or fw.get("notes") or ""
 
         info = (
@@ -805,7 +868,7 @@ class ESP32StudioWindow(QMainWindow):
             self.btn_flash.setEnabled(True)
 
     def _on_flash_log(self, text: str, color: str):
-        self.term_flash.append(f'<span style="color:{color};">{text}</span>')
+        self.term_flash.append(f'<span style="color:{color};">{html.escape(text)}</span>')
         self.term_flash.moveCursor(QTextCursor.MoveOperation.End)
 
     def _on_flash_finished(self, success: bool, msg: str):
@@ -822,14 +885,27 @@ class ESP32StudioWindow(QMainWindow):
             return
         reply = QMessageBox.question(
             self, "Tasdiqlang",
-            f"{port} flash xotirasi tozalanadi. Davom etasizmi?",
+            f"{port} da saqlangan sozlamalar (NVS: WiFi, konfiguratsiya) tozalanadi. Davom etasizmi?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if reply == QMessageBox.StandardButton.Yes:
-            self._log(f"Flash tozalanmoqda: {port}...", "#fbbf24")
-            proc = EsptoolService.erase_flash(port)
-            out, _ = proc.communicate()
-            self._log(out or "Tozalandi", "#4ade80")
+            ok, msg = self.controller.start_erase_nvs(
+                port=port,
+                log_cb=self._on_flash_log,
+                finish_cb=self._on_erase_finished,
+            )
+            if ok:
+                self.btn_erase.setEnabled(False)
+            else:
+                QMessageBox.warning(self, "Xato", msg)
+
+    def _on_erase_finished(self, success: bool, msg: str):
+        self.btn_erase.setEnabled(True)
+        if success:
+            self._log(msg, "#4ade80")
+            self.lbl_status.setText("Sozlamalar (NVS) tozalandi")
+        else:
+            self._log(f"Xato: {msg}", "#f87171")
 
     def _log(self, text: str, color: str = "#cbd5e1"):
         self.term_flash.append(f'<span style="color:{color};">{text}</span>')
@@ -845,23 +921,25 @@ class ESP32StudioWindow(QMainWindow):
         btn = getattr(self, f"mon_btn_{idx}")
         term = getattr(self, f"mon_term_{idx}")
 
-        port = combo_p.currentData()
-        if not port:
-            return
-
-        if idx in self._serial_workers and self._serial_workers[idx].isRunning():
-            self.controller.stop_serial_monitor(port)
+        entry = self._serial_workers.get(idx)
+        if entry and entry[1].isRunning():
+            # Worker qaysi portda boshlangan bo'lsa — o'sha port bilan to'xtatamiz
+            started_port, _worker = entry
+            self.controller.stop_serial_monitor(started_port)
             self._serial_workers.pop(idx, None)
             btn.setText("Boshlash")
             btn.setObjectName("btnSuccess")
             term.append('<span style="color:#94a3b8;">[Monitor to\'xtatildi]</span>')
         else:
+            port = combo_p.currentData()
+            if not port:
+                return
             baud = int(combo_b.currentText())
             term.append(f'<span style="color:#94a3b8;">[Ulanmoqda: {port} @ {baud}]</span>')
 
             def _on_data(p, line):
                 ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-                term.append(f'<span style="color:#64748b;">[{ts}]</span> {line}')
+                term.append(f'<span style="color:#64748b;">[{ts}]</span> {html.escape(line)}')
                 term.moveCursor(QTextCursor.MoveOperation.End)
                 # LoRa Inspector parsing
                 decoded = LoRaPacketDecoder.parse_serial_log_line(line)
@@ -869,10 +947,10 @@ class ESP32StudioWindow(QMainWindow):
                     self._update_inspector(decoded)
 
             def _on_status(p, connected, msg):
-                term.append(f'<span style="color:#38bdf8;">[{msg}]</span>')
+                term.append(f'<span style="color:#38bdf8;">[{html.escape(msg)}]</span>')
 
             worker = self.controller.start_serial_monitor(port, baud, _on_data, _on_status)
-            self._serial_workers[idx] = worker
+            self._serial_workers[idx] = (port, worker)
             btn.setText("To'xtatish")
             btn.setObjectName("btnDanger")
 
@@ -925,7 +1003,7 @@ class ESP32StudioWindow(QMainWindow):
         edit = getattr(self, f"mon_cmd_{idx}")
         cmd = edit.text().strip()
         if cmd and idx in self._serial_workers:
-            self._serial_workers[idx].send_command(cmd)
+            self._serial_workers[idx][1].send_command(cmd)
             term = getattr(self, f"mon_term_{idx}")
             term.append(f'<span style="color:#fbbf24;">>>> {cmd}</span>')
             edit.clear()
@@ -948,15 +1026,10 @@ class ESP32StudioWindow(QMainWindow):
 
     def closeEvent(self, event):
         self.controller.cancel_flash()
-        for port in list(self._serial_workers.keys()):
-            idx = port
-            if isinstance(port, int):
-                combo = getattr(self, f"mon_port_{port}", None)
-                if combo:
-                    port_name = combo.currentData()
-                    if port_name:
-                        self.controller.stop_serial_monitor(port_name)
-            w = self._serial_workers.get(idx)
-            if w:
-                w.stop()
+        for idx, (port, worker) in list(self._serial_workers.items()):
+            self.controller.stop_serial_monitor(port)
+            worker.wait(3000)
+        self._serial_workers.clear()
+        # Qolgan barcha workerlarni kutamiz (flash, download, chip info, ...)
+        self.controller.wait_all(3000)
         event.accept()

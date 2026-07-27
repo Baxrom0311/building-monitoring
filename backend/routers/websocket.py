@@ -14,11 +14,13 @@ router = APIRouter()
 async def ws_endpoint(ws: WebSocket):
     # Token ni query param yoki subprotocol orqali qabul qilamiz
     token = ws.query_params.get("token")
+    subprotocol = None
     if not token:
         # Subprotocol orqali ham token yuborish mumkin
         protocols = ws.headers.get("sec-websocket-protocol", "")
         parts = [p.strip() for p in protocols.split(",") if p.strip()]
         token = parts[0] if parts else None
+        subprotocol = token
 
     if not token:
         await ws.close(code=1008, reason="Token kerak")
@@ -30,7 +32,7 @@ async def ws_endpoint(ws: WebSocket):
         await ws.close(code=1008, reason="Token noto'g'ri yoki muddati tugagan")
         return
 
-    await ws_manager.connect(ws)
+    await ws_manager.connect(ws, subprotocol=subprotocol)
     logger.info("WebSocket connected: user=%s", payload.get("username"))
     try:
         while True:

@@ -1,3 +1,4 @@
+import asyncio
 import gzip
 import hashlib
 import json
@@ -5,7 +6,7 @@ import re
 from pathlib import Path
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import Integer, select, text
 
 from core.config import settings
 from core.database import SessionLocal
@@ -75,12 +76,17 @@ async def create_backup_once(reason: str | None = None) -> dict:
             result = await session.execute(select(table))
             payload["tables"][table.name] = [dict(row) for row in result.mappings().all()]
 
-    raw = json.dumps(payload, ensure_ascii=False, default=_json_default, separators=(",", ":")).encode()
-    sha256 = hashlib.sha256(raw).hexdigest()
-    filename = f"meter_backup_{ts}_{sha256[:12]}.json.gz"
-    path = settings.backup_dir / filename
-    with gzip.open(path, "wb") as fh:
-        fh.write(raw)
+    def _serialize_and_write() -> tuple[str, Path, str]:
+        raw = json.dumps(payload, ensure_ascii=False, default=_json_default, separators=(",", ":")).encode()
+        digest = hashlib.sha256(raw).hexdigest()
+        name = f"meter_backup_{ts}_{digest[:12]}.json.gz"
+        target = settings.backup_dir / name
+        with gzip.open(target, "wb") as fh:
+            fh.write(raw)
+        return name, target, digest
+
+    # JSON + gzip katta DB da sekundlab CPU yeydi — event loopni bloklamaslik uchun thread
+    filename, path, sha256 = await asyncio.to_thread(_serialize_and_write)
 
     return {
         "ok": True,
@@ -160,7 +166,14 @@ async def restore_backup_once(filename: str, confirm: str | None = None) -> dict
     restored: dict[str, int] = {}
 
     sorted_tables = _restore_tables()
+    tables_by_name = Base.metadata.tables
     async with SessionLocal() as session:
+        # devices.point_id ↔ measurement_points.device_id aylanma FK —
+        # delete dan oldin uzib qo'yamiz, aks holda PG da FK violation
+        if "devices" in tables_by_name:
+            await session.execute(tables_by_name["devices"].update().values(point_id=None))
+        if "measurement_points" in tables_by_name:
+            await session.execute(tables_by_name["measurement_points"].update().values(device_id=None))
         for table in reversed(sorted_tables):
             await session.execute(table.delete())
 
@@ -187,6 +200,19 @@ async def restore_backup_once(filename: str, confirm: str | None = None) -> dict
                         await session.execute(
                             table.update().where(table.c.id == row["id"]).values(device_id=row["device_id"])
                         )
+
+        # PG: autoincrement sequencelarni max(id) ga surish — aks holda keyingi
+        # INSERT lar duplicate key bilan yiqiladi
+        if session.bind.dialect.name == "postgresql":
+            for table in sorted_tables:
+                # faqat integer autoincrement PK (devices.id String — unga tegmaymiz)
+                if "id" in table.c and table.c.id.primary_key and isinstance(table.c.id.type, Integer):
+                    await session.execute(
+                        text(
+                            f"SELECT setval(pg_get_serial_sequence('{table.name}', 'id'), "
+                            f"COALESCE((SELECT MAX(id) FROM {table.name}), 0) + 1, false)"
+                        )
+                    )
 
         await session.commit()
 

@@ -28,15 +28,10 @@ from repositories.devices import DeviceRepository
 
 async def create_building(body: BuildingCreate) -> dict:
     ts = now_ts()
+    # Barcha schema maydonlari entityda 1:1 mavjud — qo'lda ro'yxatlash
+    # image_url/tashqi integratsiya maydonlarini tashlab yuborayotgan edi
     building = Building(
-        name=body.name,
-        address=body.address,
-        maps_url=body.maps_url,
-        latitude=body.latitude,
-        longitude=body.longitude,
-        floors=body.floors,
-        entrances_count=body.entrances_count,
-        description=body.description,
+        **body.model_dump(exclude_unset=True),
         created_at=ts,
         updated_at=ts,
     )

@@ -1,48 +1,89 @@
 #pragma once
 /**
- * water.h — 2x Analog bosim sensori (suv tizimi)
+ * water.h — Industrial suv bosimi sensori (ADS1115 + HY-131)
  *
- * Har bir kirish joyiga 2 ta bosim sensori:
- *   - Pastki (kirish joyi, boiler xona): PIN_PRESSURE_BOTTOM
- *   - Yuqori (oxirgi qavat): PIN_PRESSURE_TOP
+ * Apparat:
+ *   ADS1115 16-bit ADC (I2C, 0x48, SDA=21, SCL=22)
+ *   HY-131 bosim uzatgich: 0–0.6 MPa (0–6 bar), 4–20 mA
+ *   Shunt rezistor: 165 Ω  →  0.66 V (4mA) .. 3.30 V (20mA)
+ *   ADS1115 GAIN_ONE: ±4.096 V, 0.125 mV/bit
  *
- * Sensor turi: 4-20mA yoki 0-5V analog, 250Ω shunt orqali 0-3.3V ga keltirilgan
- *   0.5V → 0 bar (sensor minimum)
- *   4.5V → SENSOR_MAX_BAR (sensor maximum)
+ * Kanallar:
+ *   A0 = Pastki bosim (kirish, boiler xona)
+ *   A1 = Yuqori bosim (oxirgi qavat) — HAVE_PRESSURE_TOP bilan yoqiladi
  *
- * Pinlar (ESP32 ADC1 — WiFi bilan to'qnashmaydi):
- *   GPIO32 = ADC1_CH4 = pastki bosim
- *   GPIO33 = ADC1_CH5 = yuqori bosim
+ * Impuls sensori (ixtiyoriy):
+ *   GPIO25 = Suv oqimi (10 L/impuls, FALLING)
  *
- * Sensor API (main.cpp dan chaqiriladi):
- *   sensor_init()             — ADC sozlash
- *   sensor_connect() → bool  — har doim true (analog sensor)
- *   sensor_read(SensorData&) → bool  — ADC o'qish
- *   sensor_build_json(...)   → String — backend JSON
- *   sensor_do_register(...)  → bool  — backend ga ro'yxatdan o'tish
+ * Sensor API (main.cpp / lora_node.h dan chaqiriladi):
+ *   sensor_init()              — ADS1115 + impuls sozlash
+ *   sensor_connect() → bool   — ADS1115 topildimi
+ *   sensor_read(SensorData&)  → bool — bosim + oqim o'qish
+ *   sensor_build_json(...)    → String — backend JSON (faqat WiFi)
+ *   sensor_do_register(...)   → bool — backend register (faqat WiFi)
  */
 
 #include <Arduino.h>
-#include <ArduinoJson.h>
+#include <Wire.h>
+#include <Adafruit_ADS1X15.h>
 
-// ─── ADC pinlar (ADC1 — WiFi bilan muammosiz ishlaydi) ───────────────────────
-#define PIN_PRESSURE_BOTTOM  32   // GPIO32 = ADC1_CH4
-#define PIN_PRESSURE_TOP     33   // GPIO33 = ADC1_CH5
+#ifndef LORA_NODE
+  #include <ArduinoJson.h>
+#endif
 
-// ─── Kalibrovka ───────────────────────────────────────────────────────────────
-// 4-20mA sensor → 250Ω shunt → 1V–5V → voltage divider → 0.66V–3.30V
-// Yoki to'g'ridan 0-5V sensor → voltage divider (2:3) → 0-3.3V
-// Sozlash uchun ushbu qiymatlarni o'zgartiring:
-#define SENSOR_MAX_BAR     10.0f   // Sensor maksimal bosimi (bar)
-#define SENSOR_V_ZERO       0.33f  // 0 bar dagi voltaj (V) — 0.5V * 3.3/5 = 0.33V
-#define SENSOR_V_FULL       2.97f  // Max bar dagi voltaj (V) — 4.5V * 3.3/5 = 2.97V
-#define SENSOR_ADC_SAMPLES    16   // Shovqun kamaytirish uchun o'rtacha namuna soni
+// ─── ADS1115 sozlamalari ─────────────────────────────────────────────────────
+#ifndef ADS_SDA
+  #define ADS_SDA    21
+#endif
+#ifndef ADS_SCL
+  #define ADS_SCL    22
+#endif
+#define ADS_ADDR     0x48
+#define MV_PER_BIT   0.125f    // GAIN_ONE: 4.096V / 32768
 
-// ─── SensorData (suv) ─────────────────────────────────────────────────────────
-// ─── Pulse sensor setting ───────────────────────────────────────────────────
-#define PIN_WATER_PULSE       25     // GPIO25 water flow pulse input
-#define WATER_LITERS_PER_PULSE  10.0f  // 10 litr per pulse (o'zgartirish mumkin)
-#define DEBOUNCE_DELAY_MS     50     // Shovqindan saqlash millisoniyalari
+// ─── Shunt va tok chegaralari ────────────────────────────────────────────────
+#ifndef SHUNT_OHM
+  #define SHUNT_OHM    165.0f
+#endif
+#define SENSOR_MA_MIN   4.0f     // 4 mA = 0 bosim
+#define SENSOR_MA_MAX  20.0f     // 20 mA = max bosim
+#define SENSOR_ERR_LO   3.6f     // < 3.6 mA = sim uzilgan
+#define SENSOR_ERR_HI  21.0f     // > 21 mA = qisqa tutashuv
+
+// ─── Bosim oralig'i ──────────────────────────────────────────────────────────
+#ifndef PRESSURE_MAX_BAR
+  #define PRESSURE_MAX_BAR  6.0f   // HY-131: 0–0.6 MPa = 0–6 bar
+#endif
+
+// ─── EMA filtri ──────────────────────────────────────────────────────────────
+#define EMA_ALPHA       0.15f
+
+// ─── ADC oversample ──────────────────────────────────────────────────────────
+#define ADC_OVERSAMPLE  16
+
+// ─── Impuls sensor ───────────────────────────────────────────────────────────
+#ifndef PIN_WATER_PULSE
+  #define PIN_WATER_PULSE         25
+#endif
+#define WATER_LITERS_PER_PULSE  10.0f
+#define DEBOUNCE_DELAY_MS       50
+
+// ─── Bosim kanali holati ─────────────────────────────────────────────────────
+struct PressureChannel {
+    uint8_t channel;       // ADS1115 kanal (0–3)
+    float   ema_bar;       // EMA filtrdan o'tgan bosim (bar)
+    float   current_mA;    // Oxirgi tok o'qishi (mA)
+    bool    initialized;   // Birinchi o'qish bo'ldimi
+    bool    error;         // Sensor xatosi
+};
+
+// ─── Global holatlar ─────────────────────────────────────────────────────────
+static Adafruit_ADS1115 g_ads;
+static bool g_ads_ok = false;
+static PressureChannel g_ch_bottom = { 0, 0, 0, false, false };
+#ifdef HAVE_PRESSURE_TOP
+static PressureChannel g_ch_top    = { 1, 0, 0, false, false };
+#endif
 
 static volatile unsigned long g_water_pulse_count = 0;
 static volatile unsigned long g_last_water_pulse_ms = 0;
@@ -58,124 +99,169 @@ static void IRAM_ATTR water_pulse_isr() {
     }
 }
 
-// ─── SensorData (suv) ─────────────────────────────────────────────────────────
+// ─── SensorData (suv) ────────────────────────────────────────────────────────
 struct SensorData {
-    float pressure_bottom_bar;  // Kirish joyi (pastki) bosimi, bar
-    float pressure_top_bar;     // Yuqori qavat bosimi, bar
-    float flow_rate;            // Oqim tezligi, L/min
-    float volume_m3;            // Jami hajm, m3
-    float temperature_c;        // Harorat, C
+    float pressure_bottom_bar;   // Pastki bosim (bar)
+    float pressure_top_bar;      // Yuqori bosim (bar)
+    float flow_rate;             // Oqim tezligi (L/min)
+    float volume_m3;             // Jami hajm (m3)
+    float temperature_c;         // Harorat (C) — hozir ishlatilmaydi
     bool  valid;
 };
 
-// ─── Yordamchi: ADC → bar ─────────────────────────────────────────────────────
-static float _adc_to_bar(int pin) {
-    long sum = 0;
-    for (int i = 0; i < SENSOR_ADC_SAMPLES; i++) {
-        sum += analogRead(pin);
+// ─── ADS1115 yordamchi funksiyalar ───────────────────────────────────────────
+
+/** ADC dan o'rtacha voltaj o'qish (V) */
+static float _ads_read_voltage(uint8_t ch) {
+    int32_t sum = 0;
+    for (int i = 0; i < ADC_OVERSAMPLE; i++) {
+        sum += g_ads.readADC_SingleEnded(ch);
         delayMicroseconds(500);
     }
-    float voltage = (sum / (float)SENSOR_ADC_SAMPLES) / 4095.0f * 3.3f;
-    float bar = (voltage - SENSOR_V_ZERO) / (SENSOR_V_FULL - SENSOR_V_ZERO) * SENSOR_MAX_BAR;
-    return bar < 0.0f ? 0.0f : (bar > SENSOR_MAX_BAR ? SENSOR_MAX_BAR : bar);
+    return ((float)sum / ADC_OVERSAMPLE) * MV_PER_BIT / 1000.0f;
 }
 
-// ─── Sensor API ───────────────────────────────────────────────────────────────
-static void sensor_init() {
-    analogReadResolution(12);        // 12-bit: 0–4095
-    analogSetAttenuation(ADC_11db);  // 0–3.3V diapazon
-    pinMode(PIN_PRESSURE_BOTTOM, INPUT);
-    pinMode(PIN_PRESSURE_TOP,    INPUT);
+/** Voltajdan tok (mA): I = V / R × 1000 */
+static inline float _voltage_to_mA(float v) {
+    return (v / SHUNT_OHM) * 1000.0f;
+}
 
-    // Pulse sensor
+/** Tokdan bosim (bar): 4–20 mA → 0–max bar */
+static inline float _mA_to_bar(float mA) {
+    if (mA < SENSOR_MA_MIN) return 0.0f;
+    float bar = (mA - SENSOR_MA_MIN) / (SENSOR_MA_MAX - SENSOR_MA_MIN) * PRESSURE_MAX_BAR;
+    return constrain(bar, 0.0f, PRESSURE_MAX_BAR);
+}
+
+/** Bitta kanalni o'qish + EMA + xato tekshirish */
+static void _update_channel(PressureChannel& ch) {
+    float v = _ads_read_voltage(ch.channel);
+    ch.current_mA = _voltage_to_mA(v);
+
+    if (ch.current_mA < SENSOR_ERR_LO || ch.current_mA > SENSOR_ERR_HI) {
+        ch.error = true;
+        return;
+    }
+    ch.error = false;
+    float bar = _mA_to_bar(ch.current_mA);
+
+    if (!ch.initialized) {
+        ch.ema_bar = bar;
+        ch.initialized = true;
+    } else {
+        ch.ema_bar = EMA_ALPHA * bar + (1.0f - EMA_ALPHA) * ch.ema_bar;
+    }
+}
+
+// ─── Sensor API ──────────────────────────────────────────────────────────────
+
+static void sensor_init() {
+    // ADS1115 init
+    Wire.begin(ADS_SDA, ADS_SCL);
+    g_ads_ok = g_ads.begin(ADS_ADDR);
+    if (g_ads_ok) {
+        g_ads.setGain(GAIN_ONE);
+        g_ads.setDataRate(RATE_ADS1115_128SPS);
+        LOG_PRINTLN("ADS1115 tayyor (GAIN_ONE, 128SPS)");
+    } else {
+        LOG_PRINTLN("XATO: ADS1115 topilmadi (0x48)!");
+    }
+
+    // Impuls sensor
     pinMode(PIN_WATER_PULSE, INPUT_PULLUP);
-    
-    // Preferencesdan yuklash
     Preferences prefs;
     prefs.begin("water", false);
     g_water_pulse_count = prefs.getULong("pulses", 0);
     g_initial_volume_m3 = prefs.getFloat("base_vol", 0.0f);
     prefs.end();
-
     attachInterrupt(digitalPinToInterrupt(PIN_WATER_PULSE), water_pulse_isr, FALLING);
     g_last_read_pulses = g_water_pulse_count;
     g_last_read_time_ms = millis();
 
-    // Birinchi ADC o'qish
-    analogRead(PIN_PRESSURE_BOTTOM);
-    analogRead(PIN_PRESSURE_TOP);
-    LOG_PRINTLN("Suv bosim va impuls sensorlari tayyor");
-    LOG_PRINTF("  Pastki: GPIO%d | Yuqori: GPIO%d | Impuls: GPIO%d\n",
-                  PIN_PRESSURE_BOTTOM, PIN_PRESSURE_TOP, PIN_WATER_PULSE);
+    LOG_PRINTF("Suv sensor: ADS1115(0x%02X) Shunt=%dOhm Max=%.0f bar | Impuls: GPIO%d\n",
+               ADS_ADDR, (int)SHUNT_OHM, PRESSURE_MAX_BAR, PIN_WATER_PULSE);
 }
 
 static bool sensor_connect() {
-    return true;
+    return g_ads_ok;
 }
 
 static bool sensor_read(SensorData& d) {
+    if (!g_ads_ok) { d.valid = false; return false; }
+
     if (g_cfg.test_mode) {
-        d.pressure_bottom_bar = 3.2f + (random(0, 100) / 200.0f);  // 3.2 - 3.7 bar
-        d.pressure_top_bar    = 1.8f + (random(0, 100) / 200.0f);  // 1.8 - 2.3 bar
-        d.flow_rate           = 12.5f + (random(0, 100) / 25.0f);  // 12.5 - 16.5 L/min
-        
-        static float sim_volume = 48.250f;
-        sim_volume += (d.flow_rate / 60.0f) * (30.0f / 1000.0f);   // 30 soniyada o'tgan hajm
-        d.volume_m3           = sim_volume;
-        d.temperature_c       = 18.5f + (random(0, 10) / 10.0f);   // 18.5 - 19.5 C
+        d.pressure_bottom_bar = 3.2f + (random(0, 100) / 200.0f);
+        d.pressure_top_bar    = 1.8f + (random(0, 100) / 200.0f);
+        d.flow_rate           = 12.5f + (random(0, 100) / 25.0f);
+        static float sim_vol  = 48.250f;
+        sim_vol += (d.flow_rate / 60.0f) * (30.0f / 1000.0f);
+        d.volume_m3     = sim_vol;
+        d.temperature_c = NAN;
         d.valid = true;
-        
-        LOG_PRINTF("[TEST MODE] Suv: pastki=%.3f bar | yuqori=%.3f bar | oqim=%.3f L/min | hajm=%.3f m3\n",
-                      d.pressure_bottom_bar, d.pressure_top_bar, d.flow_rate, d.volume_m3);
+        LOG_PRINTF("[TEST] Suv: p=%.3f/%.3f bar | oqim=%.1f L/min | hajm=%.3f m3\n",
+                   d.pressure_bottom_bar, d.pressure_top_bar, d.flow_rate, d.volume_m3);
         return true;
     }
 
-    // Real rejimda o'qish
-    unsigned long current_pulses = g_water_pulse_count;
-    unsigned long time_now = millis();
-    unsigned long time_diff_ms = time_now - g_last_read_time_ms;
-    unsigned long pulse_diff = current_pulses - g_last_read_pulses;
+    // ── Bosim o'qish (ADS1115, 4-20mA) ──────────────────────────────────────
+    _update_channel(g_ch_bottom);
+    d.pressure_bottom_bar = g_ch_bottom.error ? 0.0f : g_ch_bottom.ema_bar;
 
-    d.pressure_bottom_bar = _adc_to_bar(PIN_PRESSURE_BOTTOM);
-    d.pressure_top_bar    = _adc_to_bar(PIN_PRESSURE_TOP);
+#ifdef HAVE_PRESSURE_TOP
+    _update_channel(g_ch_top);
+    d.pressure_top_bar = g_ch_top.error ? 0.0f : g_ch_top.ema_bar;
+#else
+    d.pressure_top_bar = 0.0f;
+#endif
 
-    // Oqim tezligi: L/min
-    if (time_diff_ms > 0) {
-        float liters = pulse_diff * WATER_LITERS_PER_PULSE;
-        d.flow_rate = (liters / (float)time_diff_ms) * 60000.0f;
+    // ── Impuls — oqim tezligi ────────────────────────────────────────────────
+    unsigned long pulses_now = g_water_pulse_count;
+    unsigned long time_now   = millis();
+    unsigned long dt_ms = time_now - g_last_read_time_ms;
+    unsigned long dp    = pulses_now - g_last_read_pulses;
+
+    if (dt_ms > 0 && dp > 0) {
+        d.flow_rate = (dp * WATER_LITERS_PER_PULSE) / (float)dt_ms * 60000.0f;
     } else {
         d.flow_rate = 0.0f;
     }
 
-    // Jami hajm: m3
-    d.volume_m3 = g_initial_volume_m3 + ((float)current_pulses * WATER_LITERS_PER_PULSE / 1000.0f);
-    d.temperature_c = NAN; // Ichki analog harorat mavjud emas
-    d.valid = true;
+    // ── Jami hajm ────────────────────────────────────────────────────────────
+    d.volume_m3 = g_initial_volume_m3 + ((float)pulses_now * WATER_LITERS_PER_PULSE / 1000.0f);
+    d.temperature_c = NAN;
+    d.valid = !g_ch_bottom.error;
 
-    g_last_read_pulses = current_pulses;
+    g_last_read_pulses  = pulses_now;
     g_last_read_time_ms = time_now;
 
-    // Har 10 impulsda yoki 5 daqiqada Preferences-ga saqlaymiz (flash-ni asrash uchun)
-    static unsigned long last_saved_pulses = 0;
+    // ── Impuls saqlash (har 10 impuls yoki 5 daqiqada) ───────────────────────
+    static unsigned long last_saved_pulses  = 0;
     static unsigned long last_saved_time_ms = 0;
-    if (current_pulses - last_saved_pulses >= 10 || (time_now - last_saved_time_ms > 300000UL)) {
+    if (pulses_now - last_saved_pulses >= 10 ||
+        (time_now - last_saved_time_ms > 300000UL)) {
         Preferences prefs;
         prefs.begin("water", false);
-        prefs.putULong("pulses", current_pulses);
+        prefs.putULong("pulses", pulses_now);
         prefs.end();
-        last_saved_pulses = current_pulses;
+        last_saved_pulses  = pulses_now;
         last_saved_time_ms = time_now;
     }
 
-    LOG_PRINTF("Suv: pastki=%.3f bar | yuqori=%.3f bar | oqim=%.3f L/min | jami=%.3f m3 (pulses=%lu)\n",
-                  d.pressure_bottom_bar, d.pressure_top_bar, d.flow_rate, d.volume_m3, current_pulses);
+    // ── Log ──────────────────────────────────────────────────────────────────
+    if (g_ch_bottom.error) {
+        LOG_PRINTF("Suv: XATO tok=%.2f mA (%s)\n", g_ch_bottom.current_mA,
+                   g_ch_bottom.current_mA < SENSOR_ERR_LO ? "uzilgan" : "qisqa");
+    } else {
+        LOG_PRINTF("Suv: p=%.3f bar (%.2f mA) | oqim=%.1f L/min | hajm=%.3f m3\n",
+                   g_ch_bottom.ema_bar, g_ch_bottom.current_mA,
+                   d.flow_rate, d.volume_m3);
+    }
     return true;
 }
 
 #ifndef LORA_NODE
 static bool sensor_do_register(const char* device_id, const char* fw_version) {
-    const char* s_type = "water_pulse_flow";
-    return app_register(device_id, "water", s_type, "", fw_version, 0);
+    return app_register(device_id, "water", "ads1115_hy131", "", fw_version, 0);
 }
 
 static String sensor_build_json(const char* device_id,
@@ -184,7 +270,7 @@ static String sensor_build_json(const char* device_id,
     StaticJsonDocument<384> doc;
     doc["device_id"]    = device_id;
     doc["utility_type"] = "water";
-    doc["sensor_type"]  = "water_pulse_flow";
+    doc["sensor_type"]  = "ads1115_hy131";
     doc["fw_version"]   = fw_ver;
     if (g_cfg.test_mode) doc["is_test_device"] = true;
 

@@ -68,12 +68,23 @@ async def pending_commands(device_id: str) -> dict:
             row.status = "sent"
             row.attempts = (row.attempts or 0) + 1
         await session.commit()
+    def _parse_params(raw: str | None) -> dict | None:
+        if not raw:
+            return None
+        try:
+            parsed = json.loads(raw)
+            return parsed if isinstance(parsed, dict) else None
+        except (ValueError, TypeError):
+            return None
+
     return {
         "commands": [
             {
                 "id": row.id,
                 "action": row.action,
                 "param": row.param,
+                # Firmware cmd["params"] obyektini o'qiydi (set_volume/set_interval/...)
+                "params": _parse_params(row.param),
                 "expires_at": row.expires_at,
                 "attempts": row.attempts,
                 "max_attempts": row.max_attempts,

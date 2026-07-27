@@ -1,6 +1,8 @@
 import json
+from datetime import datetime, timezone
 
 from fastapi import HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import settings
@@ -47,6 +49,25 @@ def _validate_reading(body: MeterReading) -> None:
     _validate_range("level", body.level, 0, 100)
 
 
+def _effective_reading_ts(body: MeterReading, server_ts: int) -> int:
+    """Firmware NTP timestamp (ISO-8601 yoki epoch) — offline buferdan kelgan
+    readinglar to'g'ri vaqt bilan saqlanadi. Noto'g'ri/uzoq qiymatda server vaqti."""
+    raw = body.timestamp
+    if raw is None:
+        return server_ts
+    try:
+        if isinstance(raw, (int, float)):
+            ts = int(raw)
+        else:
+            ts = int(datetime.fromisoformat(str(raw).replace("Z", "+00:00")).timestamp())
+    except (ValueError, OSError):
+        return server_ts
+    # 30 kun o'tmish .. 5 daqiqa kelajak oralig'ida bo'lsa ishonamiz
+    if server_ts - 30 * 86400 <= ts <= server_ts + 300:
+        return ts
+    return server_ts
+
+
 async def _save_reading_internal(session: AsyncSession, body: MeterReading, ts: int, test_mode: bool = False) -> list[dict]:
     """Bitta session ichida reading saqlash. Alert broadcastlarni qaytaradi."""
     if body.reading_id:
@@ -69,7 +90,9 @@ async def _save_reading_internal(session: AsyncSession, body: MeterReading, ts: 
         raise HTTPException(403, "Test rejim production qurilma uchun ishlatilmaydi")
 
     device.last_seen = ts
-    device.utility_type = body.utility_type or device.utility_type
+    device.utility_type = body.utility_type or device.utility_type or "electricity"
+    # Keyingi mantiq (Reading, alert rule match) bir xil qiymat ishlatsin
+    body.utility_type = body.utility_type or device.utility_type
     device.software_version = body.software_version or body.fw_version or device.software_version
     device.hardware_version = body.hardware_version or device.hardware_version
     device.fw_version = body.fw_version or device.fw_version
@@ -97,6 +120,10 @@ async def _save_reading_internal(session: AsyncSession, body: MeterReading, ts: 
     if not device.is_test_device:
         device.building_id = body.building_id or device.building_id
         device.point_id = body.point_id or device.point_id
+        # Qurilma serverda binoga biriktirilgan bo'lsa, alert rule matching va
+        # Alert.building_id ham shu qiymatni ishlatsin (ESP32 building_id yubormaydi)
+        body.building_id = body.building_id or device.building_id
+        body.point_id = body.point_id or device.point_id
     device.updated_at = ts
 
     await alert_service.clear_offline_alerts_for_device(session, body.device_id)
@@ -105,12 +132,12 @@ async def _save_reading_internal(session: AsyncSession, body: MeterReading, ts: 
         device_id=body.device_id,
         reading_id=body.reading_id,
         sequence_no=body.sequence_no,
-        building_id=None if device.is_test_device else (body.building_id or device.building_id),
-        point_id=None if device.is_test_device else (body.point_id or device.point_id),
+        building_id=None if device.is_test_device else body.building_id,
+        point_id=None if device.is_test_device else body.point_id,
         utility_type=body.utility_type,
         sensor_type=body.sensor_type,
         meter_serial=body.meter_serial,
-        ts=ts,
+        ts=_effective_reading_ts(body, ts),
         voltage_l1=body.voltage_l1,
         voltage_l2=body.voltage_l2,
         voltage_l3=body.voltage_l3,
@@ -151,7 +178,12 @@ async def save_reading(body: MeterReading, test_mode: bool = False) -> int:
     ts = now_ts()
     async with SessionLocal() as session:
         alert_broadcasts = await _save_reading_internal(session, body, ts, test_mode)
-        await session.commit()
+        try:
+            await session.commit()
+        except IntegrityError:
+            # Parallel kelgan bir xil reading_id — idempotent skip (500 emas)
+            await session.rollback()
+            return ts
     for msg in alert_broadcasts:
         await ws_manager.broadcast(msg)
     return ts
@@ -177,7 +209,9 @@ async def save_reading_batch(body: MeterReadingBatch, test_mode: bool = False) -
     all_alert_broadcasts: list[dict] = []
     ts = now_ts()
 
-    # Bitta session ichida barcha readinglarni saqlash
+    # Bitta session ichida barcha readinglarni saqlash.
+    # Har bir reading SAVEPOINT ichida — bitta xato reading butun batchni
+    # (PendingRollbackError bilan) yiqitmasligi uchun.
     async with SessionLocal() as session:
         for index, reading in enumerate(body.readings):
             try:
@@ -186,14 +220,22 @@ async def save_reading_batch(body: MeterReadingBatch, test_mode: bool = False) -
                     if await ReadingRepository(session).exists_external_id(reading.device_id, reading.reading_id):
                         skipped += 1
                         continue
-                broadcasts = await _save_reading_internal(session, reading, ts, test_mode)
+                async with session.begin_nested():
+                    broadcasts = await _save_reading_internal(session, reading, ts, test_mode)
                 all_alert_broadcasts.extend(broadcasts)
                 accepted += 1
             except HTTPException as exc:
                 errors.append({"index": index, "error": exc.detail})
+            except IntegrityError:
+                skipped += 1
             except Exception as exc:
                 errors.append({"index": index, "error": str(exc)})
-        await session.commit()
+        try:
+            await session.commit()
+        except IntegrityError:
+            await session.rollback()
+            errors.append({"index": -1, "error": "duplicate reading (race)"})
+            accepted = 0
 
     # Alert broadcastlarni session tashqarisida yuborish
     for msg in all_alert_broadcasts:

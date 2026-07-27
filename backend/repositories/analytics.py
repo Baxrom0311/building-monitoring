@@ -13,7 +13,8 @@ class AnalyticsRepository(BaseRepository[HourlyUtilityStats]):
     model = HourlyUtilityStats
 
     async def reading_stats(self, device_id: str, cutoff: int) -> list[dict]:
-        hour_ts = (Reading.ts / 3600).cast(Integer) * 3600
+        # ts % 3600 — PG da int/int bo'lish NUMERIC ga aylanib ROUND qiladi, shuning uchun modulo
+        hour_ts = Reading.ts - (Reading.ts % 3600)
         stmt = (
             select(
                 hour_ts.label("hour_ts"),
@@ -125,12 +126,14 @@ class AnalyticsRepository(BaseRepository[HourlyUtilityStats]):
         }
 
     async def aggregate_hourly_rows(self, cutoff: int) -> list[dict]:
-        hour_ts = (Reading.ts / 3600).cast(Integer) * 3600
+        hour_ts = Reading.ts - (Reading.ts % 3600)
+        # building_id/point_id GROUP BY da emas — uq_hourly_stats_device_utility
+        # (bucket_ts, device_id, utility_type) bo'yicha unique, device ko'chsa duplicate bo'lardi
         stmt = (
             select(
                 hour_ts.label("bucket_ts"),
-                Reading.building_id,
-                Reading.point_id,
+                func.max(Reading.building_id).label("building_id"),
+                func.max(Reading.point_id).label("point_id"),
                 Reading.device_id,
                 Reading.utility_type,
                 func.count().label("samples"),
@@ -150,7 +153,7 @@ class AnalyticsRepository(BaseRepository[HourlyUtilityStats]):
             )
             .join(Device, Device.id == Reading.device_id)
             .where(and_(Reading.ts >= cutoff, Device.is_test_device.is_(False)))
-            .group_by(hour_ts, Reading.building_id, Reading.point_id, Reading.device_id, Reading.utility_type)
+            .group_by(hour_ts, Reading.device_id, Reading.utility_type)
         )
         return [dict(row) for row in (await self.session.execute(stmt)).mappings().all()]
 
@@ -207,7 +210,7 @@ class AnalyticsRepository(BaseRepository[HourlyUtilityStats]):
         bucket_sec: int,
         building_id: int | None = None,
     ) -> list[dict]:
-        bucket_ts = (Reading.ts / bucket_sec).cast(Integer) * bucket_sec
+        bucket_ts = Reading.ts - (Reading.ts % bucket_sec)
         per_device = (
             select(
                 bucket_ts.label("bucket_ts"),

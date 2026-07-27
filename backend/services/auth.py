@@ -2,12 +2,23 @@ from fastapi import HTTPException
 
 from core.config import settings
 from core.database import SessionLocal
-from core.security import create_access_token, hash_password, invalidate_user_cache, validate_password, verify_password
+from core.security import (
+    _DUMMY_PASSWORD_HASH,
+    create_access_token,
+    hash_password,
+    invalidate_user_cache,
+    validate_password,
+    verify_password_async,
+)
 from core.time import now_ts
 from models.entities import User
 from repositories.auth import UserRepository
 from repositories.base import model_to_dict
 from schemas.auth import LoginRequest, UserCreate, UserUpdate
+
+
+# Tizim rollari: admin/user/viewer + kommunal idoralar (faqat o'z hisobotini yuklaydi)
+ALLOWED_ROLES = ("admin", "user", "viewer", "water_org", "gas_org", "electricity_org")
 
 
 def _public_user(user: User) -> dict:
@@ -48,13 +59,15 @@ async def login(body: LoginRequest) -> dict:
     async with SessionLocal() as session:
         user = await UserRepository(session).by_username(body.username)
         if not user or not user.is_active:
+            # Timing orqali username mavjudligini bilib bo'lmasligi uchun dummy hash
+            await verify_password_async(body.password, _DUMMY_PASSWORD_HASH)
             raise HTTPException(401, "Login yoki parol noto'g'ri")
 
         n = now_ts()
         if settings.login_lock_sec > 0 and user.locked_until and user.locked_until > n:
             raise HTTPException(423, "Akkount vaqtincha bloklangan. Keyinroq urinib ko'ring")
 
-        if not verify_password(body.password, user.password_hash):
+        if not await verify_password_async(body.password, user.password_hash):
             user.failed_login_count = (user.failed_login_count or 0) + 1
             if settings.login_lock_sec > 0 and user.failed_login_count >= settings.max_login_attempts:
                 user.locked_until = n + settings.login_lock_sec
@@ -79,8 +92,8 @@ async def me(user_id: int) -> dict:
 
 
 async def create_user(body: UserCreate) -> dict:
-    if body.role not in ("admin", "user", "viewer"):
-        raise HTTPException(400, "role faqat admin, user yoki viewer bo'lishi mumkin")
+    if body.role not in ALLOWED_ROLES:
+        raise HTTPException(400, f"role quyidagilardan biri bo'lishi kerak: {', '.join(ALLOWED_ROLES)}")
     validate_password(body.password)
     ts = now_ts()
     async with SessionLocal() as session:
@@ -150,8 +163,8 @@ async def update_user(user_id: int, body: UserUpdate, actor_id: int | None = Non
     fields = body.model_dump(exclude_none=True)
     if not fields:
         raise HTTPException(400, "Yangilanadigan maydon yo'q")
-    if "role" in fields and fields["role"] not in ("admin", "user", "viewer"):
-        raise HTTPException(400, "role faqat admin, user yoki viewer bo'lishi mumkin")
+    if "role" in fields and fields["role"] not in ALLOWED_ROLES:
+        raise HTTPException(400, f"role quyidagilardan biri bo'lishi kerak: {', '.join(ALLOWED_ROLES)}")
     if "password" in fields:
         validate_password(fields["password"])
 
@@ -161,7 +174,7 @@ async def update_user(user_id: int, body: UserUpdate, actor_id: int | None = Non
             raise HTTPException(404, "User topilmadi")
         if actor_id == user_id and fields.get("is_active") is False:
             raise HTTPException(400, "Admin o'zini deaktiv qila olmaydi")
-        if actor_id == user_id and fields.get("role") == "user":
+        if actor_id == user_id and "role" in fields and fields["role"] != "admin":
             raise HTTPException(400, "Admin o'z rolini pasaytira olmaydi")
 
         if "password" in fields:

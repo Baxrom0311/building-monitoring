@@ -1,23 +1,41 @@
+from typing import Optional
+
 from fastapi import APIRouter
+
+from core.database import SessionLocal
+from repositories.buildings import BuildingRepository
 from services import analytics as analytics_service
 
 router = APIRouter(prefix="/api/public")
 
 
 @router.get("/display")
-async def public_display():
-    """Ko'rgazma uchun ochiq endpoint — auth talab qilinmaydi."""
-    electricity = await analytics_service.list_hourly_stats(utility_type="electricity", hours=24, limit=500)
-    water = await analytics_service.list_hourly_stats(utility_type="water", hours=24, limit=500)
-    gas = await analytics_service.list_hourly_stats(utility_type="gas", hours=24, limit=500)
-    soil = await analytics_service.list_hourly_stats(utility_type="soil", hours=24, limit=500)
-    sound = await analytics_service.list_hourly_stats(utility_type="sound", hours=24, limit=500)
+async def public_display(building_id: Optional[int] = None):
+    """Ko'rgazma uchun ochiq endpoint — auth talab qilinmaydi.
+
+    building_id berilsa faqat shu bino statistikasi qaytadi
+    (kiosk ekranini bitta domga bog'lash uchun: /display?building_id=3).
+    """
+    async def stats(utility: str) -> list:
+        result = await analytics_service.list_hourly_stats(
+            building_id=building_id, utility_type=utility, hours=24, limit=500
+        )
+        return result["stats"]
+
+    building_info = None
+    if building_id is not None:
+        async with SessionLocal() as session:
+            building = await BuildingRepository(session).get(building_id)
+        if building:
+            building_info = {"id": building.id, "name": building.name, "address": building.address}
+
     return {
-        "electricity": electricity["stats"],
-        "water": water["stats"],
-        "gas": gas["stats"],
-        "soil": soil["stats"],
-        "sound": sound["stats"],
+        "building": building_info,
+        "electricity": await stats("electricity"),
+        "water": await stats("water"),
+        "gas": await stats("gas"),
+        "soil": await stats("soil"),
+        "sound": await stats("sound"),
     }
 
 
@@ -29,9 +47,12 @@ async def display_kpi():
     Javob hajmi ~300 bayt — ESP32 xotirasi uchun qulay.
     """
     def _latest(stats: list[dict]) -> dict:
-        """Ro'yxatdan eng oxirgi bo'sh bo'lmagan qiymatlarni ajratib olish."""
+        """Ro'yxatdan eng oxirgi bo'sh bo'lmagan qiymatlarni ajratib olish.
+
+        stats desc(bucket_ts) tartibida keladi — birinchi elementlar eng yangi,
+        shuning uchun to'g'ridan-to'g'ri iteratsiya qilamiz (reversed emas)."""
         result: dict = {}
-        for row in reversed(stats):
+        for row in stats:
             for key, val in row.items():
                 if key not in result and val is not None and key != "id":
                     result[key] = val

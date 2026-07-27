@@ -64,7 +64,7 @@ const CHARTS = [
   },
   {
     key: 'water' as const,
-    dataKey: 'avg_pressure_bar' as keyof HourlyUtilityStat,
+    dataKey: 'avg_pressure_bottom_bar' as keyof HourlyUtilityStat,
     label: 'Suv bosimi',
     unit: 'bar',
     icon: Droplets,
@@ -178,10 +178,11 @@ export default function DisplayPage() {
 
   const charts = CHARTS.map((cfg) => ({
     ...cfg,
-    points: data ? buildPoints(data[cfg.key], cfg.dataKey) : [],
+    // data[cfg.key] serverdan kelmasa ham sahifa yiqilmasligi uchun ?? [] guard
+    points: data ? buildPoints(data[cfg.key] ?? [], cfg.dataKey) : [],
     latest: data
       ? (() => {
-          const arr = data[cfg.key]
+          const arr = data[cfg.key] ?? []
           if (!arr.length) return null
           const sorted = [...arr].sort((a, b) => b.bucket_ts - a.bucket_ts)
           const v = sorted[0][cfg.dataKey] as number | null

@@ -177,8 +177,13 @@ async def ota_download(
     filename: str,
     device_id: Optional[str] = None,
     x_device_token: Optional[str] = Header(None),
+    authorization: Optional[str] = Header(None),
 ):
-    if device_id:
+    # Desktop dastur JWT bilan yuklab oladi; qurilmalar X-Device-Token bilan
+    if authorization and authorization.lower().startswith("bearer "):
+        from core.security import validate_access_token
+        await validate_access_token(authorization.split(" ", 1)[1])
+    elif device_id:
         await device_service.verify_device_access(device_id, x_device_token)
     else:
         await require_device_token(x_device_token)

@@ -92,7 +92,8 @@ export default function DevicesPage() {
     utilityType: typeFilter !== 'all' ? typeFilter : undefined,
     online:      statusFilter === 'online' ? true : statusFilter === 'offline' ? false : undefined,
     sortBy:      sortBy === 'last_seen' ? 'last_seen' : sortBy,
-    sortOrder:   sortBy === 'status' ? 'desc' : 'asc',
+    // last_seen/status bo'yicha eng yangi birinchi, nom/tur bo'yicha alifbo tartibida
+    sortOrder:   sortBy === 'name' || sortBy === 'type' ? 'asc' : 'desc',
   })
 
   const devices    = data?.devices ?? []

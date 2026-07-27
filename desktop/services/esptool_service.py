@@ -59,8 +59,15 @@ class EsptoolService:
 
             for line in output.splitlines():
                 line_lower = line.lower()
-                if "detecting chip type..." in line_lower or "chip is" in line_lower:
-                    info["chip_type"] = line.split(":")[-1].strip() if ":" in line else line
+                if "detecting chip type" in line_lower:
+                    # esptool 5.x: "Detecting chip type... ESP32"
+                    tail = line.split("...")[-1].strip()
+                    if tail:
+                        info["chip_type"] = tail
+                elif "chip is" in line_lower:
+                    info["chip_type"] = line[line_lower.index("chip is") + len("chip is"):].strip()
+                elif "chip type:" in line_lower:
+                    info["chip_type"] = line.split(":", 1)[-1].strip()
                 elif "mac:" in line_lower:
                     info["mac"] = line.split("MAC:")[-1].strip()
                 elif "features:" in line_lower:
@@ -92,6 +99,24 @@ class EsptoolService:
         )
 
     @classmethod
+    def erase_nvs(cls, port: str, baud: int = 115200, chip: str = "auto") -> subprocess.Popen:
+        """Faqat NVS bo'limini tozalaydi (0x9000, 0x5000 bayt) — saqlangan WiFi/sozlamalar o'chadi.
+
+        To'liq erase_flash bootloader va partition table ni ham o'chirib,
+        app-only flash rejimida platani ishlamay qoldiradi — shu sabab faqat NVS.
+        """
+        py_bin = cls.get_python_executable()
+        cmd = [py_bin, "-m", "esptool", "--chip", chip, "--port", port, "--baud", str(baud),
+               "erase_region", "0x9000", "0x5000"]
+        return subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1
+        )
+
+    @classmethod
     def flash_binary(
         cls,
         port: str,
@@ -99,7 +124,6 @@ class EsptoolService:
         offset: str = "0x10000",
         baud: int = 460800,
         chip: str = "auto",
-        erase_first: bool = False,
         extra_files: list[tuple[str, str]] | None = None
     ) -> subprocess.Popen:
         """Firmware binary faylini ESP32 ga yuklaydi.
@@ -116,9 +140,6 @@ class EsptoolService:
             "--after", "hard_reset",
             "write_flash", "-z",
         ]
-
-        if erase_first:
-            cmd.insert(cmd.index("write_flash"), "--erase-all")
 
         # Add files with offset
         if extra_files:

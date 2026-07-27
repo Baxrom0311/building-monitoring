@@ -76,6 +76,9 @@ async def import_external_buildings(admin: dict = Depends(require_admin)):
             )
             resp.raise_for_status()
             houses: list[dict] = resp.json()
+    except HTTPException:
+        # _get_external_session dagi 503 (sozlanmagan) / 502 xabari o'z holicha chiqsin
+        raise
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Tashqi API xatosi: {e}")
 

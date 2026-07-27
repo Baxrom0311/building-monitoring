@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import hashlib
 import hmac
@@ -46,6 +47,15 @@ def verify_password(password: str, password_hash: str) -> bool:
         return hmac.compare_digest(actual, expected)
     except Exception:
         return False
+
+
+async def verify_password_async(password: str, password_hash: str) -> bool:
+    """PBKDF2 (200k iteratsiya, ~50-100ms CPU) event loopni bloklamasligi uchun thread da."""
+    return await asyncio.to_thread(verify_password, password, password_hash)
+
+
+# Timing-attack himoyasi: username topilmaganda ham bir xil vaqt sarflash uchun dummy hash
+_DUMMY_PASSWORD_HASH = hash_password("dummy-timing-guard")
 
 
 def create_access_token(user_id: int, username: str, role: str, token_version: int = 1) -> str:
@@ -145,6 +155,7 @@ async def require_staff(payload: dict = Depends(current_token_payload)) -> dict:
 async def require_device_token(token: str | None = Depends(device_token_scheme)) -> bool:
     if not settings.device_api_token:
         return True
-    if not token or not hmac.compare_digest(token, settings.device_api_token):
+    # bytes bilan solishtirish — ascii bo'lmagan header TypeError → 500 bermasligi uchun
+    if not token or not hmac.compare_digest(token.encode(), settings.device_api_token.encode()):
         raise HTTPException(401, "Device token noto'g'ri")
     return True

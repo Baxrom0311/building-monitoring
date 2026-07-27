@@ -25,7 +25,15 @@ export default function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const abortRef = useRef<AbortController | null>(null)
   const [userIsScrollingUp, setUserIsScrollingUp] = useState(false)
+
+  // Sahifadan chiqilganda streaming so'rovni bekor qilamiz (unmountdan keyin setState bo'lmasin)
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort()
+    }
+  }, [])
 
   // Quick Prompts list
   const quickPrompts = [
@@ -81,6 +89,9 @@ export default function ChatPage() {
     setPartialResponse('')
     setUserIsScrollingUp(false)
 
+    const controller = new AbortController()
+    abortRef.current = controller
+
     try {
       const token = getTokenFromStorage()
       const response = await fetch(`${API_BASE_URL}/api/chat`, {
@@ -89,6 +100,7 @@ export default function ChatPage() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
+        signal: controller.signal,
         body: JSON.stringify({
           message: textToSend,
           history: history.map(h => ({ role: h.role, content: h.content })),
@@ -166,6 +178,7 @@ export default function ChatPage() {
       }
 
       // Add to final history
+      if (controller.signal.aborted) return
       setHistory((prev) => [
         ...prev,
         { role: 'model', content: accumulatedResponse, thoughts: accumulatedThoughts }
@@ -174,13 +187,15 @@ export default function ChatPage() {
       setPartialResponse('')
 
     } catch (err: any) {
+      // Abort qilingan bo'lsa (sahifadan chiqildi) hech narsa qilmaymiz
+      if (controller.signal.aborted) return
       console.error(err)
       setHistory((prev) => [
         ...prev,
         { role: 'model', content: `Xatolik yuz berdi: ${err.message}` }
       ])
     } finally {
-      setIsLoading(false)
+      if (!controller.signal.aborted) setIsLoading(false)
     }
   }
 
@@ -204,8 +219,8 @@ export default function ChatPage() {
       const cellHtml = cells.map(c => `<${tdType} class="p-3 border border-gray-300 dark:border-gray-700 align-top">${c.trim()}</${tdType}>`).join('')
       return `<tr class="border-b border-gray-300 dark:border-gray-700 transition">${cellHtml}</tr>`
     })
-    // Wrap tables
-    html = html.replace(/((?:<tr class="border-b border-gray-300 dark:border-gray-700">[\s\S]*?<\/tr>)+)/g, '<div class="overflow-x-auto my-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-md"><table class="w-full text-sm border-collapse text-left">$1</table></div>')
+    // Wrap tables — tr klassi yuqoridagi bilan aynan bir xil bo'lishi shart, qatorlar orasidagi \n ga ham chidamli
+    html = html.replace(/((?:<tr class="border-b border-gray-300 dark:border-gray-700 transition">[\s\S]*?<\/tr>\n?)+)/g, '<div class="overflow-x-auto my-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-md"><table class="w-full text-sm border-collapse text-left">$1</table></div>')
 
     // Code block parser
     html = html.replace(/```([\s\S]*?)```/g, '<pre class="bg-gray-100 dark:bg-gray-950 text-gray-800 dark:text-gray-200 p-4 rounded-lg my-3 font-mono text-xs overflow-x-auto border border-gray-200 dark:border-gray-800 shadow-inner">$1</pre>')

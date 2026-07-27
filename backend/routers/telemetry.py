@@ -56,8 +56,11 @@ async def energy_by_building(
 
 
 @router.get("/analytics/energy/summary", response_model=BuildingsEnergySummaryResponse)
-async def buildings_energy_summary(_: dict = Depends(current_token_payload)):
-    return await analytics_service.buildings_energy_summary()
+async def buildings_energy_summary(
+    days: int = Query(30, ge=1, le=365),
+    _: dict = Depends(current_token_payload),
+):
+    return await analytics_service.buildings_energy_summary(days)
 
 
 @router.post("/analytics/hourly/aggregate", response_model=AnalyticsAggregateResponse)

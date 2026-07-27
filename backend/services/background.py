@@ -3,7 +3,7 @@ import logging
 import os
 import socket
 
-from sqlalchemy import and_, delete, select, update
+from sqlalchemy import and_, delete, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
 from core.config import settings
@@ -66,7 +66,12 @@ async def detect_offline_devices_once() -> int:
                 select(Device).where(
                     and_(
                         Device.is_active.is_(True),
-                        Device.last_seen <= cutoff,
+                        Device.is_test_device.is_(False),
+                        # last_seen NULL (hech qachon ulanmagan) qurilma ham offline
+                        or_(
+                            Device.last_seen <= cutoff,
+                            and_(Device.last_seen.is_(None), Device.registered <= cutoff),
+                        ),
                     )
                 )
             )

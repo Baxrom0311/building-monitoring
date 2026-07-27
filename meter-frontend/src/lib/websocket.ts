@@ -6,9 +6,10 @@ import { API_BASE_URL } from './env'
 let ws: WebSocket | null = null
 let listeners: ((message: WebSocketMessage) => void)[] = []
 let reconnectAttempts = 0
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 let manualClose = false
-const MAX_RECONNECT_ATTEMPTS = 5
-const RECONNECT_INTERVAL = 3000
+const RECONNECT_BASE_INTERVAL = 1000
+const RECONNECT_MAX_INTERVAL = 30_000
 export const WS_STATUS_EVENT = 'meter:ws-status'
 export type WebSocketConnectionStatus = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'failed'
 
@@ -32,6 +33,11 @@ function getWebSocketURL(): string {
 }
 
 function connect() {
+  if (listeners.length === 0) {
+    // Hech kim eshitmayotgan bo'lsa ulanish shart emas
+    emitStatus('idle')
+    return
+  }
   if (ws?.readyState === WebSocket.OPEN || ws?.readyState === WebSocket.CONNECTING) {
     return
   }
@@ -76,14 +82,34 @@ function connect() {
 }
 
 function attemptReconnect() {
-  if (!manualClose && listeners.length > 0 && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-    reconnectAttempts++
-    emitStatus('reconnecting')
-    setTimeout(connect, RECONNECT_INTERVAL)
-  } else {
-    console.error('[v0] Max WebSocket reconnection attempts reached')
-    emitStatus(listeners.length > 0 ? 'failed' : 'idle')
+  if (manualClose || listeners.length === 0) {
+    emitStatus('idle')
+    return
   }
+  // Eksponensial backoff: 1s, 2s, 4s ... maksimal 30s (cheksiz urinish)
+  const delay = Math.min(RECONNECT_MAX_INTERVAL, RECONNECT_BASE_INTERVAL * 2 ** reconnectAttempts)
+  reconnectAttempts++
+  emitStatus('reconnecting')
+  if (reconnectTimer) clearTimeout(reconnectTimer)
+  reconnectTimer = setTimeout(connect, delay)
+}
+
+// Tarmoq qaytganda yoki sahifa ko'ringanda darhol qayta ulanishga urinish
+function retryImmediately() {
+  if (manualClose || listeners.length === 0) return
+  if (ws?.readyState === WebSocket.OPEN || ws?.readyState === WebSocket.CONNECTING) return
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer)
+    reconnectTimer = null
+  }
+  connect()
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', retryImmediately)
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') retryImmediately()
+  })
 }
 
 export function subscribe(listener: (message: WebSocketMessage) => void) {
@@ -131,6 +157,10 @@ export function connectWebSocket() {
 }
 
 export function disconnectWebSocket() {
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer)
+    reconnectTimer = null
+  }
   if (ws) {
     manualClose = true
     ws.close()

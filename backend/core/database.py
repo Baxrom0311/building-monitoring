@@ -33,6 +33,8 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
 async def _ensure_sqlite_columns(conn) -> None:
     table_columns: dict[str, dict[str, str]] = {
         "buildings": {
+            "street_id": "INTEGER",
+            "house_no": "VARCHAR(20)",
             "entrances_count": "INTEGER DEFAULT 1",
             "maps_url": "VARCHAR(1000)",
             "latitude": "FLOAT",

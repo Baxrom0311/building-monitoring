@@ -88,6 +88,7 @@ static void cfg_load() {
     if (strncmp(g_cfg.server_url, "http", 4) != 0) {
         char tmp[CFG_SERVER_LEN];
         strncpy(tmp, g_cfg.server_url, CFG_SERVER_LEN - 1);
+        tmp[CFG_SERVER_LEN - 1] = '\0';
         snprintf(g_cfg.server_url, CFG_SERVER_LEN, "http://%s", tmp);
     }
     char* p = strstr(g_cfg.server_url, ":8001");

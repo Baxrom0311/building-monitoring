@@ -91,7 +91,7 @@ export function useHourlyStats(
     queryFn: async () => {
       const params = new URLSearchParams({
         hours: hours.toString(),
-        limit: '1000',
+        limit: '2000', // backend maksimumi — 720 soatlik oynada ma'lumot kesilmasligi uchun
         ...(buildingId && { building_id: buildingId.toString() }),
         ...(utilityType && utilityType !== 'all' && { utility_type: utilityType }),
       })

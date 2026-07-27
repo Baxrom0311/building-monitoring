@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import os
@@ -146,7 +147,7 @@ async def list_devices_tool(utility_type: str = "", online_only: bool = False) -
     devices = result.get("devices", [])
     # Faqat kerakli maydonlarni qaytaramiz (token_hash va shunga o'xshashlarni olib tashlaymiz)
     safe_fields = [
-        "device_id", "label", "meter_type", "utility_type", "firmware_mode",
+        "id", "name", "meter_type", "utility_type", "firmware_mode",
         "building_id", "building_text", "floor_text", "group_name",
         "online", "last_seen", "fw_version", "meter_serial",
     ]
@@ -167,7 +168,7 @@ async def get_device_details_tool(device_id: str) -> str:
     try:
         device = await device_service.get_device(device_id)
         safe_fields = [
-            "device_id", "label", "meter_type", "utility_type", "firmware_mode",
+            "id", "name", "meter_type", "utility_type", "firmware_mode",
             "building_id", "building_text", "floor_text", "group_name",
             "online", "last_seen", "fw_version", "meter_serial", "is_active",
         ]
@@ -443,7 +444,7 @@ DEEPSEEK_TOOLS = [
                     "device_id": {"type": "string", "description": "Bo'sh = barcha qurilmalar"},
                     "status": {
                         "type": "string",
-                        "enum": ["", "pending", "sent", "done", "failed", "expired"],
+                        "enum": ["", "pending", "sent", "acked", "expired", "cancelled"],
                         "description": "Bo'sh = barcha holatlar",
                     },
                     "limit": {"type": "integer", "minimum": 1, "maximum": 100},
@@ -608,7 +609,8 @@ async def execute_gemini_flow(body: ChatRequest, user: dict):
         history.append({"role": role, "parts": [item.content]})
 
     chat = model.start_chat(history=history)
-    response = chat.send_message(body.message)
+    # send_message sinxron — to_thread bo'lmasa butun server LLM javobini kutib qoladi
+    response = await asyncio.to_thread(chat.send_message, body.message)
 
     max_iterations = 8
     iteration = 0
@@ -621,17 +623,31 @@ async def execute_gemini_flow(body: ChatRequest, user: dict):
         if not calls:
             break
         iteration += 1
+        # Gemini bitta turdagi barcha function_response larni bitta xabarda kutadi
+        response_parts = []
         for call in calls:
             args = dict(call.args)
             yield f"data: {_json({'type': 'THOUGHT', 'content': f'🔍 {call.name} chaqirilmoqda...'})}\n\n"
             result = await execute_tool(call.name, args, user)
             yield f"data: {_json({'type': 'THOUGHT', 'content': f'✓ Natija: {result[:300]}...' if len(result) > 300 else f'✓ Natija: {result}'})}\n\n"
-            response = chat.send_message(
-                genai.types.Part.from_function_response(name=call.name, response={"result": result})
+            response_parts.append(
+                genai.protos.Part(
+                    function_response=genai.protos.FunctionResponse(
+                        name=call.name, response={"result": result}
+                    )
+                )
             )
+        response = await asyncio.to_thread(chat.send_message, response_parts)
 
-    if getattr(response, "text", None):
-        yield f"data: {_json({'type': 'FINAL_RESPONSE', 'content': response.text})}\n\n"
+    # .text property function_call/safety-block holatida ValueError otadi
+    try:
+        final_text = response.text
+    except (ValueError, AttributeError):
+        final_text = None
+    if final_text:
+        yield f"data: {_json({'type': 'FINAL_RESPONSE', 'content': final_text})}\n\n"
+    else:
+        yield f"data: {_json({'type': 'FINAL_RESPONSE', 'content': 'Javob tayyorlab bo‘lmadi, qayta urinib ko‘ring.'})}\n\n"
     yield "data: [DONE]\n\n"
 
 
@@ -691,9 +707,24 @@ async def execute_deepseek_flow(body: ChatRequest, user: dict):
             })
         response = await call_deepseek_completions(messages, DEEPSEEK_TOOLS)
 
-    content = response.get("choices", [{}])[0].get("message", {}).get("content")
+    last_message = response.get("choices", [{}])[0].get("message", {})
+    content = last_message.get("content")
+    if not content and last_message.get("tool_calls"):
+        # max_iterations tugab qoldi — tool siz yakuniy javob so'raymiz,
+        # aks holda foydalanuvchi bo'sh javob olardi
+        messages.append({
+            "role": "user",
+            "content": "Yuqoridagi ma'lumotlar asosida yakuniy javobni ber.",
+        })
+        try:
+            final = await call_deepseek_completions(messages)
+            content = final.get("choices", [{}])[0].get("message", {}).get("content")
+        except Exception:
+            content = None
     if content:
         yield f"data: {_json({'type': 'FINAL_RESPONSE', 'content': content})}\n\n"
+    else:
+        yield f"data: {_json({'type': 'FINAL_RESPONSE', 'content': 'Javob tayyorlab bo‘lmadi, qayta urinib ko‘ring.'})}\n\n"
     yield "data: [DONE]\n\n"
 
 

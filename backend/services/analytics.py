@@ -32,7 +32,10 @@ async def building_analytics(building_id: int, hours: int) -> dict:
 
 async def aggregate_hourly_stats_once(hours: int = 48) -> dict:
     ts = now_ts()
+    # Soat boshiga tekislash — aks holda delete birinchi (qisman) bucketni o'chirmay,
+    # qayta insert unique constraint ga urilardi
     cutoff = ts - hours * 3600
+    cutoff -= cutoff % 3600
     async with SessionLocal() as session:
         repo = AnalyticsRepository(session)
         rows = await repo.aggregate_hourly_rows(cutoff)
@@ -100,12 +103,12 @@ async def energy_by_building(
     }
 
 
-async def buildings_energy_summary() -> dict:
+async def buildings_energy_summary(days: int = 30) -> dict:
     """
-    Barcha binolar uchun oxirgi 30 kun energiya sarfi xulasasi (dashboard uchun).
+    Barcha binolar uchun oxirgi N kun energiya sarfi xulasasi (dashboard uchun).
     """
     to_ts = now_ts()
-    from_ts = to_ts - 30 * 86400
+    from_ts = to_ts - days * 86400
 
     async with SessionLocal() as session:
         rows = await AnalyticsRepository(session).buildings_energy_summary_rows(from_ts)
@@ -133,7 +136,7 @@ async def buildings_energy_summary() -> dict:
             })
 
     summary.sort(key=lambda x: (x.get("total_energy_kwh") or 0), reverse=True)
-    return {"summary": summary, "days": 30}
+    return {"summary": summary, "days": days}
 
 
 async def export_csv(device_id: str, hours: int) -> tuple[str, str]:

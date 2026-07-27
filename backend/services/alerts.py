@@ -137,7 +137,7 @@ async def check_alerts(session, reading: MeterReading) -> list[dict]:
         frequency_rule = rules.get("frequency")
         frequency_min = _rule_min(frequency_rule, settings.frequency_min)
         frequency_max = _rule_max(frequency_rule, settings.frequency_max)
-        if reading.frequency and (reading.frequency < frequency_min or reading.frequency > frequency_max):
+        if reading.frequency is not None and (reading.frequency < frequency_min or reading.frequency > frequency_max):
             _queue_alert(
                 alerts,
                 Alert(
@@ -176,7 +176,9 @@ async def check_alerts(session, reading: MeterReading) -> list[dict]:
         if reading.pressure_bottom_bar is not None and reading.pressure_top_bar is not None:
             water_top_rule = rules.get("water_not_reaching_top")
             top_pressure_min = _rule_min(water_top_rule, settings.water_pressure_min_bar)
-            bottom_pressure_ok = _rule_min(water_top_rule, settings.water_bottom_pressure_for_top_check_bar)
+            # Pastki bosim chegarasi rule.min_value dan olinmaydi — u yuqori bosim
+            # uchun; aks holda min_value=0.2 qo'yilsa bosimsiz tizimda ham critical chiqardi
+            bottom_pressure_ok = settings.water_bottom_pressure_for_top_check_bar
             if reading.pressure_bottom_bar > bottom_pressure_ok and reading.pressure_top_bar < top_pressure_min:
                 _queue_alert(
                     alerts,

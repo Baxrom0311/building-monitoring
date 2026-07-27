@@ -2,7 +2,7 @@ from fastapi import HTTPException
 
 from core.config import settings
 from core.database import SessionLocal
-from core.security import generate_secret_token, hash_password, verify_password
+from core.security import generate_secret_token, hash_password, verify_password_async
 from core.time import now_ts
 from models.entities import Device, DeviceProvisioningToken
 from models.schemas import DeviceCreate, DeviceProvisioningTokenCreate, DeviceRegister, DeviceStatus, DeviceUpdate
@@ -63,11 +63,11 @@ async def verify_device_access(device_id: str | None, token: str | None) -> None
         if device.is_test_device:
             if _global_device_token_ok(token):
                 return
-            if device.api_token_hash and token and verify_password(token, device.api_token_hash):
+            if device.api_token_hash and token and await verify_password_async(token, device.api_token_hash):
                 return
         raise HTTPException(403, "Qurilma o'chirilgan")
     if device and device.api_token_hash:
-        if token and verify_password(token, device.api_token_hash):
+        if token and await verify_password_async(token, device.api_token_hash):
             return
         raise HTTPException(401, "Device token noto'g'ri")
     if device and device.token_revoked_at:
@@ -119,7 +119,11 @@ async def _consume_provisioning_token(session, body: DeviceRegister, ts: int) ->
     if not body.provisioning_token:
         return None
     rows = await DeviceProvisioningTokenRepository(session).active_candidates(ts)
-    matched = next((row for row in rows if verify_password(body.provisioning_token, row.token_hash)), None)
+    matched = None
+    for row in rows:
+        if await verify_password_async(body.provisioning_token, row.token_hash):
+            matched = row
+            break
     if not matched:
         raise HTTPException(401, "Provisioning token noto'g'ri yoki muddati tugagan")
     if matched.device_id and matched.device_id != body.device_id:
@@ -167,10 +171,12 @@ async def register_device(body: DeviceRegister, token: str | None = None) -> dic
 
         test_mode = requested_test_mode
         device.name = device.name or body.name or body.device_id
-        device.utility_type = applied_utility_type
-        device.device_role = applied_device_role
+        # None yuborilsa mavjud qiymat saqlanadi (ilgari default electricity
+        # water/gas qurilmani qayta yozib yuborardi)
+        device.utility_type = applied_utility_type or device.utility_type or "electricity"
+        device.device_role = applied_device_role or device.device_role
         device.firmware_mode = applied_firmware_mode
-        device.meter_type = body.meter_type
+        device.meter_type = body.meter_type or body.sensor_type or device.meter_type or "unknown"
         if body.meter_serial and device.meter_serial and body.meter_serial != device.meter_serial:
             from services import audit as audit_service
             await audit_service.record(
@@ -237,7 +243,7 @@ async def update_device_status(body: DeviceStatus, test_mode: bool = False) -> d
             device_repo.add(device)
         device.utility_type = body.utility_type or device.utility_type
         device.ip = body.ip or device.ip
-        device.rssi = body.rssi
+        device.rssi = body.rssi if body.rssi is not None else device.rssi
         device.hardware_version = body.hardware_version or device.hardware_version
         device.software_version = body.software_version or device.software_version
         device.firmware_mode = body.firmware_mode or device.firmware_mode
@@ -457,16 +463,28 @@ async def revoke_device_token(device_id: str, admin: dict) -> dict:
 
 
 async def delete_device(device_id: str) -> dict:
-    from sqlalchemy import delete as sa_delete
-    from models.entities import Reading, HourlyUtilityStats, FirmwareInstallEvent
+    from sqlalchemy import delete as sa_delete, update as sa_update
+    from models.entities import (
+        FirmwareInstallEvent,
+        HourlyUtilityStats,
+        MeasurementPoint,
+        OTABatchDevice,
+        Reading,
+    )
     async with SessionLocal() as session:
         device = await DeviceRepository(session).get(device_id)
         if not device:
             raise HTTPException(404, "Qurilma topilmadi")
-        # device_id NOT NULL bo'lgan bog'liq jadvallarni avval tozalab olamiz
+        # device_id ga FK bilan bog'liq jadvallarni avval tozalab olamiz
         await session.execute(sa_delete(Reading).where(Reading.device_id == device_id))
         await session.execute(sa_delete(HourlyUtilityStats).where(HourlyUtilityStats.device_id == device_id))
         await session.execute(sa_delete(FirmwareInstallEvent).where(FirmwareInstallEvent.device_id == device_id))
+        await session.execute(sa_delete(OTABatchDevice).where(OTABatchDevice.device_id == device_id))
+        await session.execute(
+            sa_update(MeasurementPoint)
+            .where(MeasurementPoint.device_id == device_id)
+            .values(device_id=None)
+        )
         await session.delete(device)
         await session.commit()
     await ws_manager.broadcast({"type": "device_deleted", "device_id": device_id})

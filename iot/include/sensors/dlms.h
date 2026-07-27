@@ -125,15 +125,21 @@ static const uint8_t* dlms_find_pdu(size_t* plen) {
 
 static float dlms_parse_float(const uint8_t* d, size_t len) {
     if (len < 2) return NAN;
+    // Har bir tur uchun yetarli uzunlik — truncated javobda bufferdan
+    // tashqarini o'qib garbage qaytarmaslik uchun
     switch (d[0]) {
-        case 0x05: return (float)(int32_t)(((uint32_t)d[1]<<24)|((uint32_t)d[2]<<16)|
+        case 0x05: if (len < 5) return NAN;
+                   return (float)(int32_t)(((uint32_t)d[1]<<24)|((uint32_t)d[2]<<16)|
                                            ((uint32_t)d[3]<<8)|d[4]);
-        case 0x06: return (float)(((uint32_t)d[1]<<24)|((uint32_t)d[2]<<16)|
+        case 0x06: if (len < 5) return NAN;
+                   return (float)(((uint32_t)d[1]<<24)|((uint32_t)d[2]<<16)|
                                   ((uint32_t)d[3]<<8)|d[4]);
         case 0x0F: return (float)(int8_t)d[1];
-        case 0x10: return (float)(int16_t)(((uint16_t)d[1]<<8)|d[2]);
+        case 0x10: if (len < 3) return NAN;
+                   return (float)(int16_t)(((uint16_t)d[1]<<8)|d[2]);
         case 0x11: return (float)d[1];
-        case 0x12: return (float)(((uint16_t)d[1]<<8)|d[2]);
+        case 0x12: if (len < 3) return NAN;
+                   return (float)(((uint16_t)d[1]<<8)|d[2]);
         case 0x16: return (float)(int8_t)d[1];
         default:
             LOG_PRINTF("dlms_parse: 0x%02X?\n", d[0]);
@@ -405,6 +411,7 @@ static bool dlms_get_string(uint16_t cls, const uint8_t obis[6],
     const uint8_t* d = resp+4; size_t dlen = plen-4;
     if (dlen>=2 && (d[0]==0x09 || d[0]==0x0A)) {
         uint8_t slen = d[1];
+        if ((size_t)slen > dlen - 2) return false;  // truncated javob — PDU dan tashqarini o'qimaslik
         size_t cp = slen < out_sz-1 ? slen : out_sz-1;
         memcpy(out, d+2, cp); out[cp] = '\0';
         return true;
