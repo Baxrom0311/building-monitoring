@@ -32,7 +32,11 @@ from models.entities import (
     UtilityBilling,
 )
 from repositories.base import model_to_dict
-from sqlalchemy import and_, delete, func, select
+from sqlalchemy import and_, delete, func, select, text
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+
+IMPORT_BATCH_SIZE = 3000
 
 UTILITY_TYPES = {"water", "gas", "electricity"}
 
@@ -298,6 +302,74 @@ def _detect_and_parse(content: bytes) -> tuple[str, list[dict]]:
 
 # ─── Import ──────────────────────────────────────────────────────────────────
 
+def _dialect_insert(session):
+    """Postgres/SQLite ikkalasida ham ON CONFLICT DO NOTHING qo'llab-quvvatlaydi."""
+    return pg_insert if session.bind.dialect.name == "postgresql" else sqlite_insert
+
+
+async def _bulk_upsert_mahallas(session, names_needed: set[str], ts: int) -> tuple[dict[str, int], dict[int, str]]:
+    """Kerakli barcha mahalla nomlarini BITTA bulk insert bilan yaratadi (mavjudlarini o'tkazib)."""
+    existing = {
+        row.norm_key: (row.id, row.name)
+        for row in (await session.execute(select(Mahalla.id, Mahalla.name, Mahalla.norm_key))).all()
+    }
+    dedup_new: dict[str, str] = {}
+    for name in names_needed:
+        key = norm_key(name)
+        if key not in existing:
+            dedup_new.setdefault(key, name)
+    if dedup_new:
+        insert_ = _dialect_insert(session)
+        rows = [
+            {"name": name, "norm_key": key, "created_at": ts, "updated_at": ts}
+            for key, name in dedup_new.items()
+        ]
+        stmt = insert_(Mahalla).on_conflict_do_nothing(index_elements=["norm_key"])
+        await session.execute(stmt, rows)
+        await session.flush()
+        existing = {
+            row.norm_key: (row.id, row.name)
+            for row in (await session.execute(select(Mahalla.id, Mahalla.name, Mahalla.norm_key))).all()
+        }
+    id_by_key = {k: v[0] for k, v in existing.items()}
+    name_by_id = {v[0]: v[1] for v in existing.values()}
+    return id_by_key, name_by_id
+
+
+async def _bulk_upsert_streets(
+    session, needed: set[tuple[int, str, str]], ts: int
+) -> tuple[dict[tuple[int, str], int], dict[int, str]]:
+    """needed: {(mahalla_id, norm_key, display_name), ...}. Qaytaradi:
+    (mahalla_id,norm_key)->street_id, street_id->street_name."""
+    existing_rows = (
+        await session.execute(select(Street.id, Street.mahalla_id, Street.norm_key, Street.name))
+    ).all()
+    id_by_key = {(r.mahalla_id, r.norm_key): r.id for r in existing_rows}
+    name_by_id = {r.id: r.name for r in existing_rows}
+
+    dedup_new: dict[tuple[int, str], str] = {}
+    for mahalla_id, key, name in needed:
+        if (mahalla_id, key) not in id_by_key:
+            dedup_new.setdefault((mahalla_id, key), name)
+    if dedup_new:
+        insert_ = _dialect_insert(session)
+        rows = [
+            {"mahalla_id": mid, "name": name, "norm_key": key, "created_at": ts, "updated_at": ts}
+            for (mid, key), name in dedup_new.items()
+        ]
+        stmt = insert_(Street).on_conflict_do_nothing(
+            index_elements=["mahalla_id", "norm_key"]
+        )
+        await session.execute(stmt, rows)
+        await session.flush()
+        existing_rows = (
+            await session.execute(select(Street.id, Street.mahalla_id, Street.norm_key, Street.name))
+        ).all()
+        id_by_key = {(r.mahalla_id, r.norm_key): r.id for r in existing_rows}
+        name_by_id = {r.id: r.name for r in existing_rows}
+    return id_by_key, name_by_id
+
+
 async def import_billing_file(
     content: bytes,
     filename: str,
@@ -327,188 +399,258 @@ async def import_billing_file(
         raise HTTPException(422, "Faylda import qilinadigan qator topilmadi")
 
     ts = now_ts()
+    total = len(parsed)
     imported = 0
+    skipped = 0
     buildings_created = 0
 
-    async with SessionLocal() as session:
-        # Keshlarni yuklab olamiz — 50k qatorli faylda har qatorga query yubormaslik uchun
-        mahallas = {m.norm_key: m for m in (await session.scalars(select(Mahalla))).all()}
-        streets = {(s.mahalla_id, s.norm_key): s for s in (await session.scalars(select(Street))).all()}
-        # Mahallasiz hisobotlar (masalan hisoblagich ko'rsatkichlari) mavjud
-        # ko'chani nomi bo'yicha topsin — dublikat ko'cha/bino yaratmaslik uchun
-        streets_any = {s.norm_key: s for s in streets.values()}
-        buildings = {
-            (b.street_id, (b.house_no or "").lower()): b
-            for b in (await session.scalars(select(Building).where(Building.street_id.isnot(None)))).all()
-        }
-        apartments = {
-            (a.building_id, a.apartment_no.lower()): a
-            for a in (await session.scalars(select(Apartment))).all()
-        }
+    # Har bir qatorga oldindan uy raqamini normallashtiramiz (bir marta)
+    for r in parsed:
+        r["_house_norm"] = norm_house(r["house"]) if r["house"] else ""
+        r["_street_key"] = norm_key(r["street"])
 
-        # Shu davr + utility uchun eski yozuvlarni o'chirib qayta yozamiz
-        # (bir xil faylni qayta yuklash xatosiz ishlashi uchun)
-        if fmt != "registry":
+    # ─── 0-bosqich: shu davr+utility uchun eski yozuvlarni tozalash ────────────
+    # (bir xil faylni qayta yuklash xatosiz ishlashi uchun; registry bundan mustasno)
+    if fmt != "registry":
+        async with SessionLocal() as session:
             await session.execute(
                 delete(UtilityBilling).where(
-                    and_(
-                        UtilityBilling.utility_type == utility_type,
-                        UtilityBilling.period == period_int,
-                    )
+                    and_(UtilityBilling.utility_type == utility_type, UtilityBilling.period == period_int)
                 )
             )
+            await session.commit()
 
-        def get_mahalla(name: str | None) -> Mahalla:
-            display = (name or "Noma'lum").strip()
-            key = norm_key(display)
-            if key not in mahallas:
-                m = Mahalla(name=display, norm_key=key, created_at=ts, updated_at=ts)
-                session.add(m)
-                mahallas[key] = m
-            return mahallas[key]
+    # ─── 1-bosqich: mahalla/ko'cha ierarxiyasi ─────────────────────────────────
+    # Soni doim kichik (o'nlab/yuzlab) — butun fayl uchun bitta marta, bulk
+    # insert bilan hal qilinadi (minglab qatorga alohida flush YO'Q).
+    async with SessionLocal() as session:
+        mahalla_names_needed = {(r["mahalla"] or "Noma'lum").strip() for r in parsed}
+        mahalla_id_by_key, mahalla_name_by_id = await _bulk_upsert_mahallas(
+            session, mahalla_names_needed, ts
+        )
 
-        flush_needed = False
-        # 1-bosqich: mahalla/ko'cha/bino/xonadon ierarxiyasini tayyorlash
+        # Mahallasiz qatorlar (masalan "readings" format) uchun — ko'cha nomi
+        # bo'yicha MAVJUD ko'chani topamiz (dublikat mahalla/ko'cha yaratmaslik uchun)
+        existing_streets_any: dict[str, tuple[int, int]] = {}  # norm_key -> (street_id, mahalla_id)
+        for row in (await session.execute(select(Street.id, Street.mahalla_id, Street.norm_key))).all():
+            existing_streets_any.setdefault(row.norm_key, (row.id, row.mahalla_id))
+
+        streets_needed: set[tuple[int, str, str]] = set()
         for r in parsed:
-            skey = norm_key(r["street"])
-            if r["mahalla"] is None and skey in streets_any:
-                st = streets_any[skey]
-                mah = next((m for m in mahallas.values() if m.id == st.mahalla_id), None)
-                if mah is None:
-                    mah = get_mahalla(None)
-            else:
-                mah = get_mahalla(r["mahalla"])
-                if mah.id is None:
-                    await session.flush()
-                if (mah.id, skey) not in streets:
-                    st = Street(mahalla_id=mah.id, name=r["street"], norm_key=skey,
-                                created_at=ts, updated_at=ts)
-                    session.add(st)
-                    await session.flush()
-                    streets[(mah.id, skey)] = st
-                    streets_any.setdefault(skey, st)
-                st = streets[(mah.id, skey)]
+            skey = r["_street_key"]
+            if r["mahalla"] is None and skey in existing_streets_any:
+                r["_mahalla_id"] = existing_streets_any[skey][1]
+                continue
+            mid = mahalla_id_by_key[norm_key((r["mahalla"] or "Noma'lum").strip())]
+            r["_mahalla_id"] = mid
+            streets_needed.add((mid, skey, r["street"]))
 
-            hkey = (st.id, r["house"].lower())
-            if hkey not in buildings:
-                b = Building(
-                    name=f"{st.name} {r['house']}-uy" if r["house"] else st.name,
-                    street_id=st.id,
-                    house_no=r["house"] or None,
-                    mahalla_name=mah.name,
-                    street_name=st.name,
-                    created_at=ts,
-                    updated_at=ts,
-                )
-                session.add(b)
-                await session.flush()
-                buildings[hkey] = b
-                buildings_created += 1
-            b = buildings[hkey]
+        street_id_by_key, street_name_by_id = await _bulk_upsert_streets(session, streets_needed, ts)
+        await session.commit()
 
-            # Yakka xovli (kvartira raqami yo'q) ham xonadon sifatida saqlanadi
-            # ('-' belgisi bilan) — egasi/hisob raqami yo'qolmasin
-            apt_no = r["apartment"] or "-"
-            akey = (b.id, apt_no.lower())
-            if akey not in apartments:
-                apt = Apartment(
-                    building_id=b.id,
-                    apartment_no=apt_no,
-                    owner_name=r["owner"],
-                    account_no=r["account"],
-                    cadastre_code=r["cadastre"],
-                    contract_no=r["contract_no"],
-                    contract_date=r["contract_date"],
-                    pinfl=r["pinfl"],
-                    phone=r["phone"],
-                    people_count=r["people"],
-                    area_m2=r["area"],
-                    living_area_m2=r["living_area"],
-                    property_value=r["property_value"],
-                    rooms=r["rooms"],
-                    created_at=ts,
-                    updated_at=ts,
-                )
-                session.add(apt)
-                flush_needed = True
-                apartments[akey] = apt
-            else:
-                apt = apartments[akey]
-                # Har bir import mavjud xonadonni yangi ma'lumot bilan boyitadi
-                for src_key, attr in (
-                    ("owner", "owner_name"), ("account", "account_no"),
-                    ("cadastre", "cadastre_code"), ("contract_no", "contract_no"),
-                    ("contract_date", "contract_date"), ("pinfl", "pinfl"),
-                    ("phone", "phone"), ("people", "people_count"),
-                    ("area", "area_m2"), ("living_area", "living_area_m2"),
-                    ("property_value", "property_value"), ("rooms", "rooms"),
-                ):
-                    if r[src_key] and not getattr(apt, attr):
-                        setattr(apt, attr, r[src_key])
-                        apt.updated_at = ts
-            r["_building"] = b
-            r["_apartment"] = apt
-
-        if flush_needed:
-            await session.flush()
-
-        # 2-bosqich: billing yozuvlari (registry format faqat xonadonlarni to'ldiradi)
-        skipped = 0
-        if fmt != "registry":
-            seen: set[tuple] = set()
-            for r in parsed:
-                has_metrics = any(
-                    r[k] is not None
-                    for k in ("volume", "accrued", "paid", "debt", "debt_start",
-                              "penalty", "meter_reading", "meter_end")
-                )
-                if not has_metrics:
-                    skipped += 1
-                    continue
-                apt = r["_apartment"]
-                dedupe_key = (r["_building"].id, apt.id if apt else None)
-                if dedupe_key in seen:
-                    skipped += 1
-                    continue
-                seen.add(dedupe_key)
-                session.add(
-                    UtilityBilling(
-                        building_id=r["_building"].id,
-                        apartment_id=apt.id if apt else None,
-                        utility_type=utility_type,
-                        period=period_int,
-                        volume=r["volume"],
-                        accrued=r["accrued"],
-                        paid=r["paid"],
-                        debt_start=r["debt_start"],
-                        debt=r["debt"],
-                        penalty=r["penalty"],
-                        correction=r["correction"],
-                        has_meter=r["has_meter"],
-                        meter_count=r["meter_count"],
-                        meter_reading=r["meter_reading"],
-                        meter_reading_start=r["meter_start"],
-                        meter_reading_end=r["meter_end"],
-                        canal_volume=r["canal_volume"],
-                        canal_amount=r["canal_amount"],
-                        people_count=r["people"],
-                        tariff=r["tariff"],
-                        accrual_type=r["accrual_type"],
-                        consumer_status=r["consumer_status"],
-                        last_payment_date=r["last_payment"],
-                        created_at=ts,
-                    )
-                )
-                imported += 1
+    # Har qatorga street_id ni bog'laymiz (Python xotirasida, DB so'rovisiz)
+    for r in parsed:
+        skey = r["_street_key"]
+        if r["mahalla"] is None and skey in existing_streets_any:
+            r["_street_id"] = existing_streets_any[skey][0]
         else:
-            imported = len(parsed)
+            r["_street_id"] = street_id_by_key[(r["_mahalla_id"], skey)]
 
+    # ─── 2-bosqich: bino/xonadon/billing — BATCH-BATCH ishlanadi ───────────────
+    # Har batch alohida tranzaksiya+commit — uzilib qolsa faqat oxirgi batch
+    # yo'qoladi, butun ish emas.
+    seen_billing: set[tuple[int, int | None]] = set()
+
+    for batch_start in range(0, total, IMPORT_BATCH_SIZE):
+        batch = parsed[batch_start:batch_start + IMPORT_BATCH_SIZE]
+
+        async with SessionLocal() as session:
+            insert_ = _dialect_insert(session)
+
+            # ── Binolar: kerakli kalitlarni yig'ib, mavjudini so'rab, yo'qini bulk yaratamiz
+            house_keys_needed = {(r["_street_id"], r["_house_norm"]) for r in batch}
+            existing_b = {}
+            if house_keys_needed:
+                street_ids = list({k[0] for k in house_keys_needed})
+                rows = (
+                    await session.execute(
+                        select(Building.id, Building.street_id, Building.house_no)
+                        .where(Building.street_id.in_(street_ids))
+                    )
+                ).all()
+                existing_b = {(row.street_id, (row.house_no or "").lower()): row.id for row in rows}
+
+            new_building_rows = []
+            seen_new_keys = set()
+            for r in batch:
+                key = (r["_street_id"], r["_house_norm"])
+                if key not in existing_b and key not in seen_new_keys:
+                    seen_new_keys.add(key)
+                    st_name = street_name_by_id.get(r["_street_id"], r["street"])
+                    mah_name = mahalla_name_by_id.get(r["_mahalla_id"], r["mahalla"])
+                    new_building_rows.append({
+                        "name": f"{st_name} {r['_house_norm']}-uy" if r["_house_norm"] else st_name,
+                        "street_id": r["_street_id"],
+                        "house_no": r["_house_norm"] or None,
+                        "mahalla_name": mah_name,
+                        "street_name": st_name,
+                        "floors": 1,
+                        "entrances_count": 1,
+                        "is_active": True,
+                        "created_at": ts,
+                        "updated_at": ts,
+                    })
+            if new_building_rows:
+                stmt = insert_(Building).on_conflict_do_nothing(
+                    index_elements=[Building.street_id, func.lower(Building.house_no)],
+                    index_where=text("street_id IS NOT NULL"),
+                )
+                await session.execute(stmt, new_building_rows)
+                await session.flush()
+                rows = (
+                    await session.execute(
+                        select(Building.id, Building.street_id, Building.house_no)
+                        .where(Building.street_id.in_(list({k[0] for k in house_keys_needed})))
+                    )
+                ).all()
+                existing_b = {(row.street_id, (row.house_no or "").lower()): row.id for row in rows}
+                buildings_created += len(new_building_rows)
+
+            for r in batch:
+                r["_building_id"] = existing_b[(r["_street_id"], r["_house_norm"])]
+
+            # ── Xonadonlar: mavjudini so'rab, yo'qini bulk yaratamiz, mavjudini
+            # COALESCE bilan bulk boyitamiz (faqat bo'sh maydonlarni to'ldiradi)
+            apt_keys_needed = {(r["_building_id"], (r["apartment"] or "-").strip()) for r in batch}
+            existing_a = {}
+            if apt_keys_needed:
+                building_ids = list({k[0] for k in apt_keys_needed})
+                rows = (
+                    await session.execute(
+                        select(Apartment.id, Apartment.building_id, Apartment.apartment_no)
+                        .where(Apartment.building_id.in_(building_ids))
+                    )
+                ).all()
+                existing_a = {(row.building_id, row.apartment_no.lower()): row.id for row in rows}
+
+            new_apt_rows = []
+            seen_new_apt = set()
+            enrich_rows = []
+            for r in batch:
+                apt_no = (r["apartment"] or "-").strip()
+                key = (r["_building_id"], apt_no.lower())
+                if key not in existing_a and key not in seen_new_apt:
+                    seen_new_apt.add(key)
+                    new_apt_rows.append({
+                        "building_id": r["_building_id"],
+                        "apartment_no": apt_no,
+                        "owner_name": r["owner"], "account_no": r["account"],
+                        "cadastre_code": r["cadastre"], "contract_no": r["contract_no"],
+                        "contract_date": r["contract_date"], "pinfl": r["pinfl"],
+                        "phone": r["phone"], "people_count": r["people"],
+                        "area_m2": r["area"], "living_area_m2": r["living_area"],
+                        "property_value": r["property_value"], "rooms": r["rooms"],
+                        "created_at": ts, "updated_at": ts,
+                    })
+                elif key in existing_a:
+                    enrich_rows.append({
+                        "_id": existing_a[key],
+                        "owner_name": r["owner"], "account_no": r["account"],
+                        "cadastre_code": r["cadastre"], "contract_no": r["contract_no"],
+                        "contract_date": r["contract_date"], "pinfl": r["pinfl"],
+                        "phone": r["phone"], "people_count": r["people"],
+                        "area_m2": r["area"], "living_area_m2": r["living_area"],
+                        "property_value": r["property_value"], "rooms": r["rooms"],
+                        "updated_at": ts,
+                    })
+            if new_apt_rows:
+                stmt = insert_(Apartment).on_conflict_do_nothing(
+                    index_elements=["building_id", "apartment_no"]
+                )
+                await session.execute(stmt, new_apt_rows)
+                await session.flush()
+                building_ids = list({k[0] for k in apt_keys_needed})
+                rows = (
+                    await session.execute(
+                        select(Apartment.id, Apartment.building_id, Apartment.apartment_no)
+                        .where(Apartment.building_id.in_(building_ids))
+                    )
+                ).all()
+                existing_a = {(row.building_id, row.apartment_no.lower()): row.id for row in rows}
+            if enrich_rows:
+                # Faqat hozircha BO'SH bo'lgan maydonlarni to'ldiradi (COALESCE)
+                await session.execute(
+                    text("""
+                        UPDATE apartments SET
+                            owner_name = COALESCE(owner_name, :owner_name),
+                            account_no = COALESCE(account_no, :account_no),
+                            cadastre_code = COALESCE(cadastre_code, :cadastre_code),
+                            contract_no = COALESCE(contract_no, :contract_no),
+                            contract_date = COALESCE(contract_date, :contract_date),
+                            pinfl = COALESCE(pinfl, :pinfl),
+                            phone = COALESCE(phone, :phone),
+                            people_count = COALESCE(people_count, :people_count),
+                            area_m2 = COALESCE(area_m2, :area_m2),
+                            living_area_m2 = COALESCE(living_area_m2, :living_area_m2),
+                            property_value = COALESCE(property_value, :property_value),
+                            rooms = COALESCE(rooms, :rooms),
+                            updated_at = :updated_at
+                        WHERE id = :_id
+                    """),
+                    enrich_rows,
+                )
+
+            for r in batch:
+                apt_no = (r["apartment"] or "-").strip()
+                r["_apartment_id"] = existing_a[(r["_building_id"], apt_no.lower())]
+
+            # ── Billing yozuvlari (registry format — faqat xonadon boyitish, bino bosqichi yetarli)
+            if fmt != "registry":
+                billing_rows = []
+                for r in batch:
+                    has_metrics = any(
+                        r[k] is not None
+                        for k in ("volume", "accrued", "paid", "debt", "debt_start",
+                                  "penalty", "meter_reading", "meter_end")
+                    )
+                    if not has_metrics:
+                        skipped += 1
+                        continue
+                    dedupe_key = (r["_building_id"], r["_apartment_id"])
+                    if dedupe_key in seen_billing:
+                        skipped += 1
+                        continue
+                    seen_billing.add(dedupe_key)
+                    billing_rows.append({
+                        "building_id": r["_building_id"],
+                        "apartment_id": r["_apartment_id"],
+                        "utility_type": utility_type,
+                        "period": period_int,
+                        "volume": r["volume"], "accrued": r["accrued"], "paid": r["paid"],
+                        "debt_start": r["debt_start"], "debt": r["debt"], "penalty": r["penalty"],
+                        "correction": r["correction"], "has_meter": r["has_meter"],
+                        "meter_count": r["meter_count"], "meter_reading": r["meter_reading"],
+                        "meter_reading_start": r["meter_start"], "meter_reading_end": r["meter_end"],
+                        "canal_volume": r["canal_volume"], "canal_amount": r["canal_amount"],
+                        "people_count": r["people"], "tariff": r["tariff"],
+                        "accrual_type": r["accrual_type"], "consumer_status": r["consumer_status"],
+                        "last_payment_date": r["last_payment"], "created_at": ts,
+                    })
+                    imported += 1
+                if billing_rows:
+                    await session.execute(UtilityBilling.__table__.insert(), billing_rows)
+            else:
+                imported += len(batch)
+
+            await session.commit()
+
+    async with SessionLocal() as session:
         record = BillingImport(
             filename=filename,
             utility_type=utility_type,
             period=period_int,
             fmt=fmt,
-            rows_total=len(parsed),
+            rows_total=total,
             rows_imported=imported,
             rows_skipped=skipped,
             buildings_created=buildings_created,
@@ -523,7 +665,7 @@ async def import_billing_file(
     return {
         "ok": True,
         "format": fmt,
-        "rows_total": len(parsed),
+        "rows_total": total,
         "rows_imported": imported,
         "buildings_created": buildings_created,
         "import_id": record.id,
