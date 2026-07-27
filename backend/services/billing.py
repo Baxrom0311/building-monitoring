@@ -112,12 +112,16 @@ def _blank_row() -> dict:
     }
 
 
-def _parse_f3(ws) -> list[dict]:
+def _parse_f3(ws, mahalla_filter_key: str | None = None) -> list[dict]:
     rows = []
     for row in ws.iter_rows(min_row=6, values_only=True):
         street, house = row[3], row[4]
         if not street or not str(street).strip():
             continue
+        if mahalla_filter_key is not None:
+            mah = row[2]
+            if not mah or norm_key(str(mah)) != mahalla_filter_key:
+                continue
         phone = None
         for cand in (row[13], row[12]):  # sotoviy birinchi
             if cand and str(cand).strip():
@@ -163,12 +167,16 @@ def _parse_f3(ws) -> list[dict]:
     return rows
 
 
-def _parse_registry(ws) -> list[dict]:
+def _parse_registry(ws, mahalla_filter_key: str | None = None) -> list[dict]:
     rows = []
     for row in ws.iter_rows(min_row=2, values_only=True):
         street, house = row[7], row[8]
         if not street or not str(street).strip():
             continue
+        if mahalla_filter_key is not None:
+            mah = row[6]
+            if not mah or norm_key(str(mah)) != mahalla_filter_key:
+                continue
         rows.append(_blank_row() | {
             "mahalla": str(row[6]).strip() if row[6] else None,
             "street": str(street).strip(),
@@ -228,7 +236,7 @@ _SIMPLE_ALIASES = {
 }
 
 
-def _parse_simple(ws) -> list[dict]:
+def _parse_simple(ws, mahalla_filter_key: str | None = None) -> list[dict]:
     header = None
     header_row_idx = 0
     for i, row in enumerate(ws.iter_rows(min_row=1, max_row=5, values_only=True), start=1):
@@ -257,6 +265,10 @@ def _parse_simple(ws) -> list[dict]:
         street = cell(row, "street")
         if not street or not str(street).strip():
             continue
+        if mahalla_filter_key is not None:
+            mah = cell(row, "mahalla")
+            if not mah or norm_key(str(mah)) != mahalla_filter_key:
+                continue
         apartment = cell(row, "apartment")
         rows.append(_blank_row() | {
             "mahalla": str(cell(row, "mahalla")).strip() if cell(row, "mahalla") else None,
@@ -273,7 +285,7 @@ def _parse_simple(ws) -> list[dict]:
     return rows
 
 
-def _detect_and_parse(content: bytes) -> tuple[str, list[dict]]:
+def _detect_and_parse(content: bytes, mahalla_filter_key: str | None = None) -> tuple[str, list[dict]]:
     wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
     try:
         ws = wb.active
@@ -283,12 +295,12 @@ def _detect_and_parse(content: bytes) -> tuple[str, list[dict]]:
         ).lower()
 
         if "лиц.счет" in head_text and "махалля" in head_text:
-            return "f3", _parse_f3(ws)
+            return "f3", _parse_f3(ws, mahalla_filter_key)
         if "правообладатель" in head_text:
-            return "registry", _parse_registry(ws)
+            return "registry", _parse_registry(ws, mahalla_filter_key)
         if "шартнома" in head_text:
             return "readings", _parse_readings(ws)
-        parsed = _parse_simple(ws)
+        parsed = _parse_simple(ws, mahalla_filter_key)
         if parsed:
             return "simple", parsed
         raise HTTPException(
@@ -382,7 +394,12 @@ async def import_billing_file(
         raise HTTPException(422, "utility_type: water, gas yoki electricity")
     period_int = parse_period(period)
 
-    fmt, parsed = await asyncio.to_thread(_detect_and_parse, content)
+    # only_mahalla berilsa — PARSING PAYTIDA filtrlanadi (mos kelmagan qatorlar
+    # xotirada umuman saqlanmaydi). Katta fayl + kichik mahalla holatida bu
+    # xotira sarfini tub sababidan kamaytiradi (49k qator emas, faqat mos
+    # kelgan yuzlab/minglab qator xotirada bo'ladi).
+    mahalla_filter_key = norm_key(only_mahalla) if only_mahalla else None
+    fmt, parsed = await asyncio.to_thread(_detect_and_parse, content, mahalla_filter_key)
 
     # Asl faylni diskda saqlaymiz — kerak bo'lsa istalgan payt qayta o'qish
     # yoki boshqa ustunlarini olish mumkin (hech narsa yo'qolmaydi)
@@ -392,9 +409,6 @@ async def import_billing_file(
     saved_path = str(saved_file)
     await asyncio.to_thread(saved_file.write_bytes, content)
 
-    if only_mahalla:
-        key = norm_key(only_mahalla)
-        parsed = [r for r in parsed if r["mahalla"] and norm_key(r["mahalla"]) == key]
     if not parsed:
         raise HTTPException(422, "Faylda import qilinadigan qator topilmadi")
 
@@ -405,8 +419,12 @@ async def import_billing_file(
     buildings_created = 0
 
     # Har bir qatorga oldindan uy raqamini normallashtiramiz (bir marta)
+    # _house_key — HAR DOIM kichik harfda, faqat lug'at kaliti sifatida
+    # ishlatiladi (DB dagi lower(house_no) indeksi bilan mos kelishi shart);
+    # _house_norm — asl registr saqlanadi (nom/ustun qiymati sifatida).
     for r in parsed:
         r["_house_norm"] = norm_house(r["house"]) if r["house"] else ""
+        r["_house_key"] = r["_house_norm"].lower()
         r["_street_key"] = norm_key(r["street"])
 
     # ─── 0-bosqich: shu davr+utility uchun eski yozuvlarni tozalash ────────────
@@ -468,7 +486,7 @@ async def import_billing_file(
             insert_ = _dialect_insert(session)
 
             # ── Binolar: kerakli kalitlarni yig'ib, mavjudini so'rab, yo'qini bulk yaratamiz
-            house_keys_needed = {(r["_street_id"], r["_house_norm"]) for r in batch}
+            house_keys_needed = {(r["_street_id"], r["_house_key"]) for r in batch}
             existing_b = {}
             if house_keys_needed:
                 street_ids = list({k[0] for k in house_keys_needed})
@@ -483,7 +501,7 @@ async def import_billing_file(
             new_building_rows = []
             seen_new_keys = set()
             for r in batch:
-                key = (r["_street_id"], r["_house_norm"])
+                key = (r["_street_id"], r["_house_key"])
                 if key not in existing_b and key not in seen_new_keys:
                     seen_new_keys.add(key)
                     st_name = street_name_by_id.get(r["_street_id"], r["street"])
@@ -517,7 +535,7 @@ async def import_billing_file(
                 buildings_created += len(new_building_rows)
 
             for r in batch:
-                r["_building_id"] = existing_b[(r["_street_id"], r["_house_norm"])]
+                r["_building_id"] = existing_b[(r["_street_id"], r["_house_key"])]
 
             # ── Xonadonlar: mavjudini so'rab, yo'qini bulk yaratamiz, mavjudini
             # COALESCE bilan bulk boyitamiz (faqat bo'sh maydonlarni to'ldiradi)
