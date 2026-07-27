@@ -17,12 +17,20 @@ source .env
 set +a
 venv/bin/alembic upgrade head
 
-echo "=== 4. Frontend build ==="
+echo "=== 4. Frontend v1 build (ss.boos.uz) ==="
 cd ../meter-frontend
 npm install --legacy-peer-deps --silent 2>/dev/null
 npx vite build 2>&1 | tail -3
 rm -rf ../backend/frontend/*
 cp -r dist/* ../backend/frontend/
+
+echo "=== 4b. Frontend v2 build (sss.boos.uz) ==="
+cd ../meter-frontend-v2
+npm install --silent 2>/dev/null
+npx vite build 2>&1 | tail -3
+rm -rf /var/www/sss.boos.uz/*
+cp -r dist/* /var/www/sss.boos.uz/
+chown -R www-data:www-data /var/www/sss.boos.uz
 
 echo "=== 5. Restart ==="
 systemctl restart meter-api
