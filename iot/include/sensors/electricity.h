@@ -139,9 +139,17 @@ static bool sensor_try_baud(uint32_t baud) {
 }
 
 static bool sensor_connect() {
-    if (sensor_try_baud(9600)) { g_sensor_meta.meter_baud = 9600; return true; }
+    if (sensor_try_baud(9600)) {
+        g_sensor_meta.meter_baud = 9600;
+        LOG_PRINTLN("Meter: REAL DLMS ulanish OK (9600 baud)");
+        return true;
+    }
     dlms_disconnect();
-    if (sensor_try_baud(4800)) { g_sensor_meta.meter_baud = 4800; return true; }
+    if (sensor_try_baud(4800)) {
+        g_sensor_meta.meter_baud = 4800;
+        LOG_PRINTLN("Meter: REAL DLMS ulanish OK (4800 baud)");
+        return true;
+    }
     dlms_disconnect();
 
     if (g_cfg.test_mode) {
@@ -151,8 +159,10 @@ static bool sensor_connect() {
         if (!g_sensor_meta.meter_serial[0])
             strncpy(g_sensor_meta.meter_serial, "202032000525", sizeof(g_sensor_meta.meter_serial));
         strncpy(g_sensor_meta.sensor_type, "te71", sizeof(g_sensor_meta.sensor_type));
+        LOG_PRINTLN("Meter: REAL ulanish MUVAFFAQIYATSIZ — TEST/SIMULATSIYA rejimiga o'tildi!");
         return true;
     }
+    LOG_PRINTLN("Meter: ulanish MUVAFFAQIYATSIZ (test_mode ham o'chiq)");
     return false;
 }
 

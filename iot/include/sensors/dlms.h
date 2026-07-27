@@ -90,6 +90,12 @@ static void hdlc_build(uint8_t dest, uint8_t src, uint8_t ctrl,
 // ═══════════════════════════════════════════════════════════════════════════════
 // RS-485 TX/RX
 // ═══════════════════════════════════════════════════════════════════════════════
+static void dlms_hexdump(const char* label, const uint8_t* d, size_t n) {
+    LOG_PRINTF("RS485 %s(%u): ", label, (unsigned)n);
+    for (size_t i = 0; i < n; i++) LOG_PRINTF("%02X ", d[i]);
+    LOG_PRINTLN(n ? "" : "(bo'sh — javob yo'q)");
+}
+
 static bool dlms_txrx(uint32_t timeout_ms = 3000) {
     while (Serial2.available()) Serial2.read();
     dlms_rx_len = 0;
@@ -101,6 +107,7 @@ static bool dlms_txrx(uint32_t timeout_ms = 3000) {
     delayMicroseconds(600);
     digitalWrite(PIN_DE, LOW);
     delayMicroseconds(300);
+    dlms_hexdump("TX", dlms_tx, dlms_tx_len);
 
     uint32_t t = millis();
     while (millis() - t < timeout_ms) {
@@ -109,6 +116,7 @@ static bool dlms_txrx(uint32_t timeout_ms = 3000) {
         if (dlms_rx_len > 4 && dlms_rx[dlms_rx_len-1] == 0x7E) break;
         yield();
     }
+    dlms_hexdump("RX", dlms_rx, dlms_rx_len);
     return dlms_rx_len > 4;
 }
 
@@ -377,8 +385,12 @@ static bool dlms_get_scaled(const uint8_t obis[6], float* out) {
     int8_t scaler = 0;
     if (dlms_txrx(3000)) {
         size_t plen; const uint8_t* resp = dlms_find_pdu(&plen);
+        // scaler_unit structure: 02 02 <0F scaler> <16 unit>
+        // (element1 = integer8 scaler, element2 = enum unit — was checking
+        //  resp[6]==0x16 which is the UNIT tag, not the scaler tag, so this
+        //  branch never matched and scaler silently stayed 0)
         if (resp && plen >= 10 && resp[0]==0xC4 && resp[3]==0x00 &&
-            resp[4]==0x02 && resp[5]==0x02 && resp[6]==0x16)
+            resp[4]==0x02 && resp[5]==0x02 && resp[6]==0x0F)
             scaler = (int8_t)resp[7];
     }
 
