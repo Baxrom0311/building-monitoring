@@ -205,6 +205,7 @@ static bool sensor_read(SensorData& d) {
     dlms_get_scaled(OBIS_POWER,  &d.power_w);
     dlms_get_scaled(OBIS_FREQ,   &d.frequency);
     dlms_get_scaled(OBIS_ENERGY, &d.energy_kwh);
+    if (!isnan(d.energy_kwh)) d.energy_kwh /= 1000.0f;  // hisoblagich Wh qaytaradi (DLMS unit=30)
     dlms_get_scaled(OBIS_PF,     &d.pf);
 
     if (strcmp(d.sensor_type, "te73") == 0) {
