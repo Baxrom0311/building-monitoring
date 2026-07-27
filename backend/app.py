@@ -32,6 +32,7 @@ from routers.telemetry import router as telemetry_router
 from routers.websocket import router as websocket_router
 from routers.chat import router as chat_router
 from routers.display import router as display_router
+from routers.territory import router as territory_router
 from services.auth import bootstrap_admin
 from services.background import (
     alert_notification_worker,
@@ -113,6 +114,7 @@ app.include_router(alerts_router)
 app.include_router(audit_router)
 app.include_router(backups_router)
 app.include_router(billing_router)
+app.include_router(territory_router)
 app.include_router(buildings_router)
 app.include_router(devices_router)
 app.include_router(commands_router)

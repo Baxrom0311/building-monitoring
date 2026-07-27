@@ -155,9 +155,26 @@ static void _update_channel(PressureChannel& ch) {
 
 // ─── Sensor API ──────────────────────────────────────────────────────────────
 
+// I2C avtobusini skanerlash — faqat ADS1115 kutilgan manzilda topilmasa
+// chaqiriladi (diagnostika: simlash/quvvat muammosini tezda ko'rsatadi).
+static void _i2c_scan_diagnostic() {
+    LOG_PRINTF("I2C skan (SDA=%d SCL=%d):\n", (int)ADS_SDA, (int)ADS_SCL);
+    int found_count = 0;
+    for (uint8_t addr = 1; addr < 127; addr++) {
+        Wire.beginTransmission(addr);
+        if (Wire.endTransmission() == 0) {
+            LOG_PRINTF("  0x%02X -> topildi\n", addr);
+            found_count++;
+        }
+    }
+    if (found_count == 0) LOG_PRINTLN("  -> hech narsa topilmadi (avtobus bo'sh yoki qotib qolgan)");
+}
+
 static void sensor_init() {
     // ADS1115 init
     Wire.begin(ADS_SDA, ADS_SCL);
+    Wire.setTimeOut(50);  // ms — SDA/SCL qotib qolsa ham cheksiz osilib qolmasin
+
     g_ads_ok = g_ads.begin(ADS_ADDR);
     if (g_ads_ok) {
         g_ads.setGain(GAIN_ONE);
@@ -165,6 +182,7 @@ static void sensor_init() {
         LOG_PRINTLN("ADS1115 tayyor (GAIN_ONE, 128SPS)");
     } else {
         LOG_PRINTLN("XATO: ADS1115 topilmadi (0x48)!");
+        _i2c_scan_diagnostic();
     }
 
     // Impuls sensor

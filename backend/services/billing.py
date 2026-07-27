@@ -18,6 +18,7 @@ import unicodedata
 
 import openpyxl
 from fastapi import HTTPException
+from openpyxl.styles import Font
 
 from core.config import settings
 from core.database import SessionLocal
@@ -669,3 +670,46 @@ async def billing_periods() -> dict:
             {"period": f"{p // 100:04d}-{p % 100:02d}", "utility_type": u} for p, u in rows
         ]
     }
+
+
+# ─── Excel shablon (suv/gaz/elektr yuklash uchun) ────────────────────────────
+
+_TEMPLATE_LABELS = {
+    "mahalla": "Mahalla",
+    "street": "Ko'cha",
+    "house": "Uy",
+    "apartment": "Xonadon",
+    "owner": "Egasi (F.I.O)",
+    "account": "Hisob raqami",
+    "volume": "Hajm (m3 yoki kWh)",
+    "accrued": "Hisoblangan (so'm)",
+    "paid": "To'langan (so'm)",
+    "debt": "Qarz (so'm)",
+}
+_TEMPLATE_EXAMPLES = {
+    "water": ["Namuna MFY", "Mustaqillik", "12", "5", "Aliyev Vali", "1234567",
+              "15.5", "54000", "40000", "14000"],
+    "gas": ["Namuna MFY", "Mustaqillik", "12", "5", "Aliyev Vali", "1234567",
+            "42.0", "38000", "38000", "0"],
+    "electricity": ["Namuna MFY", "Mustaqillik", "12", "5", "Aliyev Vali", "1234567",
+                    "210", "63000", "50000", "13000"],
+}
+
+
+def billing_template_xlsx(utility_type: str) -> bytes:
+    if utility_type not in UTILITY_TYPES:
+        raise HTTPException(422, "utility_type: water, gas yoki electricity")
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Hisobot"
+    bold = Font(bold=True)
+    fields = list(_SIMPLE_ALIASES.keys())
+    for col, field in enumerate(fields, start=1):
+        cell = ws.cell(row=1, column=col, value=_TEMPLATE_LABELS[field])
+        cell.font = bold
+        ws.column_dimensions[chr(64 + col)].width = 18
+    for col, value in enumerate(_TEMPLATE_EXAMPLES[utility_type], start=1):
+        ws.cell(row=2, column=col, value=value)
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { FileSpreadsheet, Loader2, Search, UploadCloud } from 'lucide-react'
+import { Download, FileSpreadsheet, Loader2, Search, UploadCloud } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import apiClient from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/errors'
@@ -318,6 +318,29 @@ export default function BillingPage() {
       notifyError('Hisobot yuklanmadi', getApiErrorMessage(err))
     } finally {
       setUploading(false)
+    }
+  }
+
+  const [downloadingTemplate, setDownloadingTemplate] = useState(false)
+  const handleTemplateDownload = async () => {
+    setDownloadingTemplate(true)
+    try {
+      const { data } = await apiClient.get('/api/billing/template', {
+        params: { utility_type: uploadUtility },
+        responseType: 'blob',
+      })
+      const blobUrl = URL.createObjectURL(data)
+      const link = document.createElement('a')
+      link.href = blobUrl
+      link.download = `${uploadUtility}_shablon.xlsx`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(blobUrl)
+    } catch (err) {
+      notifyError("Shablonni yuklab bo'lmadi", getApiErrorMessage(err))
+    } finally {
+      setDownloadingTemplate(false)
     }
   }
 
@@ -638,6 +661,15 @@ export default function BillingPage() {
                         <UploadCloud className="h-4 w-4" />
                       )}
                       {uploading ? 'Yuklanmoqda...' : 'Yuklash'}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={downloadingTemplate}
+                      onClick={handleTemplateDownload}
+                    >
+                      <Download className="h-4 w-4" />
+                      Shablon yuklab olish
                     </Button>
                     {uploading && (
                       <span className="text-xs text-muted-foreground">

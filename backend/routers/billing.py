@@ -1,6 +1,6 @@
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile
 
 from core.security import current_token_payload
 from services import audit
@@ -95,3 +95,16 @@ async def building_billing(
     _: dict = Depends(current_token_payload),
 ):
     return await billing_service.building_billing(building_id, period)
+
+
+@router.get("/template")
+async def billing_template(
+    utility_type: str = Query(...),
+    _: dict = Depends(current_token_payload),
+):
+    content = billing_service.billing_template_xlsx(utility_type)
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{utility_type}_shablon.xlsx"'},
+    )
