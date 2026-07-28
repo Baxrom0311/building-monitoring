@@ -32,7 +32,7 @@ from models.entities import (
     UtilityBilling,
 )
 from repositories.base import model_to_dict
-from sqlalchemy import and_, delete, func, select, text
+from sqlalchemy import and_, delete, func, select, text, tuple_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
@@ -427,16 +427,14 @@ async def import_billing_file(
         r["_house_key"] = r["_house_norm"].lower()
         r["_street_key"] = norm_key(r["street"])
 
-    # ─── 0-bosqich: shu davr+utility uchun eski yozuvlarni tozalash ────────────
-    # (bir xil faylni qayta yuklash xatosiz ishlashi uchun; registry bundan mustasno)
-    if fmt != "registry":
-        async with SessionLocal() as session:
-            await session.execute(
-                delete(UtilityBilling).where(
-                    and_(UtilityBilling.utility_type == utility_type, UtilityBilling.period == period_int)
-                )
-            )
-            await session.commit()
+    # Eslatma: eski kod shu davr+utility uchun BARCHA yozuvlarni oldindan
+    # o'chirib tashlar edi ("bitta fayl = bitta davrning to'liq manbai"
+    # taxminiga asoslanib). Lekin endi bir davr uchun BIR NECHTA turli fayl
+    # (masalan F3 + alohida hisoblagich ko'rsatkichlari fayli) yuklanishi
+    # mumkin — shu sabab o'chirish endi FAQAT shu faylda uchraydigan
+    # bino+xonadon juftliklari uchun, har batch ichida (pastda) qilinadi.
+    # Bu boshqa fayl orqali kiritilgan yozuvlarni buzmaydi, faqat shu
+    # faylning o'zini qayta yuklashda eskisini almashtiradi (idempotent).
 
     # ─── 1-bosqich: mahalla/ko'cha ierarxiyasi ─────────────────────────────────
     # Soni doim kichik (o'nlab/yuzlab) — butun fayl uchun bitta marta, bulk
@@ -625,6 +623,7 @@ async def import_billing_file(
             # ── Billing yozuvlari (registry format — faqat xonadon boyitish, bino bosqichi yetarli)
             if fmt != "registry":
                 billing_rows = []
+                billing_keys = []
                 for r in batch:
                     has_metrics = any(
                         r[k] is not None
@@ -639,6 +638,7 @@ async def import_billing_file(
                         skipped += 1
                         continue
                     seen_billing.add(dedupe_key)
+                    billing_keys.append(dedupe_key)
                     billing_rows.append({
                         "building_id": r["_building_id"],
                         "apartment_id": r["_apartment_id"],
@@ -656,6 +656,19 @@ async def import_billing_file(
                     })
                     imported += 1
                 if billing_rows:
+                    # Faqat SHU faylda uchragan bino+xonadon juftliklari uchun
+                    # eskisini o'chiramiz (boshqa fayl orqali kelgan yozuvlar
+                    # tegilmaydi — bir davrga bir nechta qisman fayl yuklash
+                    # xavfsiz bo'lishi uchun).
+                    await session.execute(
+                        delete(UtilityBilling).where(
+                            and_(
+                                UtilityBilling.utility_type == utility_type,
+                                UtilityBilling.period == period_int,
+                                tuple_(UtilityBilling.building_id, UtilityBilling.apartment_id).in_(billing_keys),
+                            )
+                        )
+                    )
                     await session.execute(UtilityBilling.__table__.insert(), billing_rows)
             else:
                 imported += len(batch)
