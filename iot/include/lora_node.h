@@ -7,7 +7,7 @@
  *   SENSOR_SOUND       → LoRaSoundUplink (16 bayt)
  *   SENSOR_WATER       → LoRaWaterUplink (26 bayt)
  *   SENSOR_GAS         → LoRaGasUplink   (24 bayt)
- *   SENSOR_ELECTRICITY → LoRaUplink      (51 bayt, maxsus DLMS/relay/downlink)
+ *   SENSOR_ELECTRICITY → LoRaUplink      (51 bayt, maxsus DLMS)
  *
  * ── MESH v2 oqimi ────────────────────────────────────────────────────────────
  *   1. Sensor o'qiladi → paket (seq bilan) → TX
@@ -80,7 +80,6 @@ static AppConfig g_cfg = { false };
 static uint8_t       node_mac[6];
 static char          node_id[20];
 static unsigned long node_last_ms  = 0;
-static int           node_pending_relay = 0;  // elektr: downlink relay buyrug'i
 
 // int16 saturatsiya — overflow da qiymat teskari ishorada chiqib ketmasligi uchun
 // (masalan 40A × 1000 = 40000 → -25536 bo'lib qolardi)
@@ -121,11 +120,10 @@ static void node_pending_push(const uint8_t* pkt, size_t len) {
                node_pending_count, NODE_PENDING_SIZE);
 }
 
-// ─── Mesh pump: tinglash + relay + downlink + ACK matching ───────────────────
+// ─── Mesh pump: tinglash + relay + ACK matching ──────────────────────────────
 // duration davomida efirni tinglaydi:
 //   - boshqalarning paketlari → dedup → relay (TTL flood)
 //   - o'zimizga kelgan ACK → wait_type/wait_seq mos bo'lsa true (darhol qaytadi)
-//   - o'zimizga kelgan downlink (elektr) → node_pending_relay + ACK javob
 static bool mesh_pump(unsigned long duration_ms,
                       uint8_t wait_type = 0, uint32_t wait_seq = 0) {
 #ifdef SKIP_LORA_INIT
@@ -158,24 +156,6 @@ static bool mesh_pump(unsigned long duration_ms,
                         }
                     }
                 }
-#if defined(SENSOR_ELECTRICITY)
-                else if (buf[0] == PKT_DOWNLINK && sz == (int)sizeof(LoRaDownlink)) {
-                    if (mesh_dedup_seen(buf, sz)) {
-                        // Takror downlink — bizning ACK yo'qolgan, qayta tasdiqlaymiz
-                        mesh_send_ack(buf + 1, lora_hdr_seq(buf), PKT_DOWNLINK);
-                        continue;
-                    }
-                    LoRaDownlink dl; memcpy(&dl, buf, sizeof(dl));
-                    if (lora_decrypt_pkt((uint8_t*)&dl, sizeof(dl)) && dl.relay_cmd > 0) {
-                        mesh_dedup_record(buf, sz);
-                        node_pending_relay = dl.relay_cmd;
-                        LOG_PRINTF("LoRa RX: relay_cmd=%d (%s)\n",
-                                   dl.relay_cmd, dl.relay_cmd == 2 ? "ON" : "OFF");
-                        mesh_send_ack(dl.mac, dl.seq, PKT_DOWNLINK);
-                        LoRa.receive();
-                    }
-                }
-#endif
                 // o'z uplink echomiz — e'tiborsiz (relay qilinmaydi)
             } else {
                 // Boshqa nodeniki — mesh davom etsin (dedup + relay)
@@ -406,7 +386,7 @@ void loop() {
 }
 
 // =============================================================================
-// ELEKTR HISOBLAGICH (maxsus DLMS/relay/downlink)
+// ELEKTR HISOBLAGICH (maxsus DLMS)
 // =============================================================================
 #else  // SENSOR_ELECTRICITY
 
@@ -520,7 +500,7 @@ void loop() {
     unsigned long now = millis();
     bool read_time = (now - node_last_ms >= node_retry_ms || node_last_ms == 0);
     if (!read_time) {
-        mesh_pump(LORA_RELAY_LISTEN_MS);  // Bo'sh vaqtda mesh relay + downlink
+        mesh_pump(LORA_RELAY_LISTEN_MS);  // Bo'sh vaqtda mesh relay
         node_pending_retry();
         return;
     }
@@ -547,13 +527,6 @@ void loop() {
         if (!g_sensor_meta.sensor_type[0]) sensor_detect_type();
     }
 
-    if (node_pending_relay) {
-        bool ok = sensor_relay(node_pending_relay);
-        LOG_PRINTF("Relay %s: %s\n",
-                   node_pending_relay == 2 ? "ON" : "OFF", ok ? "OK" : "XATO");
-        node_pending_relay = 0;
-    }
-
     SensorData d;
     if (!sensor_read(d)) {
         LOG_PRINTLN("O'qish xato — meter sessiyasi uzildi");
@@ -562,7 +535,7 @@ void loop() {
     }
 
     node_send_uplink(d);
-    mesh_pump(LORA_RELAY_LISTEN_MS);  // TX dan keyin mesh relay + downlink
+    mesh_pump(LORA_RELAY_LISTEN_MS);  // TX dan keyin mesh relay
     dlms_disconnect();
 }
 

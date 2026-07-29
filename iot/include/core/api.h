@@ -28,7 +28,6 @@ static bool app_register(const char* device_id,
     doc["meter_serial"]     = meter_serial;
     doc["software_version"] = fw_version;
     doc["baud_rate"]        = baud_rate;
-    doc["ip"]               = WiFi.localIP().toString();
     doc["rssi"]             = WiFi.RSSI();
     doc["chip_model"]       = "ESP32";
     if (device_role) doc["device_role"] = device_role;
@@ -87,7 +86,6 @@ static void app_send_status(const char* device_id, const char* fw_version) {
     StaticJsonDocument<512> doc;
     doc["device_id"]        = device_id;
     doc["software_version"] = fw_version;
-    doc["ip"]               = WiFi.localIP().toString();
     doc["rssi"]             = WiFi.RSSI();
     doc["online"]           = true;
 
@@ -105,8 +103,7 @@ static void app_send_status(const char* device_id, const char* fw_version) {
     http_post("/api/device-status", body);
 }
 
-static void app_poll_commands(const char* device_id, int* pending_relay,
-                              const char* fw_version = nullptr) {
+static void app_poll_commands(const char* device_id, const char* fw_version = nullptr) {
     char path[80];
     snprintf(path, sizeof(path), "/api/commands/%s", device_id);
     String resp = http_get(path);
@@ -126,12 +123,6 @@ static void app_poll_commands(const char* device_id, int* pending_relay,
         if (strcmp(action, "reboot") == 0) {
             http_post(ack, "{}");
             ESP.restart();
-        } else if (strcmp(action, "relay_on") == 0) {
-            if (pending_relay) *pending_relay = 2;
-            http_post(ack, "{}");
-        } else if (strcmp(action, "relay_off") == 0) {
-            if (pending_relay) *pending_relay = 1;
-            http_post(ack, "{}");
         } else if (strcmp(action, "set_volume") == 0) {
             // params kelmasa 0.0 bilan hisoblagichni nolga tushirib yubormaslik
             if (cmd["params"]["volume"].is<float>() || cmd["params"]["volume"].is<int>()) {

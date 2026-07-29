@@ -19,12 +19,6 @@ async def verify_command_access(command_id: int, token: str | None) -> None:
     await devices_service.verify_device_access(command.device_id, token)
 
 
-async def create_relay_command(device_id: str, action_value: str) -> dict:
-    if action_value not in ("on", "off"):
-        raise HTTPException(400, "action: 'on' yoki 'off'")
-    return await create_command(device_id, f"relay_{action_value}", None)
-
-
 async def create_command(device_id: str, action: str, params: dict | None = None) -> dict:
     ts = now_ts()
     async with SessionLocal() as session:

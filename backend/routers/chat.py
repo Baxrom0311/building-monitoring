@@ -18,12 +18,12 @@ from services import devices as device_service
 from services import buildings as building_service
 from services.alerts import get_alerts, clear_all_alerts, list_alert_rules
 from services import audit as audit_service
-from services.commands import create_relay_command, reboot_device, list_commands
+from services.commands import reboot_device, list_commands
 
 router = APIRouter(prefix="/api", tags=["chat"])
 logger = logging.getLogger(__name__)
 
-ADMIN_TOOL_NAMES = {"reboot_tool", "relay_control_tool", "clear_alerts_tool"}
+ADMIN_TOOL_NAMES = {"reboot_tool", "clear_alerts_tool"}
 
 SENSITIVE_PROMPT_MARKERS = {
     "select ",
@@ -180,7 +180,7 @@ async def get_device_details_tool(device_id: str) -> str:
 
 
 async def list_commands_tool(device_id: str = "", status: str = "", limit: int = 20) -> str:
-    """Qurilmaga yuborilgan buyruqlar tarixi (reboot, relay va boshqalar)."""
+    """Qurilmaga yuborilgan buyruqlar tarixi (reboot va boshqalar)."""
     result = await list_commands(
         device_id=device_id.strip() or None,
         status=status.strip() or None,
@@ -207,17 +207,6 @@ async def reboot_tool(device_id: str, user: dict) -> str:
         return "Xato: device_id kerak."
     result = await reboot_device(device_id)
     return _json({"ok": True, "device_id": device_id, "cmd_id": result.get("cmd_id")})
-
-
-async def relay_control_tool(device_id: str, action: str, user: dict) -> str:
-    if user.get("role") != "admin":
-        return "Xato: relay boshqarish faqat admin uchun ruxsat etilgan."
-    if action not in {"on", "off"}:
-        return "Xato: action faqat 'on' yoki 'off' bo'lishi mumkin."
-    if not device_id:
-        return "Xato: device_id kerak."
-    result = await create_relay_command(device_id, action)
-    return _json({"ok": True, "device_id": device_id, "action": action, "cmd_id": result.get("cmd_id")})
 
 
 async def clear_alerts_tool(device_id: str, user: dict) -> str:
@@ -275,8 +264,6 @@ async def execute_tool(name: str, args: dict[str, Any], user: dict) -> str:
                 return await alert_rules_tool(args.get("utility_type", ""))
             case "reboot_tool":
                 return await reboot_tool(args.get("device_id", ""), user)
-            case "relay_control_tool":
-                return await relay_control_tool(args.get("device_id", ""), args.get("action", ""), user)
             case "clear_alerts_tool":
                 return await clear_alerts_tool(args.get("device_id", ""), user)
             case _:
@@ -437,7 +424,7 @@ DEEPSEEK_TOOLS = [
         "type": "function",
         "function": {
             "name": "list_commands_tool",
-            "description": "Qurilmalarga yuborilgan buyruqlar tarixi (reboot, relay yoqish/o'chirish va boshqalar).",
+            "description": "Qurilmalarga yuborilgan buyruqlar tarixi (reboot va boshqalar).",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -467,21 +454,6 @@ DEEPSEEK_TOOLS = [
     {
         "type": "function",
         "function": {
-            "name": "relay_control_tool",
-            "description": "FAQAT ADMIN: elektr hisoblagich relay yoqish ('on') yoki o'chirish ('off') buyrug'i.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "device_id": {"type": "string"},
-                    "action": {"type": "string", "enum": ["on", "off"]},
-                },
-                "required": ["device_id", "action"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
             "name": "clear_alerts_tool",
             "description": "FAQAT ADMIN: qurilma yoki barcha qurilmalar ogohlantirishlarini tozalash.",
             "parameters": {
@@ -503,7 +475,6 @@ def _build_system_prompt(user: dict) -> str:
         "Siz ADMIN sifatida kirgan holda quyidagi amallarni bajara olasiz:\n"
         "- Barcha ma'lumotlarni ko'rish (qurilmalar, binolar, o'qishlar, ogohlantirishlar)\n"
         "- Qurilmani qayta ishga tushirish (reboot_tool)\n"
-        "- Elektr relay yoqish/o'chirish (relay_control_tool)\n"
         "- Ogohlantirishlarni tozalash (clear_alerts_tool)\n"
         "- Buyruqlar tarixini ko'rish (list_commands_tool)"
         if role == "admin"
@@ -525,7 +496,7 @@ def _build_system_prompt(user: dict) -> str:
         "- Ma'lumot kerak bo'lsa avval tegishli tool orqali so'rang.\n"
         "- Qurilma ID ni bilmasang avval list_devices_tool yoki system_summary_tool dan foydalaning.\n"
         "- SQL, jadval nomlari, parol/token/API kalit so'rasa rad eting.\n"
-        "- Admin amallari (relay, reboot, clear) ni bajarishdan oldin foydalanuvchidan tasdiqlashni so'rang.\n"
+        "- Admin amallari (reboot, clear) ni bajarishdan oldin foydalanuvchidan tasdiqlashni so'rang.\n"
         f"Hozirgi server vaqti (Unix): {now_ts()}."
     )
 
@@ -576,9 +547,6 @@ async def execute_gemini_flow(body: ChatRequest, user: dict):
     def reboot_tool(device_id: str) -> str:
         """FAQAT ADMIN: qurilmani reboot qilish."""
 
-    def relay_control_tool(device_id: str, action: str) -> str:
-        """FAQAT ADMIN: relay yoqish ('on') yoki o'chirish ('off')."""
-
     def clear_alerts_tool(device_id: str = "") -> str:
         """FAQAT ADMIN: ogohlantirishlarni tozalash."""
 
@@ -598,7 +566,6 @@ async def execute_gemini_flow(body: ChatRequest, user: dict):
             building_analytics_tool,
             list_commands_tool,
             reboot_tool,
-            relay_control_tool,
             clear_alerts_tool,
         ],
     )

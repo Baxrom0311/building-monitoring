@@ -6,7 +6,6 @@
  *   sensor_init()                → RS-485 + LCD sozlash
  *   sensor_connect()    → bool   → DLMS ulanish
  *   sensor_read(d)      → bool   → Ma'lumot o'qish
- *   sensor_relay(m)     → bool   → Relay boshqarish
  *   sensor_build_json() → String → JSON yaratish
  *   sensor_do_register()→ bool   → Backend registratsiya
  *
@@ -48,7 +47,6 @@ static void lcd_show_status(const char*) {}
 #endif
 
 // ─── OBIS kodlar ──────────────────────────────────────────────────────────────
-static const uint8_t OBIS_RELAY[6]   = {0x00,0x00,0x60,0x03,0x0A,0xFF};
 static const uint8_t OBIS_SERIAL[6]  = {0x00,0x00,0x60,0x01,0x00,0xFF};
 static const uint8_t OBIS_VL1[6]     = {0x01,0x00,0x20,0x07,0x00,0xFF};
 static const uint8_t OBIS_VL2[6]     = {0x01,0x00,0x34,0x07,0x00,0xFF};
@@ -228,19 +226,6 @@ static bool sensor_read(SensorData& d) {
     d.valid = (!isnan(d.voltage_l1) || !isnan(d.power_w));
     if (d.valid) lcd_show_electricity(d);
     return d.valid;
-}
-
-static bool sensor_relay(int method) {
-    if (dlms_simulated) return true;
-
-    if (dlms_connected) {
-        if (dlms_action(70, OBIS_RELAY, (uint8_t)method)) return true;
-    }
-
-    dlms_disconnect();
-    unsigned long t = millis(); while (millis() - t < 1000) yield();
-    if (!dlms_connect_reader()) return false;
-    return dlms_action(70, OBIS_RELAY, (uint8_t)method);
 }
 
 static String sensor_build_json(const char* device_id,

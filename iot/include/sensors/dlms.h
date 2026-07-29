@@ -431,18 +431,3 @@ static bool dlms_get_string(uint16_t cls, const uint8_t obis[6],
     return false;
 }
 
-static bool dlms_action(uint16_t cls, const uint8_t obis[6], uint8_t method) {
-    if (!dlms_connected) return false;
-    uint8_t pdu[15];
-    pdu[0]=0xC3; pdu[1]=0x01; pdu[2]=dlms_invoke++;
-    pdu[3]=cls>>8; pdu[4]=cls&0xFF;
-    memcpy(pdu+5, obis, 6);
-    pdu[11]=method; pdu[12]=0x01; pdu[13]=0x0F; pdu[14]=0x00;
-    uint8_t info[18];
-    memcpy(info, DLMS_LLC, 3); memcpy(info+3, pdu, 15);
-    hdlc_build(DLMS_SERVER_ADDR, dlms_client, dlms_next_ctrl(), info, 18);
-    if (!dlms_txrx(5000)) return false;
-    size_t plen; const uint8_t* resp = dlms_find_pdu(&plen);
-    if (!resp || plen < 4) return false;
-    return (resp[0] == 0xC7 && resp[3] == 0x00);
-}

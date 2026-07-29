@@ -201,7 +201,6 @@ async def register_device(body: DeviceRegister, token: str | None = None) -> dic
         device.chip_model = body.chip_model or device.chip_model
         device.rssi = body.rssi
         device.fw_version = body.fw_version or device.fw_version
-        device.ip = body.ip or device.ip
         device.building_id = (
             provisioned.get("building_id") or body.building_id or device.building_id
             if provisioned
@@ -242,7 +241,6 @@ async def update_device_status(body: DeviceStatus, test_mode: bool = False) -> d
             device = Device(id=body.device_id, name=body.device_id, registered=ts, created_at=ts)
             device_repo.add(device)
         device.utility_type = body.utility_type or device.utility_type
-        device.ip = body.ip or device.ip
         device.rssi = body.rssi if body.rssi is not None else device.rssi
         device.hardware_version = body.hardware_version or device.hardware_version
         device.software_version = body.software_version or device.software_version

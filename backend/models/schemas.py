@@ -340,7 +340,6 @@ class DeviceRegister(BaseModel):
     chip_model: Optional[str] = None
     rssi: Optional[int] = None
     fw_version: Optional[str] = None
-    ip: Optional[str] = None
     building_id: Optional[int] = None
     point_id: Optional[int] = None
 
@@ -1151,7 +1150,6 @@ class BuildingAnalyticsResponse(BaseModel):
 class DeviceStatus(BaseModel):
     device_id: str
     utility_type: Optional[str] = None
-    ip: Optional[str] = None
     rssi: Optional[int] = None
     online: bool = True
     hardware_version: Optional[str] = None
@@ -1165,10 +1163,6 @@ class DeviceStatus(BaseModel):
     wifi_drops: Optional[int] = None
     read_interval_ms: Optional[int] = None
     last_error: Optional[str] = None
-
-
-class RelayCommand(BaseModel):
-    action: str
 
 
 class CommandCreate(BaseModel):

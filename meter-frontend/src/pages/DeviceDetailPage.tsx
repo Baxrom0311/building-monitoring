@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, RefreshCw, Power, ToggleLeft, ToggleRight, Zap, Clock, Droplets, Flame, Gauge, Thermometer, AlertTriangle, Pencil, X, Trash2, Sprout, Volume2, Building2, MapPin, Cpu, Wifi, WifiOff, Info } from 'lucide-react'
+import { ArrowLeft, RefreshCw, ToggleLeft, ToggleRight, Zap, Clock, Droplets, Flame, Gauge, Thermometer, AlertTriangle, Pencil, X, Trash2, Sprout, Volume2, Building2, MapPin, Cpu, Wifi, WifiOff, Info } from 'lucide-react'
 import { RootLayout } from '@/components/layout/RootLayout'
 import { useDeviceById, useDeviceLatest, useDeviceHistory, useBuildings, qk } from '@/hooks/queries'
 import { translations } from '@/i18n/translations'
@@ -18,7 +18,6 @@ import { Pagination } from '@/components/Pagination'
 
 type PendingCommand =
   | { type: 'reboot' }
-  | { type: 'relay'; action: 'on' | 'off' }
   | { type: 'status' }
   | { type: 'delete' }
 
@@ -67,20 +66,6 @@ export default function DeviceDetailPage() {
     try {
       await apiClient.post(`/api/devices/${id}/reboot`)
       notifySuccess("Reboot buyrug'i yuborildi")
-    } catch (err: any) {
-      console.error(err)
-      setMsg(getApiErrorMessage(err))
-    } finally {
-      setLoadingAction(null)
-    }
-  }
-
-  const handleRelay = async (action: 'on' | 'off') => {
-    setLoadingAction(`relay-${action}`)
-    setMsg(null)
-    try {
-      await apiClient.post(`/api/devices/${id}/relay`, { action })
-      notifySuccess(`Releni ${action === 'on' ? 'yoqish' : "o'chirish"} buyrug'i yuborildi`)
     } catch (err: any) {
       console.error(err)
       setMsg(getApiErrorMessage(err))
@@ -179,8 +164,6 @@ export default function DeviceDetailPage() {
     if (!pendingCommand) return
     if (pendingCommand.type === 'reboot') {
       handleReboot()
-    } else if (pendingCommand.type === 'relay') {
-      handleRelay(pendingCommand.action)
     } else if (pendingCommand.type === 'delete') {
       handleDelete()
     } else {
@@ -436,28 +419,6 @@ export default function DeviceDetailPage() {
                       <RefreshCw className={`w-4 h-4 ${loadingAction === 'reboot' ? 'animate-spin' : ''}`} />
                       Qurilmani reboot qilish
                     </button>
-
-                    {/* Relay Controls — faqat elektr hisoblagichlar uchun */}
-                    {device.utility_type === 'electricity' && (
-                      <div className="grid grid-cols-2 gap-2 mt-1">
-                        <button
-                          onClick={() => setPendingCommand({ type: 'relay', action: 'on' })}
-                          disabled={loadingAction !== null}
-                          className="flex items-center justify-center gap-1.5 px-3 py-2.5 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white rounded-lg transition text-xs font-semibold shadow-sm"
-                        >
-                          <Power className="w-3.5 h-3.5" />
-                          Rele ON
-                        </button>
-                        <button
-                          onClick={() => setPendingCommand({ type: 'relay', action: 'off' })}
-                          disabled={loadingAction !== null}
-                          className="flex items-center justify-center gap-1.5 px-3 py-2.5 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-lg transition text-xs font-semibold shadow-sm"
-                        >
-                          <Power className="w-3.5 h-3.5" />
-                          Rele OFF
-                        </button>
-                      </div>
-                    )}
 
                     {/* Toggle Active Status */}
                     <button
@@ -958,23 +919,19 @@ export default function DeviceDetailPage() {
         title={
           pendingCommand?.type === "reboot"
             ? "Qurilmani reboot qilish"
-            : pendingCommand?.type === "relay"
-              ? `Releni ${pendingCommand.action === "on" ? "yoqish" : "o'chirish"}`
-              : pendingCommand?.type === "delete"
-                ? "Qurilmani butunlay o'chirish"
-                : "Qurilma statusini o'zgartirish"
+            : pendingCommand?.type === "delete"
+              ? "Qurilmani butunlay o'chirish"
+              : "Qurilma statusini o'zgartirish"
         }
         message={
           pendingCommand?.type === "reboot"
             ? "Bu buyruq ESP32 qurilmasini qayta yuklaydi. Amalni davom ettirasizmi?"
-            : pendingCommand?.type === "relay"
-              ? "Bu buyruq qurilma relesiga darhol yuboriladi. Amalni tasdiqlang."
-              : pendingCommand?.type === "delete"
-                ? "Qurilma va uning barcha o'lchov ma'lumotlari bazadan butunlay o'chiriladi. Bu amalni qaytarib bo'lmaydi!"
-                : "Qurilmaning faol/faol emas holati o'zgartiriladi."
+            : pendingCommand?.type === "delete"
+              ? "Qurilma va uning barcha o'lchov ma'lumotlari bazadan butunlay o'chiriladi. Bu amalni qaytarib bo'lmaydi!"
+              : "Qurilmaning faol/faol emas holati o'zgartiriladi."
         }
         confirmLabel={pendingCommand?.type === "delete" ? "Ha, o'chirib yuborish" : "Buyruq yuborish"}
-        tone={pendingCommand?.type === "delete" || (pendingCommand?.type === "relay" && pendingCommand.action === "off") ? "danger" : "default"}
+        tone={pendingCommand?.type === "delete" ? "danger" : "default"}
         pending={loadingAction !== null}
         onConfirm={executePendingCommand}
         onCancel={() => setPendingCommand(null)}

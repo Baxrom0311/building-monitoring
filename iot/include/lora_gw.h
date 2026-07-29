@@ -5,8 +5,7 @@
  * Gateway (WiFi yonida):
  *   1. LoRa RX → Node dan sensor ma'lumot qabul
  *   2. WiFi → Backend /api/readings ga POST
- *   3. Backend /api/commands → relay buyruq poll
- *   4. LoRa TX → Node ga downlink (relay buyruq)
+ *   3. Backend /api/commands → node nomidan buyruq poll (reboot va h.k.)
  *
  * Gateway o'zi ham qurilma sifatida ro'yxatdan o'tadi.
  * Har bir node — alohida device_id (node MAC) bilan backendda ro'yxatdan o'tadi.
@@ -68,8 +67,6 @@ struct NodeState {
     uint8_t  mac[6];
     char     device_id[20];   // "AABBCCDDEEFF"
     bool     registered;
-    uint8_t  pending_relay;   // 0=yo'q, 1=off, 2=on
-    uint32_t dl_seq;          // Oxirgi yuborilgan downlink seq (ACK matching)
     unsigned long last_seen;
 };
 
@@ -498,7 +495,7 @@ static bool gw_handle_gas_uplink(const LoRaGasUplink& pkt, int rssi) {
     return ok;
 }
 
-// ─── Backend command poll → pending_relay ────────────────────────────────────
+// ─── Backend command poll (node nomidan) ─────────────────────────────────────
 static void gw_poll_commands() {
     for (int i = 0; i < gw_node_count; i++) {
         wdt_feed();  // 8 node × 5s GET = 40s — TWDT (30s) dan oshadi
@@ -519,15 +516,7 @@ static void gw_poll_commands() {
             char ack[80];
             snprintf(ack, sizeof(ack), "/api/commands/%d/ack", id);
 
-            if (strcmp(action, "relay_on") == 0) {
-                n->pending_relay = 2;
-                http_post(ack, "{}");
-                LOG_PRINTF("GW: relay_on navbatga [%s]\n", n->device_id);
-            } else if (strcmp(action, "relay_off") == 0) {
-                n->pending_relay = 1;
-                http_post(ack, "{}");
-                LOG_PRINTF("GW: relay_off navbatga [%s]\n", n->device_id);
-            } else if (strcmp(action, "reboot") == 0) {
+            if (strcmp(action, "reboot") == 0) {
                 http_post(ack, "{}");
                 ESP.restart();
             } else {
@@ -538,32 +527,6 @@ static void gw_poll_commands() {
     }
 }
 
-// ─── Pending relay buyruqni LoRa downlink orqali yuborish ────────────────────
-// Faqat hozirgina uplink yuborgan node ga — node radio o'z TX idan keyingi
-// oynada tinglaydi. pending_relay TX da EMAS, node ACKi kelganda o'chiriladi —
-// yetkazilmagan buyruq yo'qolmaydi, keyingi uplinkda qayta yuboriladi.
-static void gw_send_downlink_to(NodeState* n) {
-    if (!n || n->pending_relay == 0) return;
-
-    LoRaDownlink dl;
-    memset(&dl, 0, sizeof(dl));
-    dl.pkt_type  = PKT_DOWNLINK;
-    memcpy(dl.mac, n->mac, 6);
-    dl.flags     = LORA_TTL_DEFAULT << LORA_TTL_SHIFT;
-    dl.seq       = mesh_next_seq();
-    dl.relay_cmd = n->pending_relay;
-    n->dl_seq    = dl.seq;
-    lora_encrypt_pkt((uint8_t*)&dl, sizeof(dl));
-    // O'z downlinkimiz relaylardan qaytib kelsa qayta ishlamaslik uchun
-    mesh_dedup_record((uint8_t*)&dl, sizeof(dl));
-
-    bool ok = mesh_tx_raw((uint8_t*)&dl, sizeof(dl));
-    LOG_PRINTF("GW DL -> [%s] relay_%s seq=%lu: %s (ACK kutiladi)\n",
-               n->device_id,
-               n->pending_relay == 2 ? "ON" : "OFF",
-               (unsigned long)dl.seq,
-               ok ? "OK" : "XATO");
-}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Setup
@@ -690,23 +653,15 @@ void loop() {
             LoRa.readBytes(rxbuf, pkt_size);
             uint8_t ptype = rxbuf[0];
 
-            // ── ACK (node → gateway: downlink tasdiqlari; yoki boshqa GW ACKi) ──
+            // ── ACK (node → gateway; boshqa GW uchun bo'lsa mesh orqali o'tadi) ──
             if (ptype == PKT_ACK && pkt_size == (int)sizeof(LoRaAck)) {
                 if (!mesh_dedup_seen(rxbuf, pkt_size)) {
                     LoRaAck ack; memcpy(&ack, rxbuf, sizeof(ack));
                     uint8_t raw[sizeof(LoRaAck)]; memcpy(raw, rxbuf, sizeof(raw));
                     if (lora_decrypt_pkt((uint8_t*)&ack, sizeof(ack))) {
                         mesh_dedup_record(raw, sizeof(raw));
-                        if (ack.ack_type == PKT_DOWNLINK) {
-                            NodeState* n = gw_find_node(ack.mac);
-                            if (n && n->pending_relay && ack.seq == n->dl_seq) {
-                                n->pending_relay = 0;
-                                LOG_PRINTF("GW: downlink yetkazildi [%s]\n", n->device_id);
-                            }
-                        } else {
-                            // Boshqa gateway ACKi — mesh davom etsin (nodega yetsin)
-                            mesh_relay(raw, sizeof(raw));
-                        }
+                        // Boshqa gateway ACKi — mesh davom etsin (nodega yetsin)
+                        mesh_relay(raw, sizeof(raw));
                     }
                 }
             }
@@ -737,10 +692,6 @@ void loop() {
                         accepted = gw_handle_soil_uplink(*(const LoRaSoilUplink*)dec, rssi);
                     } else if (pkt_size == (int)sizeof(LoRaSoundUplink) && ptype == PKT_UPLINK_SOUND) {
                         accepted = gw_handle_sound_uplink(*(const LoRaSoundUplink*)dec, rssi);
-                    } else if (pkt_size == (int)sizeof(LoRaDownlink) && ptype == PKT_DOWNLINK) {
-                        // Boshqa gateway downlinki — mesh uchun relay
-                        mesh_dedup_record(rxbuf, pkt_size);
-                        mesh_relay(rxbuf, pkt_size);
                     } else {
                         known = false;
                         LOG_PRINTF("GW: noma'lum paket (hajm=%d, type=0x%02X)\n",
@@ -748,12 +699,10 @@ void loop() {
                     }
 
                     if (accepted) {
-                        // Qabul qilindi: dedup + ACK + shu nodega pending downlink
+                        // Qabul qilindi: dedup + ACK
                         mesh_dedup_record(rxbuf, pkt_size);
                         mesh_send_ack(rxbuf + 1, lora_hdr_seq(rxbuf), ptype);
-                        NodeState* n = gw_find_node(rxbuf + 1);
-                        if (n && n->pending_relay) gw_send_downlink_to(n);
-                    } else if (known && ptype != PKT_DOWNLINK) {
+                    } else if (known) {
                         // Qabul qilolmadik (bufer to'la / node limiti) —
                         // boshqa gateway eshitishi uchun relay qilamiz.
                         // Dedup YOZILMAYDI: node retry sini keyin qabul qila olamiz.
@@ -801,7 +750,6 @@ void loop() {
         _sd["device_id"]        = gw_id;
         _sd["utility_type"]     = "gateway";
         _sd["software_version"] = FW_VERSION;
-        _sd["ip"]               = WiFi.localIP().toString();
         _sd["rssi"]             = WiFi.RSSI();
         _sd["online"]           = true;
         _sd["firmware_mode"]    = "lora_gateway";

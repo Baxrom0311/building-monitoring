@@ -3,19 +3,12 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Header, Query
 
 from core.security import require_admin
-from models.schemas import CommandCreate, CommandListResponse, CommandQueuedResponse, OkResponse, PendingCommandListResponse, RelayCommand
+from models.schemas import CommandCreate, CommandListResponse, CommandQueuedResponse, OkResponse, PendingCommandListResponse
 from services import audit
 from services import commands as command_service
 from services import devices as device_service
 
 router = APIRouter(prefix="/api")
-
-
-@router.post("/devices/{device_id}/relay", response_model=CommandQueuedResponse)
-async def relay_command(device_id: str, body: RelayCommand, admin: dict = Depends(require_admin)):
-    result = await command_service.create_relay_command(device_id, body.action)
-    await audit.record(admin, "device.relay", "device", device_id, body.model_dump())
-    return result
 
 
 @router.post("/devices/{device_id}/reboot", response_model=CommandQueuedResponse)

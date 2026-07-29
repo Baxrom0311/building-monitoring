@@ -650,8 +650,8 @@ class BackendSmokeTest(unittest.IsolatedAsyncioTestCase):
         summary = await chat_router.execute_tool("system_summary_tool", {}, viewer_payload)
         self.assertIn("devices_total", summary)
         denied = await chat_router.execute_tool(
-            "relay_control_tool",
-            {"device_id": "missing-device", "action": "on"},
+            "reboot_tool",
+            {"device_id": "missing-device"},
             viewer_payload,
         )
         self.assertIn("faqat admin", denied)

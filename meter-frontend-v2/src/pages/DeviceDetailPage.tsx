@@ -11,7 +11,6 @@ import {
   Flame,
   Gauge,
   Pencil,
-  Power,
   RefreshCw,
   Sprout,
   Thermometer,
@@ -74,7 +73,6 @@ import {
 
 type PendingCommand =
   | { type: 'reboot' }
-  | { type: 'relay'; action: 'on' | 'off' }
   | { type: 'status' }
   | { type: 'delete' }
 
@@ -153,18 +151,6 @@ export default function DeviceDetailPage() {
     try {
       await apiClient.post(`/api/devices/${id}/reboot`)
       notifySuccess("Reboot buyrug'i yuborildi")
-    } catch (err) {
-      notifyError('Buyruq yuborilmadi', getApiErrorMessage(err))
-    } finally {
-      setLoadingAction(null)
-    }
-  }
-
-  const handleRelay = async (action: 'on' | 'off') => {
-    setLoadingAction(`relay-${action}`)
-    try {
-      await apiClient.post(`/api/devices/${id}/relay`, { action })
-      notifySuccess(`Releni ${action === 'on' ? 'yoqish' : "o'chirish"} buyrug'i yuborildi`)
     } catch (err) {
       notifyError('Buyruq yuborilmadi', getApiErrorMessage(err))
     } finally {
@@ -258,8 +244,6 @@ export default function DeviceDetailPage() {
     if (!pendingCommand) return
     if (pendingCommand.type === 'reboot') {
       handleReboot()
-    } else if (pendingCommand.type === 'relay') {
-      handleRelay(pendingCommand.action)
     } else if (pendingCommand.type === 'delete') {
       handleDelete()
     } else {
@@ -539,29 +523,6 @@ export default function DeviceDetailPage() {
                       <RefreshCw className={`h-4 w-4 ${loadingAction === 'reboot' ? 'animate-spin' : ''}`} />
                       Qurilmani reboot qilish
                     </Button>
-
-                    {device.utility_type === 'electricity' && (
-                      <div className="grid grid-cols-2 gap-2">
-                        <Button
-                          variant="outline"
-                          className="text-emerald-500"
-                          disabled={loadingAction !== null}
-                          onClick={() => setPendingCommand({ type: 'relay', action: 'on' })}
-                        >
-                          <Power className="h-4 w-4" />
-                          Rele ON
-                        </Button>
-                        <Button
-                          variant="outline"
-                          className="text-red-500"
-                          disabled={loadingAction !== null}
-                          onClick={() => setPendingCommand({ type: 'relay', action: 'off' })}
-                        >
-                          <Power className="h-4 w-4" />
-                          Rele OFF
-                        </Button>
-                      </div>
-                    )}
 
                     <Button
                       variant="outline"
@@ -896,28 +857,23 @@ export default function DeviceDetailPage() {
             <AlertDialogTitle>
               {pendingCommand?.type === 'reboot'
                 ? 'Qurilmani reboot qilish'
-                : pendingCommand?.type === 'relay'
-                  ? `Releni ${pendingCommand.action === 'on' ? 'yoqish' : "o'chirish"}`
-                  : pendingCommand?.type === 'delete'
-                    ? "Qurilmani butunlay o'chirish"
-                    : "Qurilma statusini o'zgartirish"}
+                : pendingCommand?.type === 'delete'
+                  ? "Qurilmani butunlay o'chirish"
+                  : "Qurilma statusini o'zgartirish"}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {pendingCommand?.type === 'reboot'
                 ? 'Bu buyruq ESP32 qurilmasini qayta yuklaydi. Amalni davom ettirasizmi?'
-                : pendingCommand?.type === 'relay'
-                  ? 'Bu buyruq qurilma relesiga darhol yuboriladi. Amalni tasdiqlang.'
-                  : pendingCommand?.type === 'delete'
-                    ? "Qurilma va uning barcha o'lchov ma'lumotlari bazadan butunlay o'chiriladi. Bu amalni qaytarib bo'lmaydi!"
-                    : "Qurilmaning faol/faol emas holati o'zgartiriladi."}
+                : pendingCommand?.type === 'delete'
+                  ? "Qurilma va uning barcha o'lchov ma'lumotlari bazadan butunlay o'chiriladi. Bu amalni qaytarib bo'lmaydi!"
+                  : "Qurilmaning faol/faol emas holati o'zgartiriladi."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Bekor qilish</AlertDialogCancel>
             <AlertDialogAction
               className={
-                pendingCommand?.type === 'delete' ||
-                (pendingCommand?.type === 'relay' && pendingCommand.action === 'off')
+                pendingCommand?.type === 'delete'
                   ? 'bg-red-600 text-white hover:bg-red-700'
                   : undefined
               }

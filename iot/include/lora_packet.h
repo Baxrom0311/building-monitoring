@@ -15,7 +15,7 @@
  * ── MESH v2 arxitekturasi ────────────────────────────────────────────────────
  * Har paketda umumiy OCHIQ header (12 bayt):
  *   [pkt_type(1)][mac(6)][flags(1)][seq(4)]
- *   - mac  = paket EGASI (uplink: node, downlink: manzil node)
+ *   - mac  = paket EGASI (uplink: node)
  *   - seq  = egasining o'sib boruvchi hisoblagichi (NVS da saqlanadi)
  *   - flags: bit0/bit1 sensor-maxsus, bit4-6 = TTL
  *
@@ -95,7 +95,6 @@ static inline uint32_t lora_hdr_seq(const uint8_t* buf) {
 
 // ─── Paket turlari ────────────────────────────────────────────────────────────
 #define PKT_UPLINK        0x01   // Node → Gateway: elektr hisoblagich
-#define PKT_DOWNLINK      0x02   // Gateway → Node: relay buyruq
 #define PKT_UPLINK_SOIL   0x03   // Node → Gateway: tuproq namligi
 #define PKT_UPLINK_SOUND  0x04   // Node → Gateway: ovoz darajasi
 #define PKT_UPLINK_WATER  0x05   // Node → Gateway: suv bosim/oqim
@@ -175,26 +174,14 @@ struct __attribute__((packed)) LoRaUplink {
     uint16_t crc;
 };
 
-// ─── Downlink: Gateway → Node ─────────────────────────────────────────────────
-// Jami: 15 bayt. mac = MANZIL node. Mesh orqali relay qilinadi (TTL bor).
-struct __attribute__((packed)) LoRaDownlink {
-    uint8_t  pkt_type;          // PKT_DOWNLINK = 0x02
-    uint8_t  mac[6];            // Manzil node MAC
-    uint8_t  flags;             // bit4-6=TTL
-    uint32_t seq;               // Gateway hisoblagichi (dedup/replay uchun)
-    uint8_t  relay_cmd;         // 0=yo'q, 1=relay_off(uzish), 2=relay_on(ulash)
-    uint16_t crc;
-};
-
 // ─── ACK: qabul tasdiqlash ────────────────────────────────────────────────────
-// Jami: 15 bayt (downlink bilan bir xil hajm — pkt_type orqali farqlanadi).
-// mac+seq = TASDIQLANAYOTGAN paketning egasi va seq raqami.
+// Jami: 15 bayt. mac+seq = TASDIQLANAYOTGAN paketning egasi va seq raqami.
 struct __attribute__((packed)) LoRaAck {
     uint8_t  pkt_type;          // PKT_ACK = 0x08
     uint8_t  mac[6];            // Tasdiqlanayotgan paket egasining MAC i
     uint8_t  flags;             // bit4-6=TTL (mesh orqali qaytishi uchun)
     uint32_t seq;               // Tasdiqlanayotgan paket seq raqami
-    uint8_t  ack_type;          // Tasdiqlanayotgan paket turi (0x01..0x06, 0x02)
+    uint8_t  ack_type;          // Tasdiqlanayotgan paket turi (0x01, 0x03..0x06)
     uint16_t crc;
 };
 

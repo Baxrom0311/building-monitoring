@@ -291,7 +291,6 @@ static unsigned long last_sound_lcd_ms = 0;
 #endif
 
 #ifdef SENSOR_ELECTRICITY
-static int           pending_relay    = 0;
 static int           meter_fail_count = 0;
 static unsigned long meter_retry_ms   = 30000UL;
 #define METER_RETRY_MAX_MS  300000UL
@@ -529,11 +528,6 @@ void loop() {
             if (!g_sensor_meta.sensor_type[0])
                 sensor_detect_type();
         }
-
-        if (pending_relay) {
-            sensor_relay(pending_relay);
-            pending_relay = 0;
-        }
 #endif
 
         SensorData d;
@@ -614,11 +608,7 @@ void loop() {
     if (server_ok && WiFi.status() == WL_CONNECTED &&
         now - last_cmd_ms >= CMD_POLL_MS) {
         last_cmd_ms = now;
-#ifdef SENSOR_ELECTRICITY
-        app_poll_commands(device_id, &pending_relay, FW_VERSION);
-#else
-        app_poll_commands(device_id, nullptr, FW_VERSION);
-#endif
+        app_poll_commands(device_id, FW_VERSION);
         app_send_status(device_id, FW_VERSION);
     }
 }
