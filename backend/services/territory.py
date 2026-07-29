@@ -525,7 +525,9 @@ async def import_apartments_file(content: bytes) -> dict:
                     ("area", "area_m2"), ("living_area", "living_area_m2"),
                     ("property_value", "property_value"), ("rooms", "rooms"),
                 ):
-                    if r[src_key] is not None:
+                    # Faqat hozircha BO'SH bo'lgan maydonni to'ldiradi — mavjud
+                    # (boshqa faylda kelgan, boyroq) qiymatni bosib yozmaydi.
+                    if getattr(apt, attr) is None and r[src_key] is not None:
                         setattr(apt, attr, r[src_key])
                 apt.updated_at = ts
             else:
