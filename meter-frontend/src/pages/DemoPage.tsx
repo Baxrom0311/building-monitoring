@@ -69,6 +69,22 @@ function generateSound(): DataPoint[] {
   })
 }
 
+function generateWaterPressure(): DataPoint[] {
+  const now = Date.now()
+  return Array.from({ length: 24 }, (_, i) => {
+    const ts = now - (23 - i) * 3_600_000
+    const h = new Date(ts).getHours()
+    const label = new Date(ts).toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' })
+    // Ertalab/kechqurun ko'p uy suv ochadi — bosim biroz pasayadi
+    const isPeak = (h >= 6 && h <= 9) || (h >= 19 && h <= 22)
+    const base = isPeak ? 2.3 : 3.1
+    let value = base + noise(i + 350) * 0.6
+    if (i === 8) value = 0.9
+    if (i === 16) value = 4.7
+    return { label, value: +Math.max(0.0, Math.min(6.0, value)).toFixed(2) }
+  })
+}
+
 // ── Threshold config ──────────────────────────────────────────────────────────
 
 const CHARTS = [
@@ -154,6 +170,34 @@ const CHARTS = [
       { label: '10 – 70 %', color: '#22c55e' },
       { label: '70 – 85 %', color: '#eab308' },
       { label: '> 85 %', color: '#ef4444' },
+    ],
+  },
+  {
+    key: 'water',
+    label: 'Suv bosimi',
+    unit: 'bar',
+    icon: Droplets,
+    color: '#22D3EE',
+    glow: 'rgba(34,211,238,0.28)',
+    bg: 'from-cyan-950/70 to-slate-950',
+    border: 'border-cyan-500/25',
+    gradientId: 'grad_water',
+    nominal: 3,
+    domain: [0, 6] as [number, number],
+    dangerLow: 1,
+    warnLow: 1.5,
+    warnHigh: 4.5,
+    dangerHigh: 5,
+    decimals: 2,
+    liveBase: 2.9,
+    liveAmp: 0.4,
+    getPoints: generateWaterPressure,
+    legendRanges: [
+      { label: '< 1 bar', color: '#ef4444' },
+      { label: '1 – 1.5 bar', color: '#eab308' },
+      { label: '1.5 – 4.5 bar', color: '#22c55e' },
+      { label: '4.5 – 5 bar', color: '#eab308' },
+      { label: '> 5 bar', color: '#ef4444' },
     ],
   },
 ]
