@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   Area,
   AreaChart,
+  Bar,
+  BarChart,
   CartesianGrid,
   ReferenceLine,
   ReferenceArea,
@@ -241,6 +243,58 @@ function generateApartments(): ApartmentUsage[] {
   })
 }
 
+// ── Kunlik / Haftalik iste'mol (bino bo'yicha, mock) ──────────────────────────
+
+interface PeriodPoint {
+  label: string
+  electricityKwh: number
+  waterM3: number
+}
+
+function generateDailyUsage(): PeriodPoint[] {
+  const now = new Date()
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(now)
+    d.setDate(d.getDate() - (6 - i))
+    const dow = d.getDay() // 0=Yak, 6=Shan
+    const isWeekend = dow === 0 || dow === 6
+
+    const baseElec = isWeekend ? 148 : 116
+    const baseWater = isWeekend ? 13.4 : 10.2
+    let elec = baseElec + noise(i + 900) * 12
+    let water = baseWater + noise(i + 950) * 1.4
+
+    if (i === 3) elec = 172   // issiq kun — konditsionerlar ko'p ishladi
+    if (i === 5) water = 16.8 // dam olish kuni umumiy tozalash
+
+    return {
+      label: d.toLocaleDateString('uz-UZ', { weekday: 'short', day: '2-digit', month: '2-digit' }),
+      electricityKwh: +Math.max(0, elec).toFixed(1),
+      waterM3: +Math.max(0, water).toFixed(2),
+    }
+  })
+}
+
+function generateWeeklyUsage(): PeriodPoint[] {
+  const now = new Date()
+  return Array.from({ length: 8 }, (_, i) => {
+    const weekStart = new Date(now)
+    weekStart.setDate(weekStart.getDate() - (7 - i) * 7 - now.getDay() + 1)
+
+    let elec = 810 + noise(i + 1100) * 85
+    let water = 76 + noise(i + 1150) * 8
+
+    if (i === 5) elec = 1080  // issiq hafta
+    if (i === 2) water = 48   // ta'mirlash — suv kam ishlatilgan
+
+    return {
+      label: weekStart.toLocaleDateString('uz-UZ', { day: '2-digit', month: '2-digit' }),
+      electricityKwh: +Math.max(0, elec).toFixed(0),
+      waterM3: +Math.max(0, water).toFixed(1),
+    }
+  })
+}
+
 // ── Status helper ─────────────────────────────────────────────────────────────
 
 type StatusLevel = 'normal' | 'warn' | 'danger'
@@ -385,6 +439,86 @@ function ApartmentRankPanel({
   )
 }
 
+// ── Kunlik/haftalik panel ──────────────────────────────────────────────────────
+
+function PeriodUsagePanel({
+  title,
+  icon: Icon,
+  color,
+  glow,
+  unit,
+  decimals,
+  dataKey,
+  data,
+}: {
+  title: string
+  icon: typeof Zap
+  color: string
+  glow: string
+  unit: string
+  decimals: number
+  dataKey: 'electricityKwh' | 'waterM3'
+  data: PeriodPoint[]
+}) {
+  const gradId = `grad_period_${dataKey}`
+  return (
+    <div className="flex-1 min-w-0 rounded-xl border border-slate-800/60 bg-slate-900/40 backdrop-blur-sm overflow-hidden flex flex-col">
+      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-800/50">
+        <div
+          className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+          style={{ backgroundColor: `${color}18`, color }}
+        >
+          <Icon className="w-4 h-4" />
+        </div>
+        <span className="text-xs font-bold text-slate-200 tracking-wide uppercase">{title}</span>
+      </div>
+      <div className="h-52 p-2">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data} margin={{ top: 10, right: 16, left: -20, bottom: 0 }}>
+            <defs>
+              <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor={color} stopOpacity={0.9} />
+                <stop offset="95%" stopColor={color} stopOpacity={0.35} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+            <XAxis
+              dataKey="label"
+              stroke="#475569"
+              tick={{ fill: '#64748b', fontSize: 10 }}
+              tickLine={false}
+              axisLine={{ stroke: '#334155' }}
+            />
+            <YAxis
+              stroke="#475569"
+              tick={{ fill: '#64748b', fontSize: 10 }}
+              tickLine={false}
+              axisLine={false}
+              width={45}
+            />
+            <Tooltip
+              content={({ active, payload }) => {
+                if (!active || !payload?.length) return null
+                const p = payload[0].payload as PeriodPoint
+                const value = p[dataKey]
+                return (
+                  <div className="bg-slate-900/95 border border-slate-700/80 rounded-lg p-2.5 shadow-xl backdrop-blur text-xs font-mono">
+                    <div className="text-slate-400 font-sans mb-1">{p.label}</div>
+                    <span className="font-extrabold text-sm" style={{ color }}>
+                      {value.toFixed(decimals)} {unit}
+                    </span>
+                  </div>
+                )
+              }}
+            />
+            <Bar dataKey={dataKey} fill={`url(#${gradId})`} radius={[4, 4, 0, 0]} style={{ filter: `drop-shadow(0 0 6px ${glow})` }} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  )
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function DemoPage() {
@@ -433,6 +567,11 @@ export default function DemoPage() {
         .map((a) => ({ id: a.id, floor: a.floor, value: a.waterLmin })),
     [apartmentsLive],
   )
+
+  const [period, setPeriod] = useState<'daily' | 'weekly'>('daily')
+  const dailyUsage = useMemo(() => generateDailyUsage(), [])
+  const weeklyUsage = useMemo(() => generateWeeklyUsage(), [])
+  const periodData = period === 'daily' ? dailyUsage : weeklyUsage
 
   // Animate the last point every tick
   const liveValues = useMemo(
@@ -726,6 +865,57 @@ export default function DemoPage() {
               unit="L/min"
               decimals={2}
               items={rankByWater}
+            />
+          </div>
+        </div>
+
+        {/* ── Kunlik / haftalik iste'mol (bino bo'yicha) ── */}
+        <div className="p-4 lg:p-6 bg-gradient-to-br from-slate-900/60 to-slate-950 border-t border-slate-800/40">
+          <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-extrabold text-white tracking-tight uppercase">
+                Bino bo'yicha iste'mol dinamikasi
+              </span>
+              <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-blue-500/15 text-blue-400 border border-blue-500/30 tracking-wider">
+                DEMO
+              </span>
+            </div>
+            <div className="flex items-center gap-1 p-1 rounded-lg bg-slate-800/60 border border-slate-700/50">
+              {(['daily', 'weekly'] as const).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setPeriod(p)}
+                  className={`px-3 py-1 rounded-md text-[11px] font-bold tracking-wide transition-colors ${
+                    period === p
+                      ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40'
+                      : 'text-slate-400 hover:text-slate-200 border border-transparent'
+                  }`}
+                >
+                  {p === 'daily' ? 'Kunlik (7 kun)' : 'Haftalik (8 hafta)'}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex flex-col lg:flex-row gap-4">
+            <PeriodUsagePanel
+              title={`Elektr iste'moli — ${period === 'daily' ? 'kunlik' : 'haftalik'}`}
+              icon={Zap}
+              color="#FACC15"
+              glow="rgba(250,204,21,0.35)"
+              unit="kWh"
+              decimals={1}
+              dataKey="electricityKwh"
+              data={periodData}
+            />
+            <PeriodUsagePanel
+              title={`Suv iste'moli — ${period === 'daily' ? 'kunlik' : 'haftalik'}`}
+              icon={Droplets}
+              color="#22D3EE"
+              glow="rgba(34,211,238,0.35)"
+              unit="m³"
+              decimals={1}
+              dataKey="waterM3"
+              data={periodData}
             />
           </div>
         </div>
