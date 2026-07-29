@@ -390,19 +390,21 @@ void setup() {
 
     // WiFi
 #ifndef DEFAULT_WIFI_SSID
-  #define DEFAULT_WIFI_SSID "12"
+  #define DEFAULT_WIFI_SSID ""
 #endif
 #ifndef DEFAULT_WIFI_PASS
-  #define DEFAULT_WIFI_PASS "12345678"
+  #define DEFAULT_WIFI_PASS ""
 #endif
-    // Portal FAQAT sozlanmagan qurilmada ochiladi (yoki BOOT tugma → reset →
-    // keyingi bootda ochiladi). Router o'chiq bo'lsa ≤16s da ishga tushib,
-    // fonda qayta ulanadi — 3 daqiqa portalda qotib turish yo'q.
     {
-        bool first_boot = !wifi_has_saved_creds();
         bool wifi_ok = wifi_connect_boot(DEFAULT_WIFI_SSID, DEFAULT_WIFI_PASS);
-        if (!wifi_ok && first_boot)
+        if (!wifi_ok) {
+#if defined(HAVE_LCD) && !defined(SENSOR_ELECTRICITY)
+            lcd_row(0, "WiFi AP Portal");
+            lcd_row(1, WIFI_AP_NAME);
+#endif
+            LOG_PRINTLN("WiFi: Ulanish bo'lmadi — AP Sozlash Portali ochilmoqda...");
             wifi_portal(WIFI_AP_NAME, WIFI_AP_PASS, device_id, g_cfg.meter_serial);
+        }
     }
 
     // NTP vaqt sinxronlash (WiFi ulangandan keyin)

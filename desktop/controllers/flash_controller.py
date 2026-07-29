@@ -59,6 +59,23 @@ class FirmwareListWorker(QThread):
             self.error.emit(str(e))
 
 
+class ServerDevicesWorker(QThread):
+    """Serverdagi barcha LoRa datchiklar ro'yxatini oluvchi background thread."""
+    result = pyqtSignal(list)       # device list
+    error = pyqtSignal(str)         # error message
+
+    def __init__(self, api: ApiClient):
+        super().__init__()
+        self.api = api
+
+    def run(self):
+        try:
+            items = self.api.list_devices()
+            self.result.emit(items)
+        except Exception as e:
+            self.error.emit(str(e))
+
+
 class DownloadFirmwareWorker(QThread):
     """Serverdan firmware faylini yuklab oluvchi background thread."""
     log_line = pyqtSignal(str, str)   # (text, color)
@@ -84,6 +101,96 @@ class DownloadFirmwareWorker(QThread):
             self.done.emit(True, self.dest_path)
         except Exception as e:
             self.done.emit(False, str(e))
+
+
+class PioBuildWorker(QThread):
+    """PlatformIO yordamida dinamik build qiluvchi background thread."""
+    log_line = pyqtSignal(str, str)
+    progress = pyqtSignal(int)
+    done = pyqtSignal(bool, str)
+
+    def __init__(self, env_name: str, sensor_type: str, server_url: str,
+                 device_token: str, wifi_ssid: str, wifi_pass: str,
+                 test_mode: bool = False, sensor_opts: dict = None):
+        super().__init__()
+        self.env_name = env_name
+        self.sensor_type = sensor_type
+        self.server_url = server_url
+        self.device_token = device_token
+        self.wifi_ssid = wifi_ssid
+        self.wifi_pass = wifi_pass
+        self.test_mode = test_mode
+        self.sensor_opts = sensor_opts or {}
+        self._proc = None
+
+    def run(self):
+        pio_bin = FlashService.find_pio(log_cb=lambda msg, col: self.log_line.emit(msg, col))
+        if not pio_bin:
+            self.done.emit(False, "PlatformIO CLI topilmadi!")
+            return
+
+        proj_root = FlashService.find_project_root()
+        if not proj_root:
+            self.done.emit(False, "PlatformIO platformio.ini loyiha papkasi topilmadi!")
+            return
+
+        self.log_line.emit(f"PlatformIO build boshlanmoqda...", "#38bdf8")
+        self.log_line.emit(f"Loyiha: {proj_root}  |  Env: {self.env_name}", "#94a3b8")
+        self.log_line.emit(f"Datchik: {self.sensor_type}  |  Server: {self.server_url}", "#94a3b8")
+        self.progress.emit(10)
+
+        flags = FlashService.make_build_flags(
+            sensor=self.sensor_type,
+            server_url=self.server_url,
+            device_token=self.device_token,
+            wifi_ssid=self.wifi_ssid,
+            wifi_pass=self.wifi_pass,
+            test_mode=self.test_mode,
+            sensor_opts=self.sensor_opts,
+        )
+
+        env = os.environ.copy()
+        env["PLATFORMIO_BUILD_FLAGS"] = flags.replace("\n", " ")
+
+        cmd = [pio_bin, "run", "-e", self.env_name]
+
+        try:
+            self._proc = subprocess.Popen(
+                cmd,
+                cwd=proj_root,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+                env=env,
+            )
+
+            for line in iter(self._proc.stdout.readline, ''):
+                line_str = line.strip()
+                if line_str:
+                    col = "#cbd5e1"
+                    if "SUCCESS" in line_str:
+                        col = "#4ade80"
+                        self.progress.emit(90)
+                    elif "FAILED" in line_str or "ERROR" in line_str:
+                        col = "#f87171"
+                    self.log_line.emit(line_str, col)
+
+            self._proc.stdout.close()
+            rc = self._proc.wait()
+
+            if rc == 0:
+                bin_path = FlashService.find_compiled_bin(proj_root, self.env_name)
+                if bin_path and os.path.exists(bin_path):
+                    self.progress.emit(100)
+                    self.log_line.emit(f"Firmware yig'ildi: {bin_path}", "#4ade80")
+                    self.done.emit(True, bin_path)
+                else:
+                    self.done.emit(False, "Build bajarildi, lekin firmware.bin topilmadi.")
+            else:
+                self.done.emit(False, f"PlatformIO build xatosi (exit code {rc}).")
+        except Exception as e:
+            self.done.emit(False, f"Build xatosi: {str(e)}")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -456,6 +563,42 @@ class FlashController(QObject):
             w = self._serial_workers.pop(port)
             w.stop()
             w.wait(2000)
+
+    # ── Server Devices ───────────────────────────────────────────────────
+
+    def fetch_server_devices(self, api: ApiClient, result_cb, error_cb):
+        """Serverdagi barcha LoRa datchiklarini fonda olib keladi."""
+        worker = ServerDevicesWorker(api)
+        worker.result.connect(result_cb)
+        worker.error.connect(error_cb)
+        worker.start()
+
+    # ── PlatformIO Build ──────────────────────────────────────────────────
+
+    def start_pio_build(self, env_name: str, sensor_type: str, server_url: str,
+                        device_token: str, wifi_ssid: str, wifi_pass: str,
+                        test_mode: bool = False, sensor_opts: dict = None,
+                        log_cb=None, prog_cb=None, finish_cb=None):
+        """PlatformIO orqali dinamik build boshlaydi."""
+        worker = PioBuildWorker(
+            env_name=env_name,
+            sensor_type=sensor_type,
+            server_url=server_url,
+            device_token=device_token,
+            wifi_ssid=wifi_ssid,
+            wifi_pass=wifi_pass,
+            test_mode=test_mode,
+            sensor_opts=sensor_opts,
+        )
+        if log_cb:
+            worker.log_line.connect(log_cb)
+        if prog_cb:
+            worker.progress.connect(prog_cb)
+        if finish_cb:
+            worker.done.connect(finish_cb)
+
+        worker.start()
+        return worker
 
     # ── Yopilish ──────────────────────────────────────────────────────────
 

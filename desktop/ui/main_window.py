@@ -22,6 +22,7 @@ from controllers.flash_controller import FlashController
 from services.esptool_service import EsptoolService
 from services.api_client import ApiClient
 from services.lora_decoder import LoRaPacketDecoder
+from services.tool_installer import ToolInstallerService
 from .styles import DARK_THEME
 
 # Sensor turlari ro'yxati
@@ -59,7 +60,8 @@ class ESP32StudioWindow(QMainWindow):
         self.api = ApiClient(server)
 
         # Firmware cache directory
-        self._cache_dir = os.path.join(tempfile.gettempdir(), "esp32studio_fw")
+        self._app_dir = ToolInstallerService.get_app_dir()
+        self._cache_dir = os.path.join(self._app_dir, "firmware_cache")
         os.makedirs(self._cache_dir, exist_ok=True)
 
         self._setup_ui()
@@ -386,9 +388,17 @@ class ESP32StudioWindow(QMainWindow):
 
         cmd_row = QHBoxLayout()
         edit_cmd = QLineEdit()
-        edit_cmd.setPlaceholderText("Buyruq yuboring...")
+        edit_cmd.setPlaceholderText("Buyruq (masalan AT+GMR)...")
+
+        combo_preset = QComboBox()
+        combo_preset.addItems(["AT Buyruqlar...", "AT", "AT+GMR", "AT+CONFIG?", "AT+WIFI?", "AT+LORA?", "AT+RST", "AT+REBOOT"])
+        combo_preset.currentIndexChanged.connect(
+            lambda i: (edit_cmd.setText(combo_preset.itemText(i)), combo_preset.setCurrentIndex(0)) if i > 0 else None
+        )
+
         btn_send = QPushButton("Yuborish")
         cmd_row.addWidget(edit_cmd, 1)
+        cmd_row.addWidget(combo_preset)
         cmd_row.addWidget(btn_send)
         layout.addLayout(cmd_row)
 
@@ -416,21 +426,62 @@ class ESP32StudioWindow(QMainWindow):
         layout.setContentsMargins(6, 6, 6, 6)
         layout.setSpacing(8)
 
-        # Metric cards
+        # Inspector Status Bar Header
+        status_card = QFrame()
+        status_card.setObjectName("card")
+        sc_layout = QHBoxLayout(status_card)
+        sc_layout.setContentsMargins(14, 8, 14, 8)
+
+        self.lbl_lora_status_icon = QLabel("●")
+        self.lbl_lora_status_icon.setStyleSheet("color: #22c55e; font-size: 16px;")
+        self.lbl_lora_status_title = QLabel("LoRa MESH v2 Inspector (Faol)")
+        self.lbl_lora_status_title.setStyleSheet("color: #f8fafc; font-weight: 800; font-size: 13px;")
+
+        sc_layout.addWidget(self.lbl_lora_status_icon)
+        sc_layout.addWidget(self.lbl_lora_status_title)
+        sc_layout.addStretch()
+
+        self.lbl_lora_pkt_count = QLabel("Jami paketlar: 0")
+        self.lbl_lora_pkt_count.setStyleSheet("color: #94a3b8; font-size: 12px; font-weight: 600;")
+        self.lbl_lora_last_time = QLabel("Oxirgi paket: —")
+        self.lbl_lora_last_time.setStyleSheet("color: #38bdf8; font-size: 12px; font-weight: 600;")
+
+        btn_fetch_cloud_devices = QPushButton("🌐 Serverdagi Barcha Datchiklarni Skan Qilish")
+        btn_fetch_cloud_devices.setStyleSheet("""
+            QPushButton {
+                background-color: #0369a1;
+                color: #ffffff;
+                font-weight: 700;
+                font-size: 11px;
+                padding: 4px 10px;
+                border-radius: 6px;
+            }
+            QPushButton:hover { background-color: #0284c7; }
+        """)
+        btn_fetch_cloud_devices.clicked.connect(self._on_fetch_server_lora_devices)
+
+        sc_layout.addWidget(btn_fetch_cloud_devices)
+        sc_layout.addWidget(QLabel("  |  "))
+        sc_layout.addWidget(self.lbl_lora_pkt_count)
+        sc_layout.addWidget(QLabel("  |  "))
+        sc_layout.addWidget(self.lbl_lora_last_time)
+        layout.addWidget(status_card)
+
+        # Metric cards for 5-in-1 utilities
         cards_row = QHBoxLayout()
-        self.lbl_card_meter = self._metric_card("METER SERIAL", "—", cards_row)
-        self.lbl_card_v = self._metric_card("KUCHLANISH L1", "0.0 V", cards_row)
-        self.lbl_card_i = self._metric_card("TOK L1", "0.0 A", cards_row)
-        self.lbl_card_p = self._metric_card("QUVVAT", "0.0 kW", cards_row)
-        self.lbl_card_e = self._metric_card("ENERGIYA", "0.00 kWh", cards_row)
+        self.lbl_card_node = self._metric_card("DATCHIK ID / MAC", "—", cards_row)
+        self.lbl_card_type = self._metric_card("PAKET TURI", "—", cards_row)
+        self.lbl_card_primary = self._metric_card("ASOSIY O'LCHOV", "0.0", cards_row)
+        self.lbl_card_secondary = self._metric_card("OQIM / QUVVAT", "—", cards_row)
+        self.lbl_card_cumulative = self._metric_card("ENERGIYA / HAJM", "—", cards_row)
         self.lbl_card_rssi = self._metric_card("RSSI / SNR", "—", cards_row)
         layout.addLayout(cards_row)
 
-        # Paket tarixi
-        layout.addWidget(self._section("Qabul qilingan LoRa paketlar"))
+        # Packet Log Table
+        layout.addWidget(self._section("Qabul qilingan LoRa paketlar tarixi"))
         self.table_lora = QTableWidget(0, 9)
         self.table_lora.setHorizontalHeaderLabels([
-            "Vaqt", "Turi", "Meter Serial", "Kuchlanish", "Tok", "Quvvat", "Energiya", "RSSI/SNR", "CRC"
+            "Vaqt", "Turi", "Datchik / Serial", "Asosiy O'lchov", "Qo'shimcha", "Jami", "TTL/Hop", "RSSI/SNR", "CRC"
         ])
         self.table_lora.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table_lora.setStyleSheet("""
@@ -449,6 +500,7 @@ class ESP32StudioWindow(QMainWindow):
             }
         """)
         layout.addWidget(self.table_lora, 1)
+        self._total_lora_packets = 0
 
         return widget
 
@@ -955,49 +1007,106 @@ class ESP32StudioWindow(QMainWindow):
             btn.setObjectName("btnDanger")
 
     def _update_inspector(self, info: dict):
-        rssi_text = f"{info.get('rssi', '—')} / {info.get('snr', '—')}" if "rssi" in info else ""
-        if rssi_text:
+        rssi_text = f"{info.get('rssi', '—')} dBm / {info.get('snr', '—')} dB" if "rssi" in info else "—"
+        if rssi_text != "—":
             self.lbl_card_rssi.setText(rssi_text)
 
         pkt = info.get("packet")
         if not pkt:
             return
 
-        if pkt.get("type") == "ELECTRICITY_UPLINK":
+        self._total_lora_packets = getattr(self, "_total_lora_packets", 0) + 1
+        ts = datetime.now().strftime("%H:%M:%S")
+        self.lbl_lora_pkt_count.setText(f"Jami paketlar: {self._total_lora_packets}")
+        self.lbl_lora_last_time.setText(f"Oxirgi paket: {ts}")
+
+        pkt_type = pkt.get("type", "UNKNOWN")
+        node_id = pkt.get("meter_serial") or pkt.get("mac") or "—"
+        ttl_hop = f"TTL: {pkt.get('ttl', '—')} (Hop: {pkt.get('hop_count', 0)})"
+        crc_status = "OK" if pkt.get("valid_crc") else "CRC XATO"
+
+        type_label = pkt_type
+        primary_val = "—"
+        sec_val = "—"
+        cum_val = "—"
+        row_type = pkt_type
+
+        if pkt_type == "ELECTRICITY_UPLINK":
             v1 = pkt["voltage_v"]["l1"]
             i1 = pkt["current_a"]["l1"]
             pw = pkt.get("power_kw", 0.0)
             en = pkt.get("energy_kwh", 0.0)
-            serial_no = pkt.get("meter_serial", "—")
 
-            self.lbl_card_meter.setText(serial_no)
-            self.lbl_card_v.setText(f"{v1:.1f} V")
-            self.lbl_card_i.setText(f"{i1:.2f} A")
-            self.lbl_card_p.setText(f"{pw:.3f} kW")
-            self.lbl_card_e.setText(f"{en:.2f} kWh")
+            type_label = "⚡ ELEKTR"
+            primary_val = f"{v1:.1f} V"
+            sec_val = f"{i1:.2f} A / {pw:.3f} kW"
+            cum_val = f"{en:.2f} kWh"
+            row_type = "ELECTRICITY"
 
-            row = self.table_lora.rowCount()
-            self.table_lora.insertRow(row)
-            ts = datetime.now().strftime("%H:%M:%S")
-            vals = [ts, "ELECTRICITY", serial_no, f"{v1:.1f}",
-                    f"{i1:.2f}", f"{pw:.3f}", f"{en:.2f}",
-                    rssi_text, "OK" if pkt.get("valid_crc") else "CRC XATO"]
-            for col, txt in enumerate(vals):
-                self.table_lora.setItem(row, col, QTableWidgetItem(txt))
-
-        elif pkt.get("type") == "SOIL_UPLINK":
+        elif pkt_type == "SOIL_UPLINK":
             hum = pkt.get("humidity_pct", 0)
-            self.lbl_card_meter.setText(pkt.get("mac", "—"))
-            self.lbl_card_v.setText(f"{hum:.1f}%")
+            type_label = "🌱 TUPROQ"
+            primary_val = f"{hum:.1f} %"
+            sec_val = "Namlik sensori"
+            cum_val = "—"
+            row_type = "SOIL"
 
-            row = self.table_lora.rowCount()
-            self.table_lora.insertRow(row)
-            ts = datetime.now().strftime("%H:%M:%S")
-            vals = [ts, "SOIL", pkt.get("mac", ""), f"{hum:.1f}%",
-                    "—", "—", "—", rssi_text,
-                    "OK" if pkt.get("valid_crc") else "CRC XATO"]
-            for col, txt in enumerate(vals):
-                self.table_lora.setItem(row, col, QTableWidgetItem(txt))
+        elif pkt_type == "SOUND_UPLINK":
+            lvl = pkt.get("level_pct", 0)
+            type_label = "🔊 SHOVQIN"
+            primary_val = f"{lvl:.1f} dB"
+            sec_val = "Shovqin sensori"
+            cum_val = "—"
+            row_type = "SOUND"
+
+        elif pkt_type == "WATER_UPLINK":
+            p_bot = pkt.get("p_bottom_bar", 0)
+            flow = pkt.get("flow_lmin", 0)
+            vol = pkt.get("volume_m3", 0)
+            type_label = "💧 SUV"
+            primary_val = f"{p_bot:.2f} bar"
+            sec_val = f"{flow:.2f} L/min"
+            cum_val = f"{vol:.3f} m³"
+            row_type = "WATER"
+
+        elif pkt_type == "GAS_UPLINK":
+            press = pkt.get("pressure_bar", 0)
+            flow = pkt.get("flow_m3h", 0)
+            vol = pkt.get("volume_m3", 0)
+            type_label = "🔥 GAZ"
+            primary_val = f"{press:.3f} bar"
+            sec_val = f"{flow:.3f} m³/h"
+            cum_val = f"{vol:.3f} m³"
+            row_type = "GAS"
+
+        # Update Inspector Cards
+        self.lbl_card_node.setText(str(node_id))
+        self.lbl_card_type.setText(type_label)
+        self.lbl_card_primary.setText(primary_val)
+        self.lbl_card_secondary.setText(sec_val)
+        self.lbl_card_cumulative.setText(cum_val)
+
+        # Append to Table Log
+        row = self.table_lora.rowCount()
+        self.table_lora.insertRow(row)
+        vals = [
+            ts,
+            row_type,
+            str(node_id),
+            primary_val,
+            sec_val,
+            cum_val,
+            ttl_hop,
+            rssi_text,
+            crc_status,
+        ]
+        for col, txt in enumerate(vals):
+            item = QTableWidgetItem(txt)
+            if col == 8:
+                item.setForeground(Qt.GlobalColor.green if pkt.get("valid_crc") else Qt.GlobalColor.red)
+            self.table_lora.setItem(row, col, item)
+
+        self.table_lora.scrollToBottom()
 
     def _send_cmd(self, idx: int):
         edit = getattr(self, f"mon_cmd_{idx}")
@@ -1007,6 +1116,59 @@ class ESP32StudioWindow(QMainWindow):
             term = getattr(self, f"mon_term_{idx}")
             term.append(f'<span style="color:#fbbf24;">>>> {cmd}</span>')
             edit.clear()
+
+    def _on_fetch_server_lora_devices(self):
+        self.lbl_lora_status_title.setText("LoRa MESH Inspector — Server Skan Qilinmoqda...")
+        self.controller.fetch_server_devices(
+            self.api,
+            result_cb=self._on_server_devices_received,
+            error_cb=self._on_server_devices_error,
+        )
+
+    def _on_server_devices_received(self, devices: list):
+        self.lbl_lora_status_title.setText(f"LoRa MESH Inspector — Serverda {len(devices)} ta Datchik Topildi")
+        self.lbl_lora_pkt_count.setText(f"Server datchiklari: {len(devices)}")
+        ts = datetime.now().strftime("%H:%M:%S")
+        self.lbl_lora_last_time.setText(f"Skan vaqti: {ts}")
+
+        for dev in devices:
+            dev_id = dev.get("device_id") or dev.get("id") or "—"
+            util = dev.get("utility_type") or dev.get("meter_type") or "—"
+            status = "ONLINE" if dev.get("online") or dev.get("status") == "online" else "OFFLINE"
+            rssi = dev.get("rssi")
+            snr = dev.get("snr")
+            rssi_str = f"{rssi} dBm / {snr} dB" if rssi is not None else "—"
+            last_reading = dev.get("last_reading", {})
+            primary = "—"
+            if isinstance(last_reading, dict) and last_reading:
+                v = last_reading.get("v_l1") or last_reading.get("value") or last_reading.get("pressure") or last_reading.get("humidity")
+                if v is not None:
+                    primary = str(v)
+
+            row = self.table_lora.rowCount()
+            self.table_lora.insertRow(row)
+            vals = [
+                ts,
+                str(util).upper(),
+                str(dev_id),
+                primary,
+                status,
+                "—",
+                "Cloud API",
+                rssi_str,
+                "OK (Server)",
+            ]
+            for col, txt in enumerate(vals):
+                item = QTableWidgetItem(txt)
+                if col == 4:
+                    item.setForeground(Qt.GlobalColor.green if status == "ONLINE" else Qt.GlobalColor.gray)
+                self.table_lora.setItem(row, col, item)
+
+        self.table_lora.scrollToBottom()
+
+    def _on_server_devices_error(self, err: str):
+        self.lbl_lora_status_title.setText("LoRa MESH Inspector — Server Skan Xatosi")
+        QMessageBox.warning(self, "Server Xatosi", f"Server datchiklarini olib bo'lmadi: {err}")
 
     def _save_log(self, term: QTextEdit):
         text = term.toPlainText()

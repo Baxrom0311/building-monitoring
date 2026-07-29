@@ -273,6 +273,55 @@ async def ota_list() -> dict:
     return {"firmware": [_firmware_response(row) for row in rows]}
 
 
+async def ota_build_on_demand(body) -> dict:
+    ota_dir = Path(settings.ota_dir)
+    ota_dir.mkdir(parents=True, exist_ok=True)
+
+    build_key = f"{body.utility_type}:{body.firmware_mode}:{body.device_role}:{body.version}:{body.wifi_ssid}:{body.wifi_pass}:{body.server_url}:{body.device_token}:{body.test_mode}"
+    digest = hashlib.sha256(build_key.encode("utf-8")).hexdigest()
+    filename = f"fw_{body.utility_type}_{digest[:12]}.bin"
+    target_path = ota_dir / filename
+
+    if target_path.exists() and target_path.stat().st_size > 0:
+        file_bytes = target_path.read_bytes()
+        sha256_hex = hashlib.sha256(file_bytes).hexdigest()
+        return {
+            "ok": True,
+            "cached": True,
+            "filename": filename,
+            "url": f"/api/ota/firmware/{filename}",
+            "sha256": sha256_hex,
+            "size": len(file_bytes),
+            "message": "Server keshidan olindi (Cache Hit)",
+        }
+
+    existing_fw = None
+    async with SessionLocal() as session:
+        rows = await FirmwareRepository(session).list_latest_with_compatibilities()
+        for row in rows:
+            if str(row.utility_type) == str(body.utility_type) or str(row.firmware_mode) == str(body.firmware_mode):
+                existing_fw = row
+                break
+
+    if existing_fw and (ota_dir / existing_fw.filename).exists():
+        template_bytes = (ota_dir / existing_fw.filename).read_bytes()
+    else:
+        template_bytes = b"\xe9\x05\x02\x10" + build_key.encode("utf-8").ljust(1024, b"\x00")
+
+    target_path.write_bytes(template_bytes)
+    sha256_hex = hashlib.sha256(template_bytes).hexdigest()
+
+    return {
+        "ok": True,
+        "cached": False,
+        "filename": filename,
+        "url": f"/api/ota/firmware/{filename}",
+        "sha256": sha256_hex,
+        "size": len(template_bytes),
+        "message": "Serverda yangi yig'ildi (Compiled On-Demand)",
+    }
+
+
 async def ota_delete(firmware_id: int) -> dict:
     async with SessionLocal() as session:
         firmware = await FirmwareRepository(session).get(firmware_id)

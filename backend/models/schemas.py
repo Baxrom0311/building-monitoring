@@ -1266,3 +1266,25 @@ class FirmwareCompatibilityCreate(BaseModel):
     sensor_type: Optional[str] = None
     converter_type: Optional[str] = None
     notes: Optional[str] = None
+
+
+class FirmwareOnDemandRequest(BaseModel):
+    utility_type: UtilityType = UtilityType.electricity
+    firmware_mode: FirmwareMode = FirmwareMode.auto
+    device_role: Optional[DeviceRole] = None
+    version: str = "1.0.0"
+    wifi_ssid: Optional[str] = None
+    wifi_pass: Optional[str] = None
+    server_url: Optional[str] = None
+    device_token: Optional[str] = None
+    test_mode: bool = False
+
+
+class FirmwareOnDemandResponse(BaseModel):
+    ok: bool
+    cached: bool
+    filename: str
+    url: str
+    sha256: str
+    size: int
+    message: str

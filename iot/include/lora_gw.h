@@ -321,6 +321,17 @@ static bool gw_handle_soil_uplink(const LoRaSoilUplink& pkt, int rssi) {
     LOG_PRINTF("GW RX <- [%s] RSSI=%ddBm namlik=%.1f%%\n",
                node->device_id, rssi, humidity);
 
+#ifndef LCD_SHOW_ELECTRICITY_ONLY
+    // LCD
+    {
+        char _r0[17], _r1[17];
+        snprintf(_r0, sizeof(_r0), "SOIL: %5.1f %%", humidity);
+        snprintf(_r1, sizeof(_r1), "R:%d N:%d B:%d", rssi, gw_node_count, gw_buf_count);
+        gw_lcd_show(0, _r0);
+        gw_lcd_show(1, _r1);
+    }
+#endif
+
     StaticJsonDocument<256> doc;
     doc["device_id"]    = node->device_id;
     char _rid[32];
@@ -352,6 +363,17 @@ static bool gw_handle_sound_uplink(const LoRaSoundUplink& pkt, int rssi) {
     float level = pkt.level / 100.0f;
     LOG_PRINTF("GW RX <- [%s] RSSI=%ddBm ovoz=%.1f%%\n",
                node->device_id, rssi, level);
+
+#ifndef LCD_SHOW_ELECTRICITY_ONLY
+    // LCD
+    {
+        char _r0[17], _r1[17];
+        snprintf(_r0, sizeof(_r0), "SOUND: %5.1f %%", level);
+        snprintf(_r1, sizeof(_r1), "R:%d N:%d B:%d", rssi, gw_node_count, gw_buf_count);
+        gw_lcd_show(0, _r0);
+        gw_lcd_show(1, _r1);
+    }
+#endif
 
     StaticJsonDocument<256> doc;
     doc["device_id"]    = node->device_id;
@@ -388,6 +410,17 @@ static bool gw_handle_water_uplink(const LoRaWaterUplink& pkt, int rssi) {
 
     LOG_PRINTF("GW RX <- [%s] RSSI=%ddBm suv p=%.3f/%.3f oqim=%.1f hajm=%.3f\n",
                node->device_id, rssi, p_bottom, p_top, flow, volume);
+
+#ifndef LCD_SHOW_ELECTRICITY_ONLY
+    // LCD
+    {
+        char _r0[17], _r1[17];
+        snprintf(_r0, sizeof(_r0), "WATER: %.2f bar", p_bottom);
+        snprintf(_r1, sizeof(_r1), "R:%d N:%d B:%d", rssi, gw_node_count, gw_buf_count);
+        gw_lcd_show(0, _r0);
+        gw_lcd_show(1, _r1);
+    }
+#endif
 
     StaticJsonDocument<384> doc;
     doc["device_id"]    = node->device_id;
@@ -428,6 +461,17 @@ static bool gw_handle_gas_uplink(const LoRaGasUplink& pkt, int rssi) {
 
     LOG_PRINTF("GW RX <- [%s] RSSI=%ddBm gaz p=%.3f oqim=%.3f hajm=%.3f\n",
                node->device_id, rssi, pressure, flow, volume);
+
+#ifndef LCD_SHOW_ELECTRICITY_ONLY
+    // LCD
+    {
+        char _r0[17], _r1[17];
+        snprintf(_r0, sizeof(_r0), "GAS: %.3f m3", volume);
+        snprintf(_r1, sizeof(_r1), "R:%d N:%d B:%d", rssi, gw_node_count, gw_buf_count);
+        gw_lcd_show(0, _r0);
+        gw_lcd_show(1, _r1);
+    }
+#endif
 
     StaticJsonDocument<384> doc;
     doc["device_id"]    = node->device_id;
@@ -564,10 +608,10 @@ void setup() {
     // Router o'chiq bo'lsa ≤16s da davom etadi: LoRa qabul (mesh) WiFi siz ham
     // ishlashi shart — readinglar buferda to'planib, server qaytganda ketadi.
 #ifndef DEFAULT_WIFI_SSID
-  #define DEFAULT_WIFI_SSID "12"
+  #define DEFAULT_WIFI_SSID ""
 #endif
 #ifndef DEFAULT_WIFI_PASS
-  #define DEFAULT_WIFI_PASS "12345678"
+  #define DEFAULT_WIFI_PASS ""
 #endif
 #ifndef WIFI_AP_NAME
   #define WIFI_AP_NAME   "Bakhromdev"
@@ -576,10 +620,12 @@ void setup() {
   #define WIFI_AP_PASS   "998935580311"
 #endif
     {
-        bool first_boot = !wifi_has_saved_creds();
         bool wifi_ok = wifi_connect_boot(DEFAULT_WIFI_SSID, DEFAULT_WIFI_PASS);
-        if (!wifi_ok && first_boot)
+        if (!wifi_ok) {
+            gw_lcd_show(0, "WiFi AP Portal");
+            gw_lcd_show(1, WIFI_AP_NAME);
             wifi_portal(WIFI_AP_NAME, WIFI_AP_PASS, gw_id, "LoRa Gateway");
+        }
     }
 
     // Server + OTA
@@ -593,6 +639,8 @@ void setup() {
     LOG_PRINT("LoRa SX1278 init...");
     if (!lora_init()) {
         LOG_PRINTLN(" XATO! Modul topilmadi.");
+        gw_lcd_show(0, "LoRa Xatolik!");
+        gw_lcd_show(1, "SX1278 Topilmadi");
         while (true) yield();
     }
     LoRa.receive();  // RX rejimida kutish

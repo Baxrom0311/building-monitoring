@@ -11,6 +11,8 @@ from models.schemas import (
     FirmwareCheckResponse,
     FirmwareInstallEventListResponse,
     FirmwareListResponse,
+    FirmwareOnDemandRequest,
+    FirmwareOnDemandResponse,
     FirmwareUploadResponse,
     OkResponse,
     OTABatchCancelResponse,
@@ -102,6 +104,16 @@ async def ota_upload(
 @router.get("/ota/list", response_model=FirmwareListResponse)
 async def ota_list(_: dict = Depends(current_token_payload)):
     return await ota_service.ota_list()
+
+
+@router.post("/ota/build-on-demand", response_model=FirmwareOnDemandResponse)
+async def ota_build_on_demand(
+    body: FirmwareOnDemandRequest,
+    admin: dict = Depends(require_admin),
+):
+    result = await ota_service.ota_build_on_demand(body)
+    await audit.record(admin, "ota.build_on_demand", "firmware", None, body.model_dump())
+    return result
 
 
 @router.delete("/ota/{fw_id}", response_model=OkResponse)

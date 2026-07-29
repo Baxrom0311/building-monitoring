@@ -1,46 +1,31 @@
 """Flash service — PlatformIO build va firmware fayllari bilan ishlash.
 
-Cross-platform (macOS, Windows, Linux) qo'llab-quvvatlaydi.
+Cross-platform (macOS, Windows, Linux) dinamic va avtomatik qo'llab-quvvatlash.
 """
 import os
 import sys
 import subprocess
+from pathlib import Path
+from services.tool_installer import ToolInstallerService
 
 
 class FlashService:
     """PlatformIO build va flash xizmati logikasi."""
 
     @staticmethod
-    def find_pio() -> str | None:
-        """PlatformIO CLI yo'lini topadi."""
-        candidates = ["pio", "platformio"]
-        home = os.path.expanduser("~")
-        if sys.platform == "win32":
-            candidates += [
-                os.path.join(home, ".platformio", "penv", "Scripts", "pio.exe"),
-                r"C:\Users\%s\.platformio\penv\Scripts\pio.exe" % os.getenv("USERNAME", ""),
-            ]
-        else:
-            candidates += [
-                os.path.join(home, ".platformio", "penv", "bin", "pio"),
-                "/usr/local/bin/pio",
-                "/opt/homebrew/bin/pio",
-                os.path.join(home, ".local", "bin", "pio"),
-            ]
-        for c in candidates:
-            try:
-                result = subprocess.run(
-                    [c, "--version"], capture_output=True, text=True, timeout=5
-                )
-                if result.returncode == 0:
-                    return c
-            except (FileNotFoundError, subprocess.TimeoutExpired, Exception):
-                continue
-        return None
+    def find_pio(log_cb=None) -> str | None:
+        """PlatformIO CLI yo'lini dinamik topadi yoki avtomatik o'rnatadi."""
+        return ToolInstallerService.ensure_platformio(log_cb=log_cb)
 
     @staticmethod
     def find_project_root() -> str | None:
-        """platformio.ini faylini topadi."""
+        """platformio.ini faylini har qanday muhitda dinamik topadi."""
+        # 1. Environment variable berilgan bo'lsa
+        env_root = os.getenv("ESP32STUDIO_IOT_DIR")
+        if env_root and os.path.exists(os.path.join(env_root, "platformio.ini")):
+            return env_root
+
+        # 2. Joriy fayldan yuqoriga qarab platformio.ini qidirish
         cur = os.path.dirname(os.path.abspath(__file__))
         for _ in range(6):
             if os.path.exists(os.path.join(cur, "platformio.ini")):
@@ -50,10 +35,18 @@ class FlashService:
                 break
             cur = parent
 
-        # Check relative to repo root
-        repo_iot = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "iot"))
-        if os.path.exists(os.path.join(repo_iot, "platformio.ini")):
-            return repo_iot
+        # 3. Ishchi katalog (CWD) va repo strukturasini tekshirish
+        cwd = os.getcwd()
+        candidates = [
+            os.path.join(cwd, "iot"),
+            os.path.join(os.path.dirname(cwd), "iot"),
+            os.path.join(Path.home(), ".esp32studio", "iot"),
+            os.path.join(Path.home(), "iot"),
+        ]
+
+        for cand in candidates:
+            if os.path.exists(os.path.join(cand, "platformio.ini")):
+                return cand
 
         return None
 

@@ -4,17 +4,56 @@ Cross-platform (macOS, Windows, Linux) ESP32 Firmware Flasher and Dual Serial Mo
 """
 import sys
 import os
+import traceback
+from datetime import datetime
+from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from PyQt6.QtWidgets import QApplication
+from PyQt6.QtWidgets import QApplication, QMessageBox
 from PyQt6.QtGui import QFont, QIcon
 
+from services.tool_installer import ToolInstallerService
 from ui.styles import DARK_THEME
 from ui.main_window import ESP32StudioWindow
 
 
+def setup_exception_handler():
+    """Unhandled exception handler for production stability."""
+    logs_dir = Path(ToolInstallerService.get_app_dir()) / "logs"
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    crash_log = logs_dir / "crash.log"
+
+    def handle_exception(exc_type, exc_value, exc_traceback):
+        if issubclass(exc_type, KeyboardInterrupt):
+            sys.__excepthook__(exc_type, exc_value, exc_traceback)
+            return
+
+        err_msg = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        try:
+            with open(crash_log, "a", encoding="utf-8") as f:
+                f.write(f"\n--- CRASH LOG [{timestamp}] ---\n{err_msg}\n")
+        except Exception:
+            pass
+
+        app = QApplication.instance()
+        if app:
+            msg_box = QMessageBox()
+            msg_box.setIcon(QMessageBox.Icon.Critical)
+            msg_box.setWindowTitle("ESP32 Studio — Xatolik")
+            msg_box.setText("Kutilmagan xatolik yuz berdi:")
+            msg_box.setInformativeText(str(exc_value))
+            msg_box.setDetailedText(err_msg)
+            msg_box.exec()
+
+    sys.excepthook = handle_exception
+
+
 def main():
+    setup_exception_handler()
+
     # Fix taskbar icon on Windows
     if sys.platform == "win32":
         import ctypes

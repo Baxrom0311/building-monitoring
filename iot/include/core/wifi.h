@@ -32,7 +32,9 @@ static bool wifi_has_saved_creds() {
     WiFi.mode(WIFI_STA);  // driver init — idempotent
     wifi_config_t conf;
     if (esp_wifi_get_config(WIFI_IF_STA, &conf) != ESP_OK) return false;
-    return conf.sta.ssid[0] != 0;
+    if (conf.sta.ssid[0] == 0) return false;
+    if (strcmp((const char*)conf.sta.ssid, "12") == 0) return false;
+    return true;
 }
 
 // Setup: portalsiz tez ulanish. Saqlangan creds → keyin default (bo'lsa).
@@ -40,10 +42,11 @@ static bool wifi_connect_boot(const char* def_ssid, const char* def_pass) {
     WiFi.mode(WIFI_STA);
     WiFi.setSleep(false);
 
+    bool has_def = (def_ssid && def_ssid[0] && strcmp(def_ssid, "12") != 0);
     bool saved = wifi_has_saved_creds();
     if (saved) {
         WiFi.begin();  // saqlangan creds bilan
-    } else if (def_ssid && def_ssid[0]) {
+    } else if (has_def) {
         WiFi.begin(def_ssid, def_pass);
     } else {
         return false;  // hech qanday ma'lumot yo'q — portal kerak
@@ -54,7 +57,7 @@ static bool wifi_connect_boot(const char* def_ssid, const char* def_pass) {
         yield();
 
     // Saqlangan creds eskirgan bo'lishi mumkin — default bilan bitta urinish
-    if (WiFi.status() != WL_CONNECTED && saved && def_ssid && def_ssid[0]) {
+    if (WiFi.status() != WL_CONNECTED && saved && has_def) {
         WiFi.disconnect(true);
         t = millis(); while (millis() - t < 300) yield();
         WiFi.begin(def_ssid, def_pass);

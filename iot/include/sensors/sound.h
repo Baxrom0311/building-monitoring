@@ -30,14 +30,17 @@ struct SensorData {
 static float s_noise_floor  = 0.0f;
 static float s_level_smooth = 0.0f;
 
-// ADC amplituda: max - min (delay yo'q)
+// ADC amplituda: 50ms audio sample oyna ichida peak-to-peak o'lchash
 static int _sound_amplitude() {
     int lo = 4095, hi = 0;
-    for (int i = 0; i < SOUND_SAMPLES; i++) {
+    unsigned long start = millis();
+    while (millis() - start < 50) {
         int v = analogRead(PIN_SOUND_ADC);
         if (v < lo) lo = v;
         if (v > hi) hi = v;
+        delayMicroseconds(50);
     }
+    if (hi < lo) return 0;
     return hi - lo;
 }
 
@@ -49,16 +52,21 @@ static void sensor_init() {
     pinMode(PIN_SOUND_ADC, INPUT);
     for (int i = 0; i < 10; i++) analogRead(PIN_SOUND_ADC);
 
-    // Boshlang'ich noise floor — 20 o'qishning o'rtachasi
+    // Boshlang'ich noise floor — 10 ta o'qishning o'rtachasi
     long sum = 0;
-    for (int i = 0; i < 20; i++) sum += _sound_amplitude();
-    s_noise_floor = (float)sum / 20.0f;
+    for (int i = 0; i < 10; i++) sum += _sound_amplitude();
+    s_noise_floor = (float)sum / 10.0f;
+    if (s_noise_floor < 10.0f) s_noise_floor = 10.0f;
+    s_level_smooth = 0.0f;
 
-    LOG_PRINTF("Ovoz sensori (GPIO%d) noise=%.0f ref=%d\n",
-               PIN_SOUND_ADC, s_noise_floor, SOUND_FIGHT_REF);
+    LOG_PRINTF("Ovoz sensori (GPIO%d) noise=%.0f\n", PIN_SOUND_ADC, s_noise_floor);
 }
 
 static bool sensor_connect() { return true; }
+
+#ifndef SOUND_SCALE_REF
+  #define SOUND_SCALE_REF 2500.0f
+#endif
 
 static bool sensor_read(SensorData& d) {
     if (g_cfg.test_mode) {
@@ -71,17 +79,19 @@ static bool sensor_read(SensorData& d) {
 
     int amp = _sound_amplitude();
 
-    // Avtomatik noise moslashish (EMA)
-    // Jim → asta-sekin moslashadi | Ovoz → o'zgarmaydi
-    if ((float)amp < s_noise_floor * 1.3f)
-        s_noise_floor = s_noise_floor * 0.98f + (float)amp * 0.02f;
+    // Avtomatik noise floor moslashuvi (asta-sekin)
+    if ((float)amp < s_noise_floor * 1.5f) {
+        s_noise_floor = s_noise_floor * 0.95f + (float)amp * 0.05f;
+    }
 
-    float real  = max(0.0f, (float)amp - s_noise_floor);
-    float level = constrain(real / (float)SOUND_FIGHT_REF * 100.0f, 0.0f, 100.0f);
+    float real = max(0.0f, (float)amp - s_noise_floor);
+    float target_level = constrain((real / SOUND_SCALE_REF) * 100.0f, 0.0f, 100.0f);
 
-    // EMA silliqlashtirish: tez yuqoriga (0.6), sekin pastga (0.15)
-    float alpha = (level > s_level_smooth) ? 0.6f : 0.15f;
-    s_level_smooth += (level - s_level_smooth) * alpha;
+    // EMA silliqlashtirish (sakramaydigan tekis harakat): o'sish 0.25, tushish 0.08
+    float alpha = (target_level > s_level_smooth) ? 0.25f : 0.08f;
+    s_level_smooth += (target_level - s_level_smooth) * alpha;
+
+    if (s_level_smooth < 0.5f) s_level_smooth = 0.0f;
 
     d = {s_level_smooth, true};
     return true;
