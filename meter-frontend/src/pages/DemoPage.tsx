@@ -209,36 +209,44 @@ const CHARTS = [
 interface ApartmentUsage {
   id: number
   floor: number
-  electricityW: number
-  waterLmin: number
+  electricityKwh: number   // shu oy hozirgacha jami — faqat o'sadi, kamaymaydi
+  waterM3: number          // shu oy hozirgacha jami — faqat o'sadi, kamaymaydi
+  electricityRate: number  // har tikda qo'shiladigan o'sish (kWh)
+  waterRate: number        // har tikda qo'shiladigan o'sish (m3)
 }
 
 const APARTMENTS_PER_FLOOR = 4
 const APARTMENT_COUNT = 24
 
+// Muhim: real hisoblagich ko'rsatkichi (iste'mol) hech qachon kamaymaydi —
+// faqat o'sib boradi. Shu sabab bu yerda "hozirgi tik" ga qarab ORTIB
+// boruvchi qiymat hisoblanadi (base + tick*rate), tasodifiy pastga
+// tebranish YO'Q — aks holda real foydalanuvchiga shubhali ko'rinadi.
 function generateApartments(): ApartmentUsage[] {
   return Array.from({ length: APARTMENT_COUNT }, (_, i) => {
     const id = i + 1
     const floor = Math.floor(i / APARTMENTS_PER_FLOOR) + 1
 
-    let electricityW = 90 + Math.abs(noise(i + 500)) * 260
-    let waterLmin = Math.abs(noise(i + 700)) * 2.0
+    let electricityKwh = 60 + Math.abs(noise(i + 500)) * 160
+    let waterM3 = 1.5 + Math.abs(noise(i + 700)) * 6.5
 
     // Ko'zga tashlanadigan "ko'p ishlatuvchi" / "kam ishlatuvchi" holatlar
-    if (id === 7)  electricityW = 1580   // konditsioner + kir mashinasi ishlayapti
-    if (id === 19) electricityW = 1320   // isitgich + televizor + hammasi yoqiq
-    if (id === 3)  electricityW = 28     // deyarli bo'sh xonadon (faqat muzlatgich)
-    if (id === 14) electricityW = 45
-    if (id === 11) waterLmin = 9.2       // dush ishlatilmoqda
-    if (id === 22) waterLmin = 6.8       // idish yuvish mashinasi
-    if (id === 3)  waterLmin = 0
-    if (id === 9)  waterLmin = 0
+    if (id === 7)  electricityKwh = 412   // konditsioner + kir mashinasi ko'p ishlaydi
+    if (id === 19) electricityKwh = 358   // isitgich + televizor doim yoqiq
+    if (id === 3)  electricityKwh = 9     // deyarli bo'sh xonadon (faqat muzlatgich)
+    if (id === 14) electricityKwh = 14
+    if (id === 11) waterM3 = 15.8         // katta oila, dush ko'p ishlaydi
+    if (id === 22) waterM3 = 12.4
+    if (id === 3)  waterM3 = 0.4
+    if (id === 9)  waterM3 = 0.6
 
     return {
       id,
       floor,
-      electricityW: +electricityW.toFixed(0),
-      waterLmin: +Math.max(0, waterLmin).toFixed(2),
+      electricityKwh: +electricityKwh.toFixed(1),
+      waterM3: +Math.max(0, waterM3).toFixed(2),
+      electricityRate: +(0.03 + Math.abs(noise(i + 850)) * 0.12).toFixed(3),
+      waterRate: +(0.002 + Math.abs(noise(i + 870)) * 0.006).toFixed(4),
     }
   })
 }
@@ -387,7 +395,7 @@ function ApartmentRankPanel({
 
       <div className="max-h-[340px] overflow-y-auto px-3 py-2 space-y-1">
         {items.map((it, idx) => {
-          const isTop = idx < 3
+          const isTop = idx < 2
           const isBottom = idx >= n - 3
           const pct = Math.max(3, (it.value / max) * 100)
           return (
@@ -536,18 +544,14 @@ export default function DemoPage() {
 
   const apartmentsBase = useMemo(() => generateApartments(), [])
 
+  // Faqat o'sib boradi (base + tick*rate) — real hisoblagich kabi, hech qachon
+  // kamaymaydi (aks holda foydalanuvchiga shubhali ko'rinadi).
   const apartmentsLive = useMemo(
     () =>
       apartmentsBase.map((a) => ({
         ...a,
-        electricityW: Math.max(
-          5,
-          +(a.electricityW + Math.sin(tick * 0.5 + a.id) * (a.electricityW * 0.03)).toFixed(0),
-        ),
-        waterLmin: Math.max(
-          0,
-          +(a.waterLmin + Math.sin(tick * 0.7 + a.id * 1.3) * 0.15).toFixed(2),
-        ),
+        electricityKwh: +(a.electricityKwh + tick * a.electricityRate).toFixed(1),
+        waterM3: +(a.waterM3 + tick * a.waterRate).toFixed(2),
       })),
     [apartmentsBase, tick],
   )
@@ -555,16 +559,16 @@ export default function DemoPage() {
   const rankByElectricity: RankItem[] = useMemo(
     () =>
       [...apartmentsLive]
-        .sort((a, b) => b.electricityW - a.electricityW)
-        .map((a) => ({ id: a.id, floor: a.floor, value: a.electricityW })),
+        .sort((a, b) => b.electricityKwh - a.electricityKwh)
+        .map((a) => ({ id: a.id, floor: a.floor, value: a.electricityKwh })),
     [apartmentsLive],
   )
 
   const rankByWater: RankItem[] = useMemo(
     () =>
       [...apartmentsLive]
-        .sort((a, b) => b.waterLmin - a.waterLmin)
-        .map((a) => ({ id: a.id, floor: a.floor, value: a.waterLmin })),
+        .sort((a, b) => b.waterM3 - a.waterM3)
+        .map((a) => ({ id: a.id, floor: a.floor, value: a.waterM3 })),
     [apartmentsLive],
   )
 
@@ -594,7 +598,7 @@ export default function DemoPage() {
           <div>
             <div className="flex items-center gap-2">
               <span className="text-base font-extrabold tracking-tight text-white">
-                Turar-joy binosi №23
+                Turar-joy binosi №12
               </span>
               <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-blue-500/15 text-blue-400 border border-blue-500/30 tracking-wider">
                 DEMO
@@ -849,20 +853,20 @@ export default function DemoPage() {
           </div>
           <div className="flex flex-col lg:flex-row gap-4">
             <ApartmentRankPanel
-              title="Elektr iste'moli"
+              title="Elektr iste'moli (bu oy)"
               icon={Zap}
               color="#FACC15"
               glow="rgba(250,204,21,0.35)"
-              unit="W"
-              decimals={0}
+              unit="kWh"
+              decimals={1}
               items={rankByElectricity}
             />
             <ApartmentRankPanel
-              title="Suv iste'moli"
+              title="Suv iste'moli (bu oy)"
               icon={Droplets}
               color="#22D3EE"
               glow="rgba(34,211,238,0.35)"
-              unit="L/min"
+              unit="m³"
               decimals={2}
               items={rankByWater}
             />
