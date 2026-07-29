@@ -454,7 +454,6 @@ export default function DashboardPage() {
                     <TableHead className="w-10" />
                     <TableHead>Qurilma</TableHead>
                     <TableHead>Tur</TableHead>
-                    <TableHead>IP</TableHead>
                     <TableHead>Ko'rilgan</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -482,9 +481,6 @@ export default function DashboardPage() {
                         <Badge variant="outline">
                           {UTILITY_LABELS[device.utility_type] || device.utility_type}
                         </Badge>
-                      </TableCell>
-                      <TableCell className="font-mono text-xs text-muted-foreground">
-                        {device.ip || '—'}
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
                         <span className="flex items-center gap-1">

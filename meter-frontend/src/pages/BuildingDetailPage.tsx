@@ -308,7 +308,6 @@ export default function BuildingDetailPage() {
                         <th className="px-6 py-4">Holat</th>
                         <th className="px-6 py-4">Qurilma nomi / ID</th>
                         <th className="px-6 py-4">Turi</th>
-                        <th className="px-6 py-4">IP manzil</th>
                         {isAdmin && <th className="px-6 py-4 text-right">Amallar</th>}
                       </tr>
                     </thead>
@@ -328,7 +327,6 @@ export default function BuildingDetailPage() {
                           <td className="px-6 py-4 text-gray-700 dark:text-gray-350">
                             {translations.deviceTypes[device.utility_type as keyof typeof translations.deviceTypes] || device.utility_type}
                           </td>
-                          <td className="px-6 py-4 font-mono text-gray-600 dark:text-gray-400">{device.ip ?? '—'}</td>
                           {isAdmin && (
                             <td className="px-6 py-4 text-right">
                               <button

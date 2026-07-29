@@ -307,10 +307,6 @@ export default function DeviceDetailPage() {
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500 mb-1 uppercase tracking-wider">{translations.devices.ip}</p>
-                    <p className="text-gray-800 dark:text-gray-100 font-mono font-medium text-xs">{device.ip ?? '—'}</p>
-                  </div>
-                  <div>
                     <p className="text-xs text-gray-500 mb-1 uppercase tracking-wider">Tizim Faolligi</p>
                     <div className="flex flex-wrap gap-1.5">
                       <span className={`px-2 py-0.5 rounded text-xs font-semibold ${

@@ -69,7 +69,6 @@ const deviceTableColumns: TableColumn[] = [
   { key: 'status', label: 'Holat' },
   { key: 'id', label: 'ID / nom' },
   { key: 'type', label: 'Tur' },
-  { key: 'ip', label: 'IP manzil' },
   { key: 'firmware', label: 'Firmware' },
   { key: 'actions', label: 'Amallar' },
 ]
@@ -202,13 +201,12 @@ export default function DevicesPage() {
     if (!devices.length) return
     downloadCsv(
       `devices_${new Date().toISOString().slice(0, 10)}.csv`,
-      ['ID', 'Name', 'Utility', 'Status', 'IP', 'Firmware', 'Building ID'],
+      ['ID', 'Name', 'Utility', 'Status', 'Firmware', 'Building ID'],
       devices.map((d) => [
         d.id,
         d.name ?? '',
         d.utility_type,
         d.online ? 'online' : 'offline',
-        d.ip ?? '',
         d.fw_version ?? '',
         d.building_id ?? '',
       ]),
@@ -250,7 +248,7 @@ export default function DevicesPage() {
             <Input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Qurilma ID, nomi yoki IP manzilini qidirish..."
+              placeholder="Qurilma ID yoki nomini qidirish..."
               className="pl-9"
             />
           </div>
@@ -334,7 +332,6 @@ export default function DevicesPage() {
                   {isColumnVisible('status') && <TableHead className="w-24">Holat</TableHead>}
                   {isColumnVisible('id') && <TableHead>ID / nom</TableHead>}
                   {isColumnVisible('type') && <TableHead>Tur</TableHead>}
-                  {isColumnVisible('ip') && <TableHead>IP manzil</TableHead>}
                   {isColumnVisible('firmware') && <TableHead>Firmware</TableHead>}
                   {isColumnVisible('actions') && <TableHead className="w-12" />}
                 </TableRow>
@@ -387,9 +384,6 @@ export default function DevicesPage() {
                       <TableCell>
                         <Badge variant="secondary">{utilityLabel(device.utility_type)}</Badge>
                       </TableCell>
-                    )}
-                    {isColumnVisible('ip') && (
-                      <TableCell className="font-mono text-muted-foreground">{device.ip ?? '—'}</TableCell>
                     )}
                     {isColumnVisible('firmware') && (
                       <TableCell className="font-mono text-muted-foreground">{device.fw_version ?? '—'}</TableCell>

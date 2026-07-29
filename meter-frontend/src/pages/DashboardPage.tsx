@@ -232,7 +232,6 @@ export default function DashboardPage() {
                       <th className="text-left px-5 py-3 text-xs text-gray-500 font-semibold uppercase tracking-wide w-10"></th>
                       <th className="text-left px-5 py-3 text-xs text-gray-500 font-semibold uppercase tracking-wide">Qurilma</th>
                       <th className="text-left px-5 py-3 text-xs text-gray-500 font-semibold uppercase tracking-wide">Tur</th>
-                      <th className="text-left px-5 py-3 text-xs text-gray-500 font-semibold uppercase tracking-wide">IP</th>
                       <th className="text-left px-5 py-3 text-xs text-gray-500 font-semibold uppercase tracking-wide">Ko'rilgan</th>
                     </tr>
                   </thead>
@@ -257,7 +256,6 @@ export default function DashboardPage() {
                               {translations.deviceTypes[device.utility_type as keyof typeof translations.deviceTypes] || device.utility_type}
                             </span>
                           </td>
-                          <td className="px-5 py-3.5 text-gray-500 dark:text-gray-400 font-mono text-xs">{device.ip || '—'}</td>
                           <td className="px-5 py-3.5 text-gray-500 dark:text-gray-400 text-xs">
                             <span className="flex items-center gap-1">
                               <Clock className="w-3 h-3 shrink-0" />

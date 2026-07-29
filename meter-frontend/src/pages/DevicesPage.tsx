@@ -32,7 +32,6 @@ const deviceTableColumns: TableColumn[] = [
   { key: 'status',   label: 'Holat'    },
   { key: 'id',       label: 'ID / nom' },
   { key: 'type',     label: 'Tur'      },
-  { key: 'ip',       label: 'IP manzil'},
   { key: 'firmware', label: 'Firmware' },
   { key: 'actions',  label: 'Amallar'  },
 ]
@@ -144,11 +143,11 @@ export default function DevicesPage() {
     if (!devices.length) return
     downloadCsv(
       `devices_${new Date().toISOString().slice(0, 10)}.csv`,
-      ['ID', 'Name', 'Utility', 'Status', 'IP', 'Firmware', 'Building ID'],
+      ['ID', 'Name', 'Utility', 'Status', 'Firmware', 'Building ID'],
       devices.map((d) => [
         d.id, d.name ?? '', d.utility_type,
         d.online ? 'online' : 'offline',
-        d.ip ?? '', d.fw_version ?? '', d.building_id ?? '',
+        d.fw_version ?? '', d.building_id ?? '',
       ]),
     )
     notifySuccess('CSV eksport qilindi', `${devices.length} ta qurilma (joriy sahifa)`)
@@ -191,7 +190,7 @@ export default function DevicesPage() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Qurilma ID, nomi yoki IP manzilini qidirish..."
+              placeholder="Qurilma ID yoki nomini qidirish..."
               className="w-full pl-10 pr-4 py-2 rounded-lg glass-input focus:outline-none text-sm"
             />
           </div>
@@ -322,11 +321,6 @@ export default function DevicesPage() {
                         {translations.devices.type}
                       </th>
                     )}
-                    {isColumnVisible('ip') && (
-                      <th className="text-left px-6 py-4 text-gray-600 dark:text-gray-400 font-semibold">
-                        {translations.devices.ip}
-                      </th>
-                    )}
                     {isColumnVisible('firmware') && (
                       <th className="text-left px-6 py-4 text-gray-600 dark:text-gray-400 font-semibold">
                         {translations.devices.firmware}
@@ -405,7 +399,6 @@ export default function DevicesPage() {
                           </span>
                         </td>
                       )}
-                      {isColumnVisible('ip')       && <td className="px-6 py-4 text-gray-600 dark:text-gray-400 font-mono">{device.ip       ?? '—'}</td>}
                       {isColumnVisible('firmware') && <td className="px-6 py-4 text-gray-600 dark:text-gray-400 font-mono">{device.fw_version ?? '—'}</td>}
                       {isColumnVisible('actions')  && (
                         <td className="px-6 py-4">
@@ -476,10 +469,6 @@ export default function DevicesPage() {
                         <span className={clsx('font-semibold', utilTab?.accent)}>
                           {translations.deviceTypes[device.utility_type as keyof typeof translations.deviceTypes] || device.utility_type}
                         </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>IP</span>
-                        <span className="font-mono">{device.ip ?? '—'}</span>
                       </div>
                       <div className="flex justify-between">
                         <span>Firmware</span>

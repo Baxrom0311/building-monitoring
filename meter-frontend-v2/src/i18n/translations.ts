@@ -68,7 +68,6 @@ export const translations = {
     id: 'ID',
     type: 'Tur',
     building: 'Bino',
-    ip: 'IP manzili',
     firmware: 'Firmware',
     lastSeen: 'Oxirgi aloqa',
     status: 'Holat',

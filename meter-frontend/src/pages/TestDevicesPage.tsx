@@ -278,7 +278,6 @@ export default function TestDevicesPage() {
                     <th className="text-left px-5 py-4 text-gray-600 dark:text-gray-400 font-semibold">Holat</th>
                     <th className="text-left px-5 py-4 text-gray-600 dark:text-gray-400 font-semibold">Qurilma</th>
                     <th className="text-left px-5 py-4 text-gray-600 dark:text-gray-400 font-semibold">Hisoblagich</th>
-                    <th className="text-left px-5 py-4 text-gray-600 dark:text-gray-400 font-semibold">IP</th>
                     <th className="text-left px-5 py-4 text-gray-600 dark:text-gray-400 font-semibold">Oxirgi ko'rilgan</th>
                     <th className="text-left px-5 py-4 text-gray-600 dark:text-gray-400 font-semibold">Cleanup</th>
                   </tr>
@@ -304,7 +303,6 @@ export default function TestDevicesPage() {
                           {device.meter_serial ?? '-'}
                         </span>
                       </td>
-                      <td className="px-5 py-4 font-mono text-gray-600 dark:text-gray-400">{device.ip ?? '-'}</td>
                       <td className="px-5 py-4 text-gray-700 dark:text-gray-300">{formatTime(device.last_seen)}</td>
                       <td className="px-5 py-4">
                         <span className="inline-flex items-center gap-1.5 text-xs font-bold text-orange-500">

@@ -708,7 +708,6 @@ export default function BuildingDetailPage() {
                             <TableHead>Holat</TableHead>
                             <TableHead>Qurilma nomi / ID</TableHead>
                             <TableHead>Turi</TableHead>
-                            <TableHead>IP manzil</TableHead>
                             {isAdmin && <TableHead className="text-right">Amallar</TableHead>}
                           </TableRow>
                         </TableHeader>
@@ -732,9 +731,6 @@ export default function BuildingDetailPage() {
                                 </Link>
                               </TableCell>
                               <TableCell>{utilityLabel(device.utility_type)}</TableCell>
-                              <TableCell className="font-mono text-muted-foreground">
-                                {device.ip ?? '—'}
-                              </TableCell>
                               {isAdmin && (
                                 <TableCell className="text-right">
                                   <Button

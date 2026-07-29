@@ -458,7 +458,6 @@ export default function DeviceDetailPage() {
                         : '—'
                     }
                   />
-                  <InfoField label="IP manzil" value={device.ip ?? '—'} mono />
                   <div>
                     <p className="mb-1 text-xs uppercase tracking-wider text-muted-foreground">Tizim faolligi</p>
                     <div className="flex flex-wrap gap-1.5">

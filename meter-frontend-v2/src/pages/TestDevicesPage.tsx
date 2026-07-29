@@ -291,7 +291,6 @@ export default function TestDevicesPage() {
                   <TableHead>Holat</TableHead>
                   <TableHead>Qurilma</TableHead>
                   <TableHead>Hisoblagich</TableHead>
-                  <TableHead>IP</TableHead>
                   <TableHead>Oxirgi ko'rilgan</TableHead>
                   <TableHead>Cleanup</TableHead>
                 </TableRow>
@@ -322,7 +321,6 @@ export default function TestDevicesPage() {
                         {device.meter_serial ?? '-'}
                       </Badge>
                     </TableCell>
-                    <TableCell className="font-mono text-muted-foreground">{device.ip ?? '-'}</TableCell>
                     <TableCell>{formatTime(device.last_seen)}</TableCell>
                     <TableCell>
                       <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-500">
