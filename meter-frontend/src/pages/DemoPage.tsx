@@ -10,7 +10,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { Zap, Sprout, Volume2 } from 'lucide-react'
+import { Zap, Sprout, Volume2, Droplets, TrendingUp, TrendingDown } from 'lucide-react'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -158,6 +158,45 @@ const CHARTS = [
   },
 ]
 
+// ── Xonadonlar iste'moli (mock) ────────────────────────────────────────────────
+
+interface ApartmentUsage {
+  id: number
+  floor: number
+  electricityW: number
+  waterLmin: number
+}
+
+const APARTMENTS_PER_FLOOR = 4
+const APARTMENT_COUNT = 24
+
+function generateApartments(): ApartmentUsage[] {
+  return Array.from({ length: APARTMENT_COUNT }, (_, i) => {
+    const id = i + 1
+    const floor = Math.floor(i / APARTMENTS_PER_FLOOR) + 1
+
+    let electricityW = 90 + Math.abs(noise(i + 500)) * 260
+    let waterLmin = Math.abs(noise(i + 700)) * 2.0
+
+    // Ko'zga tashlanadigan "ko'p ishlatuvchi" / "kam ishlatuvchi" holatlar
+    if (id === 7)  electricityW = 1580   // konditsioner + kir mashinasi ishlayapti
+    if (id === 19) electricityW = 1320   // isitgich + televizor + hammasi yoqiq
+    if (id === 3)  electricityW = 28     // deyarli bo'sh xonadon (faqat muzlatgich)
+    if (id === 14) electricityW = 45
+    if (id === 11) waterLmin = 9.2       // dush ishlatilmoqda
+    if (id === 22) waterLmin = 6.8       // idish yuvish mashinasi
+    if (id === 3)  waterLmin = 0
+    if (id === 9)  waterLmin = 0
+
+    return {
+      id,
+      floor,
+      electricityW: +electricityW.toFixed(0),
+      waterLmin: +Math.max(0, waterLmin).toFixed(2),
+    }
+  })
+}
+
 // ── Status helper ─────────────────────────────────────────────────────────────
 
 type StatusLevel = 'normal' | 'warn' | 'danger'
@@ -207,6 +246,101 @@ function Clock() {
   )
 }
 
+// ── Xonadonlar reytingi paneli ────────────────────────────────────────────────
+
+interface RankItem {
+  id: number
+  floor: number
+  value: number
+}
+
+function ApartmentRankPanel({
+  title,
+  icon: Icon,
+  color,
+  glow,
+  unit,
+  decimals,
+  items,
+}: {
+  title: string
+  icon: typeof Zap
+  color: string
+  glow: string
+  unit: string
+  decimals: number
+  items: RankItem[]
+}) {
+  const max = Math.max(...items.map((it) => it.value), 1)
+  const n = items.length
+
+  return (
+    <div className="flex-1 min-w-0 rounded-xl border border-slate-800/60 bg-slate-900/40 backdrop-blur-sm overflow-hidden flex flex-col">
+      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-800/50">
+        <div
+          className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+          style={{ backgroundColor: `${color}18`, color }}
+        >
+          <Icon className="w-4 h-4" />
+        </div>
+        <span className="text-xs font-bold text-slate-200 tracking-wide uppercase">{title}</span>
+        <span className="text-[10px] text-slate-500 ml-auto">{n} ta xonadon</span>
+      </div>
+
+      <div className="max-h-[340px] overflow-y-auto px-3 py-2 space-y-1">
+        {items.map((it, idx) => {
+          const isTop = idx < 3
+          const isBottom = idx >= n - 3
+          const pct = Math.max(3, (it.value / max) * 100)
+          return (
+            <div
+              key={it.id}
+              className="flex items-center gap-2.5 py-1.5 px-1.5 rounded-lg"
+              style={{
+                backgroundColor: isTop
+                  ? 'rgba(239,68,68,0.06)'
+                  : isBottom
+                    ? 'rgba(34,197,94,0.06)'
+                    : 'transparent',
+              }}
+            >
+              <span className="w-5 text-[11px] font-mono font-bold text-slate-500 text-right shrink-0">
+                {idx + 1}
+              </span>
+              <span className="w-24 lg:w-28 text-[11px] text-slate-300 font-semibold truncate shrink-0">
+                {it.id}-xonadon <span className="text-slate-500 font-normal">· {it.floor}-qavat</span>
+              </span>
+              <div className="flex-1 min-w-[40px] h-2 rounded-full bg-slate-800/70 overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all duration-700"
+                  style={{ width: `${pct}%`, backgroundColor: color, boxShadow: `0 0 8px ${glow}` }}
+                />
+              </div>
+              <span
+                className="w-16 text-right text-[11px] font-mono font-bold tabular-nums shrink-0"
+                style={{ color }}
+              >
+                {it.value.toFixed(decimals)} {unit}
+              </span>
+              {isTop && <TrendingUp className="w-3.5 h-3.5 text-red-400 shrink-0" />}
+              {isBottom && <TrendingDown className="w-3.5 h-3.5 text-emerald-400 shrink-0" />}
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="flex items-center gap-4 px-4 py-2 border-t border-slate-800/50 text-[10px] text-slate-500">
+        <span className="flex items-center gap-1">
+          <TrendingUp className="w-3 h-3 text-red-400" /> Eng ko'p ishlatayotganlar
+        </span>
+        <span className="flex items-center gap-1">
+          <TrendingDown className="w-3 h-3 text-emerald-400" /> Eng kam ishlatayotganlar
+        </span>
+      </div>
+    </div>
+  )
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function DemoPage() {
@@ -220,6 +354,40 @@ export default function DemoPage() {
   const baseData = useMemo(
     () => CHARTS.map((cfg) => ({ key: cfg.key, points: cfg.getPoints() })),
     [],
+  )
+
+  const apartmentsBase = useMemo(() => generateApartments(), [])
+
+  const apartmentsLive = useMemo(
+    () =>
+      apartmentsBase.map((a) => ({
+        ...a,
+        electricityW: Math.max(
+          5,
+          +(a.electricityW + Math.sin(tick * 0.5 + a.id) * (a.electricityW * 0.03)).toFixed(0),
+        ),
+        waterLmin: Math.max(
+          0,
+          +(a.waterLmin + Math.sin(tick * 0.7 + a.id * 1.3) * 0.15).toFixed(2),
+        ),
+      })),
+    [apartmentsBase, tick],
+  )
+
+  const rankByElectricity: RankItem[] = useMemo(
+    () =>
+      [...apartmentsLive]
+        .sort((a, b) => b.electricityW - a.electricityW)
+        .map((a) => ({ id: a.id, floor: a.floor, value: a.electricityW })),
+    [apartmentsLive],
+  )
+
+  const rankByWater: RankItem[] = useMemo(
+    () =>
+      [...apartmentsLive]
+        .sort((a, b) => b.waterLmin - a.waterLmin)
+        .map((a) => ({ id: a.id, floor: a.floor, value: a.waterLmin })),
+    [apartmentsLive],
   )
 
   // Animate the last point every tick
@@ -485,6 +653,38 @@ export default function DemoPage() {
             </div>
           )
         })}
+
+        {/* ── Xonadonlar iste'moli reytingi ── */}
+        <div className="p-4 lg:p-6 bg-gradient-to-br from-slate-900/60 to-slate-950">
+          <div className="flex items-center gap-2 mb-4">
+            <span className="text-sm font-extrabold text-white tracking-tight uppercase">
+              Xonadonlar bo'yicha iste'mol
+            </span>
+            <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-blue-500/15 text-blue-400 border border-blue-500/30 tracking-wider">
+              DEMO
+            </span>
+          </div>
+          <div className="flex flex-col lg:flex-row gap-4">
+            <ApartmentRankPanel
+              title="Elektr iste'moli"
+              icon={Zap}
+              color="#FACC15"
+              glow="rgba(250,204,21,0.35)"
+              unit="W"
+              decimals={0}
+              items={rankByElectricity}
+            />
+            <ApartmentRankPanel
+              title="Suv iste'moli"
+              icon={Droplets}
+              color="#22D3EE"
+              glow="rgba(34,211,238,0.35)"
+              unit="L/min"
+              decimals={2}
+              items={rankByWater}
+            />
+          </div>
+        </div>
       </div>
     </div>
   )
