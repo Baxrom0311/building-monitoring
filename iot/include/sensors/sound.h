@@ -18,7 +18,7 @@
   #define SOUND_SAMPLES   300
 #endif
 #ifndef SOUND_FIGHT_REF
-  #define SOUND_FIGHT_REF 40
+  #define SOUND_FIGHT_REF 2500.0f
 #endif
 
 struct SensorData {
@@ -64,10 +64,6 @@ static void sensor_init() {
 
 static bool sensor_connect() { return true; }
 
-#ifndef SOUND_SCALE_REF
-  #define SOUND_SCALE_REF 2500.0f
-#endif
-
 static bool sensor_read(SensorData& d) {
     if (g_cfg.test_mode) {
         static float sim = 25.0f;
@@ -85,7 +81,7 @@ static bool sensor_read(SensorData& d) {
     }
 
     float real = max(0.0f, (float)amp - s_noise_floor);
-    float target_level = constrain((real / SOUND_SCALE_REF) * 100.0f, 0.0f, 100.0f);
+    float target_level = constrain((real / SOUND_FIGHT_REF) * 100.0f, 0.0f, 100.0f);
 
     // EMA silliqlashtirish (sakramaydigan tekis harakat): o'sish 0.25, tushish 0.08
     float alpha = (target_level > s_level_smooth) ? 0.25f : 0.08f;

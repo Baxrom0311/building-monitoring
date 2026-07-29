@@ -23,21 +23,35 @@
 #include <ArduinoJson.h>
 
 // ─── ADC pin ──────────────────────────────────────────────────────────────────
-#define PIN_PRESSURE_GAS   35   // GPIO35 = ADC1_CH7 (faqat input)
+#ifndef PIN_PRESSURE_GAS
+  #define PIN_PRESSURE_GAS   35   // GPIO35 = ADC1_CH7 (faqat input)
+#endif
 
 // ─── Kalibrovka ───────────────────────────────────────────────────────────────
 // Gaz tizimi uchun odatda past bosim: 0.02–0.5 bar (past bosimli uy gazi)
 // Yoki 0–5 bar (o'rta bosimli)
-// Sensor tipiga qarab o'zgartiring:
-#define SENSOR_MAX_BAR      5.0f   // Sensor maksimal bosimi (bar)
-#define SENSOR_V_ZERO       0.33f  // 0 bar dagi voltaj (0.5V * 3.3/5)
-#define SENSOR_V_FULL       2.97f  // Max bar dagi voltaj (4.5V * 3.3/5)
-#define SENSOR_ADC_SAMPLES    16
+// Sensor tipiga qarab -D... build_flags orqali o'zgartiring:
+#ifndef SENSOR_MAX_BAR
+  #define SENSOR_MAX_BAR      5.0f   // Sensor maksimal bosimi (bar)
+#endif
+#ifndef SENSOR_V_ZERO
+  #define SENSOR_V_ZERO       0.33f  // 0 bar dagi voltaj (0.5V * 3.3/5)
+#endif
+#ifndef SENSOR_V_FULL
+  #define SENSOR_V_FULL       2.97f  // Max bar dagi voltaj (4.5V * 3.3/5)
+#endif
+#ifndef SENSOR_ADC_SAMPLES
+  #define SENSOR_ADC_SAMPLES    16
+#endif
 
 // ─── SensorData (gaz) ─────────────────────────────────────────────────────────
 // ─── Pulse sensor setting ───────────────────────────────────────────────────
-#define PIN_GAS_PULSE         26     // GPIO26 gas flow pulse input
-#define GAS_M3_PER_PULSE       0.01f  // 10 litr per pulse = 0.01 m3 (o'zgartirish mumkin)
+#ifndef PIN_GAS_PULSE
+  #define PIN_GAS_PULSE         26     // GPIO26 gas flow pulse input
+#endif
+#ifndef GAS_M3_PER_PULSE
+  #define GAS_M3_PER_PULSE       0.01f  // 10 litr per pulse = 0.01 m3 (o'zgartirish mumkin)
+#endif
 #define DEBOUNCE_DELAY_MS     50     // Shovqindan saqlash millisoniyalari
 
 static volatile unsigned long g_gas_pulse_count = 0;
