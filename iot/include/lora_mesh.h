@@ -9,8 +9,6 @@
  *   - relay: TTL-- qilib qayta uzatish (CRC TTL-mask tufayli buzilmaydi)
  *   - ACK yuborish
  *
- * Talab: lora_packet.h (va u orqali lora_crypto.h) oldin include qilingan
- * bo'lishi kerak; core/log.h va core/watchdog.h ham.
  */
 
 #include <Preferences.h>

@@ -32,7 +32,6 @@
  *   - Bir nechta gateway bo'lsa qaysi biri qabul qila olsa o'sha ACK beradi;
  *     server duplikatlarni reading_id="MAC-seq" orqali tashlaydi
  *
- * Shifrlash (lora_crypto.h): payload offset 12 dan, nonce = MAC+type+seq+blk
  */
 
 #include <Arduino.h>
