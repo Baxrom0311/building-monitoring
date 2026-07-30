@@ -5,7 +5,7 @@ from fastapi import HTTPException
 from core.config import settings
 from core.database import SessionLocal
 from core.time import now_ts
-from models.entities import Command, Device
+from models.entities import Command
 from repositories.base import model_to_dict
 from repositories.devices import CommandRepository, DeviceRepository
 from services import devices as devices_service

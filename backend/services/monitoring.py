@@ -1,4 +1,4 @@
-from sqlalchemy import Integer, and_, desc, func, select
+from sqlalchemy import and_, desc, func, select
 from sqlalchemy.orm import aliased
 
 from core.config import settings

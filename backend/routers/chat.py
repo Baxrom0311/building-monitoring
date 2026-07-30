@@ -213,7 +213,7 @@ async def clear_alerts_tool(device_id: str, user: dict) -> str:
     """Admin: qurilma yoki barcha qurilmalar ogohlantirishlarini tozalash."""
     if user.get("role") != "admin":
         return "Xato: ogohlantirishlarni tozalash faqat admin uchun ruxsat etilgan."
-    result = await clear_all_alerts(device_id.strip() or None)
+    await clear_all_alerts(device_id.strip() or None)
     target = f"'{device_id}' qurilmasi" if device_id.strip() else "barcha qurilmalar"
     return _json({"ok": True, "message": f"{target} ogohlantirishlari tozalandi."})
 

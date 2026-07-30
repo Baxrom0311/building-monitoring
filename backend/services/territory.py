@@ -7,7 +7,6 @@ yozuvga to'g'ri keladi (dublikat yaratilmaydi).
 """
 
 import io
-import re
 
 import openpyxl
 from fastapi import HTTPException
