@@ -34,7 +34,6 @@ from models.entities import (
 from repositories.base import model_to_dict
 from sqlalchemy import and_, delete, func, select, text, tuple_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 IMPORT_BATCH_SIZE = 3000
 
@@ -314,11 +313,6 @@ def _detect_and_parse(content: bytes, mahalla_filter_key: str | None = None) -> 
 
 # ─── Import ──────────────────────────────────────────────────────────────────
 
-def _dialect_insert(session):
-    """Postgres/SQLite ikkalasida ham ON CONFLICT DO NOTHING qo'llab-quvvatlaydi."""
-    return pg_insert if session.bind.dialect.name == "postgresql" else sqlite_insert
-
-
 async def _bulk_upsert_mahallas(session, names_needed: set[str], ts: int) -> tuple[dict[str, int], dict[int, str]]:
     """Kerakli barcha mahalla nomlarini BITTA bulk insert bilan yaratadi (mavjudlarini o'tkazib)."""
     existing = {
@@ -331,7 +325,7 @@ async def _bulk_upsert_mahallas(session, names_needed: set[str], ts: int) -> tup
         if key not in existing:
             dedup_new.setdefault(key, name)
     if dedup_new:
-        insert_ = _dialect_insert(session)
+        insert_ = pg_insert
         rows = [
             {"name": name, "norm_key": key, "created_at": ts, "updated_at": ts}
             for key, name in dedup_new.items()
@@ -364,7 +358,7 @@ async def _bulk_upsert_streets(
         if (mahalla_id, key) not in id_by_key:
             dedup_new.setdefault((mahalla_id, key), name)
     if dedup_new:
-        insert_ = _dialect_insert(session)
+        insert_ = pg_insert
         rows = [
             {"mahalla_id": mid, "name": name, "norm_key": key, "created_at": ts, "updated_at": ts}
             for (mid, key), name in dedup_new.items()
@@ -481,7 +475,7 @@ async def import_billing_file(
         batch = parsed[batch_start:batch_start + IMPORT_BATCH_SIZE]
 
         async with SessionLocal() as session:
-            insert_ = _dialect_insert(session)
+            insert_ = pg_insert
 
             # ── Binolar: kerakli kalitlarni yig'ib, mavjudini so'rab, yo'qini bulk yaratamiz
             house_keys_needed = {(r["_street_id"], r["_house_key"]) for r in batch}

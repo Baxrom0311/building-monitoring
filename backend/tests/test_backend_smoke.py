@@ -4,18 +4,16 @@ import logging
 import tempfile
 import unittest
 from io import BytesIO
-from pathlib import Path
 from types import SimpleNamespace
 
 from fastapi import HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 
 os.environ.setdefault("SECRET_KEY", "test-secret-key")
 os.environ.setdefault("DEVICE_API_TOKEN", "global-device-token")
 os.environ.setdefault("RATE_LIMIT_PER_MINUTE", "120")
 os.environ.setdefault("DEVICE_RATE_LIMIT_PER_MINUTE", "600")
-os.environ["DB_PATH"] = tempfile.mktemp(prefix="electr-test-", suffix=".db")
-os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///{os.environ['DB_PATH']}"
+os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://localhost/electr_test")
 os.environ["OTA_DIR"] = tempfile.mkdtemp(prefix="electr-test-fw-")
 os.environ["BACKUP_DIR"] = tempfile.mkdtemp(prefix="electr-test-backups-")
 
@@ -24,7 +22,7 @@ from starlette.requests import Request
 from starlette.responses import PlainTextResponse
 
 from core.config import settings
-from core.database import init_db
+from core.database import engine, init_db
 from core.logging import JsonFormatter
 from core.metrics import reset_http_metrics
 from core.middleware import (
@@ -117,14 +115,21 @@ async def _ok_response(_: Request):
 
 class BackendSmokeTest(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        Path(settings.db_path).unlink(missing_ok=True)
+        async with engine.begin() as conn:
+            await conn.execute(text("DROP SCHEMA public CASCADE"))
+            await conn.execute(text("CREATE SCHEMA public"))
         settings.bootstrap_admin_username = "admin"
         settings.bootstrap_admin_password = "Admin1234"
         await init_db()
         await auth.bootstrap_admin()
 
     async def asyncTearDown(self) -> None:
-        Path(settings.db_path).unlink(missing_ok=True)
+        async with engine.begin() as conn:
+            await conn.execute(text("DROP SCHEMA public CASCADE"))
+            await conn.execute(text("CREATE SCHEMA public"))
+        # Har test o'z event loop'ida ishlaydi (IsolatedAsyncioTestCase) — pool
+        # keyingi testga eski (yopilgan) loop bilan bog'liq ulanish bermasin.
+        await engine.dispose()
 
     async def test_auth_device_token_ota_and_audit_flow(self) -> None:
         login = await auth.login(LoginRequest(username="admin", password="Admin1234"))
@@ -584,7 +589,6 @@ class BackendSmokeTest(unittest.IsolatedAsyncioTestCase):
         old_cors = settings.cors_origins
         old_hosts = settings.trusted_hosts
         old_log_format = settings.log_format
-        old_database_url = settings.database_url
         old_command_ttl = settings.command_ttl_sec
         old_gas_max = settings.gas_pressure_max_bar
         old_gas_min = settings.gas_pressure_min_bar
@@ -614,7 +618,6 @@ class BackendSmokeTest(unittest.IsolatedAsyncioTestCase):
             settings.bootstrap_admin_password = "StrongAdmin1234"
             settings.cors_origins = ["https://meter.example.uz"]
             settings.trusted_hosts = ["meter.example.uz"]
-            # SQLite production da ham qo'llab-quvvatlanadi — xato chiqmaydi
             settings.log_format = "yaml"
             with self.assertRaises(RuntimeError):
                 settings.validate_runtime()
@@ -628,7 +631,6 @@ class BackendSmokeTest(unittest.IsolatedAsyncioTestCase):
             settings.cors_origins = old_cors
             settings.trusted_hosts = old_hosts
             settings.log_format = old_log_format
-            settings.database_url = old_database_url
             settings.command_ttl_sec = old_command_ttl
             settings.gas_pressure_min_bar = old_gas_min
             settings.gas_pressure_max_bar = old_gas_max

@@ -1039,7 +1039,7 @@ Bir xil `device_id + alert kind` bo'yicha ochiq alert `ALERT_DEDUPE_SEC` ichida 
 
 ### Database
 
-Boshlanishda SQLite ishlashi mumkin.
+Faqat PostgreSQL qo'llab-quvvatlanadi (SQLite butunlay olib tashlangan).
 
 Production uchun:
 
@@ -1063,9 +1063,9 @@ Docker production stack:
 
 Local development:
 
-- SQLite ishlashi mumkin
+- Lokal PostgreSQL kerak (`DATABASE_URL` orqali)
 - Alembic migration temp/prod DBlar uchun ishlatiladi
-- `init_db()` fallback development uchun saqlanadi
+- `init_db()` (`create_all`) startup vaqtida idempotent fallback sifatida ishlaydi
 
 ### Security
 

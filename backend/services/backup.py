@@ -201,18 +201,17 @@ async def restore_backup_once(filename: str, confirm: str | None = None) -> dict
                             table.update().where(table.c.id == row["id"]).values(device_id=row["device_id"])
                         )
 
-        # PG: autoincrement sequencelarni max(id) ga surish — aks holda keyingi
+        # Autoincrement sequencelarni max(id) ga surish — aks holda keyingi
         # INSERT lar duplicate key bilan yiqiladi
-        if session.bind.dialect.name == "postgresql":
-            for table in sorted_tables:
-                # faqat integer autoincrement PK (devices.id String — unga tegmaymiz)
-                if "id" in table.c and table.c.id.primary_key and isinstance(table.c.id.type, Integer):
-                    await session.execute(
-                        text(
-                            f"SELECT setval(pg_get_serial_sequence('{table.name}', 'id'), "
-                            f"COALESCE((SELECT MAX(id) FROM {table.name}), 0) + 1, false)"
-                        )
+        for table in sorted_tables:
+            # faqat integer autoincrement PK (devices.id String — unga tegmaymiz)
+            if "id" in table.c and table.c.id.primary_key and isinstance(table.c.id.type, Integer):
+                await session.execute(
+                    text(
+                        f"SELECT setval(pg_get_serial_sequence('{table.name}', 'id'), "
+                        f"COALESCE((SELECT MAX(id) FROM {table.name}), 0) + 1, false)"
                     )
+                )
 
         await session.commit()
 

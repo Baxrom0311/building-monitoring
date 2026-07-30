@@ -8,6 +8,3 @@ __pycache__/
 data/
 firmware/
 backups/
-*.db
-*.sqlite
-*.sqlite3

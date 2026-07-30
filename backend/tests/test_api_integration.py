@@ -1,22 +1,21 @@
 import os
 import tempfile
 import unittest
-from pathlib import Path
 
 os.environ.setdefault("SECRET_KEY", "test-secret-key")
 os.environ.setdefault("DEVICE_API_TOKEN", "global-device-token")
 os.environ.setdefault("RATE_LIMIT_PER_MINUTE", "500")
 os.environ.setdefault("DEVICE_RATE_LIMIT_PER_MINUTE", "1000")
-os.environ["DB_PATH"] = tempfile.mktemp(prefix="electr-api-test-", suffix=".db")
-os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///{os.environ['DB_PATH']}"
+os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://localhost/electr_test")
 os.environ["OTA_DIR"] = tempfile.mkdtemp(prefix="electr-api-fw-")
 os.environ["BACKUP_DIR"] = tempfile.mkdtemp(prefix="electr-api-backups-")
 
 import httpx
+from sqlalchemy import text
 
 from app import app
 from core.config import settings
-from core.database import init_db
+from core.database import engine, init_db
 from services import alerts as alert_service
 from services import backup
 from services import ota as ota_service
@@ -25,7 +24,9 @@ from services.auth import bootstrap_admin
 
 class ApiIntegrationTest(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        Path(settings.db_path).unlink(missing_ok=True)
+        async with engine.begin() as conn:
+            await conn.execute(text("DROP SCHEMA public CASCADE"))
+            await conn.execute(text("CREATE SCHEMA public"))
         settings.bootstrap_admin_username = "admin"
         settings.bootstrap_admin_password = "Admin1234"
         await init_db()
@@ -35,7 +36,12 @@ class ApiIntegrationTest(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self) -> None:
         await self.client.aclose()
-        Path(settings.db_path).unlink(missing_ok=True)
+        async with engine.begin() as conn:
+            await conn.execute(text("DROP SCHEMA public CASCADE"))
+            await conn.execute(text("CREATE SCHEMA public"))
+        # Har test o'z event loop'ida ishlaydi (IsolatedAsyncioTestCase) — pool
+        # keyingi testga eski (yopilgan) loop bilan bog'liq ulanish bermasin.
+        await engine.dispose()
 
     async def _admin_headers(self) -> dict[str, str]:
         response = await self.client.post(
@@ -525,7 +531,7 @@ class ApiIntegrationTest(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(energy_reading.status_code, 200, energy_reading.text)
         energy = await self.client.get(
-            f"/api/analytics/energy?from_ts=0&to_ts=9999999999&building_id={building_id}&granularity=day",
+            f"/api/analytics/energy?from_ts=0&to_ts=2147483647&building_id={building_id}&granularity=day",
             headers=admin_headers,
         )
         self.assertEqual(energy.status_code, 200, energy.text)

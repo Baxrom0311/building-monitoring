@@ -3,10 +3,9 @@ from pathlib import Path
 
 class Settings:
     app_env: str = os.getenv("APP_ENV", "development").lower()
-    db_path: Path = Path(os.getenv("DB_PATH", "data/meters.db"))
     database_url: str = os.getenv(
         "DATABASE_URL",
-        "sqlite+aiosqlite:///data/meters.db",
+        "postgresql+asyncpg://localhost/electr_dev",
     )
     ota_dir: Path = Path(os.getenv("OTA_DIR", "firmware"))
     backup_dir: Path = Path(os.getenv("BACKUP_DIR", "backups"))
@@ -140,9 +139,8 @@ class Settings:
             errors.append("Retention kunlari kamida 1 bo'lishi kerak")
         if self.alert_escalation_after_sec < 0:
             errors.append("ALERT_ESCALATION_AFTER_SEC manfiy bo'lmasligi kerak")
-        # SQLite production da ham qo'llab-quvvatlanadi
-        # if self.is_production and not self.database_url.startswith(("postgresql+asyncpg://", "postgresql://")):
-        #     errors.append("Productionda DATABASE_URL PostgreSQL bo'lishi kerak")
+        if not self.database_url.startswith(("postgresql+asyncpg://", "postgresql://")):
+            errors.append("DATABASE_URL faqat PostgreSQL bo'lishi kerak (sqlite qo'llab-quvvatlanmaydi)")
         allowed_channels = {"internal", "telegram", "webhook"}
         invalid_channels = [item for item in self.alert_notification_channels if item not in allowed_channels]
         if invalid_channels:
@@ -172,5 +170,5 @@ class Settings:
 
 settings = Settings()
 
-for directory in (settings.db_path.parent, settings.ota_dir, settings.backup_dir, settings.billing_upload_dir):
+for directory in (settings.ota_dir, settings.backup_dir, settings.billing_upload_dir):
     directory.mkdir(parents=True, exist_ok=True)
