@@ -273,36 +273,6 @@ static bool hls5_complete(const uint8_t resp17[17]) {
     return (r[0] == 0xC7 && r[3] == 0x00);
 }
 
-// ─── Manager client (LOW auth, "00000000") ────────────────────────────────────
-static bool dlms_connect_manager() {
-    static const uint8_t pwd[8] = {'0','0','0','0','0','0','0','0'};
-    uint8_t aarq[64]; size_t p = 0;
-    aarq[p++]=0x60; aarq[p++]=0x36;
-    const uint8_t ac[]={0xA1,0x09,0x06,0x07,0x60,0x85,0x74,0x05,0x08,0x01,0x01};
-    memcpy(aarq+p, ac, 11); p+=11;
-    const uint8_t as[]={0x8A,0x02,0x07,0x80};
-    memcpy(aarq+p, as, 4); p+=4;
-    const uint8_t mh[]={0x8B,0x07,0x60,0x85,0x74,0x05,0x08,0x02,0x01};
-    memcpy(aarq+p, mh, 9); p+=9;
-    aarq[p++]=0xAC; aarq[p++]=0x0A; aarq[p++]=0x80; aarq[p++]=0x08;
-    memcpy(aarq+p, pwd, 8); p+=8;
-    const uint8_t ui[]={0xBE,0x10,0x04,0x0E,0x01,0x00,0x00,0x00,
-                        0x06,0x5F,0x1F,0x04,0x00,0x00,0x7E,0x1F,0x04,0xB0};
-    memcpy(aarq+p, ui, 18); p+=18;
-
-    dlms_client   = DLMS_CLIENT_READER;
-    dlms_send_seq = dlms_recv_seq = 0;
-    unsigned long t = millis(); while (millis() - t < 500) yield();
-
-    if (!dlms_snrm()) return false;
-    bool ok = dlms_aarq(aarq, p);
-    if (!ok) {
-        hdlc_build(DLMS_SERVER_ADDR, dlms_client, 0x53, nullptr, 0);
-        dlms_txrx(500); dlms_connected = false;
-    }
-    return ok;
-}
-
 // ─── Reader client (Client 1, HLS5) ──────────────────────────────────────────
 static bool dlms_connect_reader() {
     dlms_client = DLMS_CLIENT_READER;
