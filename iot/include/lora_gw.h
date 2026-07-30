@@ -430,8 +430,10 @@ static bool gw_handle_water_uplink(const LoRaWaterUplink& pkt, int rssi) {
     doc["lora_rssi"]    = rssi;
     if (pkt.flags & 0x01) doc["is_test_device"] = true;  // bit0=test_mode
 
-    if (pkt.p_bottom != 0) doc["pressure_bottom_bar"] = serialized(String(p_bottom, 3));
-    if (pkt.p_top    != 0) doc["pressure_top_bar"]    = serialized(String(p_top, 3));
+    // Bosim har doim yuboriladi (0 ham xato/signal yo'q holatini bildiradi —
+    // yashirilsa backend NULL saqlaydi va frontendda "—" chiqadi, farqlanmaydi)
+    doc["pressure_bottom_bar"] = serialized(String(p_bottom, 3));
+    doc["pressure_top_bar"]    = serialized(String(p_top, 3));
     if (pkt.flow     != 0) doc["flow_rate"]           = serialized(String(flow, 3));
     if (pkt.volume   != 0) doc["volume_m3"]           = serialized(String(volume, 3));
     if (pkt.temp     != 0) doc["temperature_c"]       = serialized(String(temp, 1));

@@ -247,7 +247,10 @@ static bool sensor_read(SensorData& d) {
     // ── Jami hajm ────────────────────────────────────────────────────────────
     d.volume_m3 = g_initial_volume_m3 + ((float)pulses_now * WATER_LITERS_PER_PULSE / 1000.0f);
     d.temperature_c = NAN;
-    d.valid = !g_ch_bottom.error;
+    // Bosim kanali xato bo'lsa ham (0 bar bilan) yuborilaveradi — jim qolib
+    // ketmasligi uchun. Faqat ADS1115 umuman topilmasa (g_ads_ok=false)
+    // sensor_read() yuqorida false qaytaradi va bu yerga yetib kelmaydi.
+    d.valid = true;
 
     g_last_read_pulses  = pulses_now;
     g_last_read_time_ms = time_now;
