@@ -334,6 +334,64 @@ void loop() {
 #include "lora_packet.h"
 #include "lora_gw.h"
 
+// GAZ PLACEHOLDER — gaz sensori hali tayyor emas (kalibrovka/montaj kutilmoqda).
+// WiFi/server/sensor UMUMAN yo'q — faqat LCD'da "Ma'lumot kutilmoqda..."
+// matnini aylantirib (marquee) ko'rsatadi. Mavjud SENSOR_GAS/gas.h rejimiga
+// tegmaydi — gaz tayyor bo'lganda oddiy -DSENSOR_GAS -DHAVE_LCD env'ga
+// o'tkaziladi.
+#elif defined(GAS_PLACEHOLDER)
+#include <Arduino.h>
+#include <string.h>
+#include "core/log.h"
+#include "display/lcd.h"
+
+// Matn + kamida LCD_COLS bo'sh joy (aylanish to'liq ekrandan chiqib
+// ketgandan keyingina qayta boshlansin — uzilishsiz "yopishib qolgan"
+// ko'rinishning oldini oladi) va boshida ham LCD_COLS bo'sh joy (birinchi
+// marta ekranga chapdan sekin kirib kelsin).
+static char GAS_WAIT_MSG[64];
+
+static void gas_build_marquee_msg() {
+    const char* text = "Ma'lumot kutilmoqda...";
+    int gap = LCD_COLS;
+    snprintf(GAS_WAIT_MSG, sizeof(GAS_WAIT_MSG), "%*s%-*s",
+             gap, "", (int)(strlen(text) + gap), text);
+}
+
+void setup() {
+#if CORE_DEBUG_LEVEL > 0 || defined(APP_DEBUG)
+    Serial.begin(115200);
+#endif
+    gas_build_marquee_msg();
+    lcd_init();
+    lcd_row(1, "A1TECH  BRR");
+}
+
+void loop() {
+    static unsigned long last_scroll_ms = 0;
+    static unsigned long last_row1_ms = 0;
+    static size_t offset = 0;
+    unsigned long now = millis();
+
+    // Row1 muntazam qayta yoziladi — glitch bo'lsa ham "A1TECH  BRR"
+    // doim ko'rinib turishini kafolatlaydi.
+    if (now - last_row1_ms >= 3000) {
+        last_row1_ms = now;
+        lcd_row(1, "A1TECH  BRR");
+    }
+
+    // Aylanish sekinroq (o'qish uchun qulay) — 550ms/belgi.
+    if (now - last_scroll_ms < 550) return;
+    last_scroll_ms = now;
+
+    size_t len = strlen(GAS_WAIT_MSG);
+    char buf[LCD_COLS + 1];
+    for (int i = 0; i < LCD_COLS; i++) buf[i] = GAS_WAIT_MSG[(offset + i) % len];
+    buf[LCD_COLS] = '\0';
+    lcd_row(0, buf);
+    offset = (offset + 1) % len;
+}
+
 #else
 // NORMAL FIRMWARE MODE
 #include "common.h"
@@ -349,8 +407,10 @@ void loop() {
   #include "sensors/soil.h"
 #elif defined(SENSOR_SOUND)
   #include "sensors/sound.h"
+#elif defined(SENSOR_HEATING)
+  #include "sensors/heating.h"
 #else
-  #error "Sensor flag kerak: -DSENSOR_ELECTRICITY | _WATER | _GAS | _SOIL | _SOUND"
+  #error "Sensor flag kerak: -DSENSOR_ELECTRICITY | _WATER | _GAS | _SOIL | _SOUND | _HEATING"
 #endif
 
 // ─── Display ─────────────────────────────────────────────────────────────────
@@ -358,6 +418,8 @@ void loop() {
   #include "display/disp_soil.h"
 #elif defined(HAVE_LCD) && defined(SENSOR_SOUND)
   #include "display/disp_sound.h"
+#elif defined(HAVE_LCD) && defined(SENSOR_HEATING)
+  #include "display/disp_heating.h"
 #elif defined(HAVE_LCD) && defined(SENSOR_ELECTRICITY)
   #include "display/disp_elec.h"
 #else
@@ -571,6 +633,19 @@ void loop() {
 
     // WiFi: non-blocking qayta ulanish
     wifi_loop();
+
+    // LCD holatini muntazam tekshirish — WiFi TX oqim sakrashi LCD backpack'ni
+    // reset qilib qo'ysa, READ_INTERVAL_MS (masalan 30s) kutmasdan tezroq
+    // (2s ichida) tuzatiladi.
+#if defined(HAVE_LCD) && !defined(SENSOR_ELECTRICITY)
+    {
+        static unsigned long last_lcd_check_ms = 0;
+        if (now - last_lcd_check_ms >= 2000) {
+            last_lcd_check_ms = now;
+            lcd_refresh_if_needed();
+        }
+    }
+#endif
 
     // Sound LCD: har 200ms real-time yangilash
 #ifdef SENSOR_SOUND

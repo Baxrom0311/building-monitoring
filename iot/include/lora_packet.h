@@ -50,11 +50,7 @@
 #define LORA_SF       9       // Spreading Factor 9: ~1-3km shahar, ~5km ochiq
 #define LORA_BW       125E3   // Bandwidth 125 kHz
 #define LORA_CR       5       // Coding Rate 4/5
-// TX power dBm. Default 2 (stol testi, antena yo'q — PA himoyasi).
-// Antenali production qurilmada build flag bilan oshiring: -DLORA_TX_PWR=17
-#ifndef LORA_TX_PWR
-  #define LORA_TX_PWR   2
-#endif
+#define LORA_TX_PWR   17      // TX power dBm
 #define LORA_SYNC     0xAB    // Sync word (tarmoq ajratuvchi, 0x12 = LoRaWAN)
 
 // ─── Umumiy header ────────────────────────────────────────────────────────────

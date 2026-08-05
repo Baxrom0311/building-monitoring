@@ -1,51 +1,76 @@
 #pragma once
 /**
- * gas.h — 1x Analog bosim sensori (gaz tizimi)
+ * gas.h — Industrial gaz bosimi sensori (ADS1115 + 4-20mA transmitter) + impuls oqim
  *
- * Kirish joyiga 1 ta gaz bosim sensori:
- *   PIN_PRESSURE_GAS — gaz quvuri bosimi
+ * Apparat:
+ *   ADS1115 16-bit ADC (I2C, 0x48, SDA=21, SCL=22)
+ *   4-20mA bosim transmitteri (past/o'rta bosimli gaz tizimi uchun)
+ *   Shunt rezistor: 165 Ω (real transmitter datasheet bo'yicha tekshirib
+ *   kerak bo'lsa -DSHUNT_OHM bilan almashtiring)
+ *   ADS1115 GAIN_ONE: ±4.096 V, 0.125 mV/bit
  *
- * Sensor turi: 4-20mA yoki 0-5V analog, 250Ω shunt orqali 0-3.3V
- *   0.5V → 0 bar | 4.5V → SENSOR_MAX_BAR
+ *   ESKI VERSIYA ESP32 ichki ADC (GPIO35, analogRead) ishlatgan edi — bu
+ *   past voltajlarda (past bosimli gaz diapazoni) nochiziqli/shovqinli
+ *   bo'lgani uchun ADS1115'ga o'tkazildi (suv sensoridagi kabi).
  *
- * Pinlar (ESP32 ADC1):
- *   GPIO35 = ADC1_CH7 = gaz bosimi (faqat INPUT — output bo'lmaydi)
+ * Kanal:
+ *   A0 = Gaz bosimi
+ *
+ * Pulse (oqim) sensori — o'zgarmadi:
+ *   GPIO26 = Gaz oqimi impuls hisoblagichi (FALLING)
  *
  * Sensor API (main.cpp dan chaqiriladi):
- *   sensor_init()             — ADC sozlash
- *   sensor_connect() → bool  — har doim true
- *   sensor_read(SensorData&) → bool  — ADC o'qish
+ *   sensor_init()             — ADS1115 + impuls sozlash
+ *   sensor_connect() → bool  — ADS1115 topildimi
+ *   sensor_read(SensorData&) → bool  — bosim + oqim o'qish
  *   sensor_build_json(...)   → String — backend JSON
  *   sensor_do_register(...)  → bool  — backend ro'yxatdan o'tish
  */
 
 #include <Arduino.h>
-#include <ArduinoJson.h>
+#include <Wire.h>
+#include <Adafruit_ADS1X15.h>
 
-// ─── ADC pin ──────────────────────────────────────────────────────────────────
-#ifndef PIN_PRESSURE_GAS
-  #define PIN_PRESSURE_GAS   35   // GPIO35 = ADC1_CH7 (faqat input)
+#ifndef LORA_NODE
+  #include <ArduinoJson.h>
 #endif
 
-// ─── Kalibrovka ───────────────────────────────────────────────────────────────
+// ─── ADS1115 sozlamalari ─────────────────────────────────────────────────────
+#ifndef ADS_SDA
+  #define ADS_SDA    21
+#endif
+#ifndef ADS_SCL
+  #define ADS_SCL    22
+#endif
+#ifndef ADS_ADDR
+  #define ADS_ADDR   0x48
+#endif
+#define MV_PER_BIT   0.125f    // GAIN_ONE: 4.096V / 32768
+
+// ─── Shunt va tok chegaralari ────────────────────────────────────────────────
+#ifndef SHUNT_OHM
+  #define SHUNT_OHM    165.0f
+#endif
+#define SENSOR_MA_MIN   4.0f     // 4 mA = 0 bosim
+#define SENSOR_MA_MAX  20.0f     // 20 mA = max bosim
+#define SENSOR_ERR_LO   3.6f     // < 3.6 mA = sim uzilgan
+#define SENSOR_ERR_HI  21.0f     // > 21 mA = qisqa tutashuv
+
+// ─── Bosim oralig'i ──────────────────────────────────────────────────────────
 // Gaz tizimi uchun odatda past bosim: 0.02–0.5 bar (past bosimli uy gazi)
-// Yoki 0–5 bar (o'rta bosimli)
-// Sensor tipiga qarab -D... build_flags orqali o'zgartiring:
-#ifndef SENSOR_MAX_BAR
-  #define SENSOR_MAX_BAR      5.0f   // Sensor maksimal bosimi (bar)
-#endif
-#ifndef SENSOR_V_ZERO
-  #define SENSOR_V_ZERO       0.33f  // 0 bar dagi voltaj (0.5V * 3.3/5)
-#endif
-#ifndef SENSOR_V_FULL
-  #define SENSOR_V_FULL       2.97f  // Max bar dagi voltaj (4.5V * 3.3/5)
-#endif
-#ifndef SENSOR_ADC_SAMPLES
-  #define SENSOR_ADC_SAMPLES    16
+// Yoki 0–5 bar (o'rta bosimli). Sensor tipiga qarab -DPRESSURE_MAX_BAR
+// build_flag orqali o'zgartiring.
+#ifndef PRESSURE_MAX_BAR
+  #define PRESSURE_MAX_BAR  5.0f
 #endif
 
-// ─── SensorData (gaz) ─────────────────────────────────────────────────────────
-// ─── Pulse sensor setting ───────────────────────────────────────────────────
+// ─── EMA filtri ──────────────────────────────────────────────────────────────
+#define EMA_ALPHA       0.15f
+
+// ─── ADC oversample ──────────────────────────────────────────────────────────
+#define ADC_OVERSAMPLE  16
+
+// ─── Pulse sensor (gaz oqimi) ────────────────────────────────────────────────
 #ifndef PIN_GAS_PULSE
   #define PIN_GAS_PULSE         26     // GPIO26 gas flow pulse input
 #endif
@@ -68,36 +93,108 @@ static void IRAM_ATTR gas_pulse_isr() {
     }
 }
 
+// ─── Bosim kanali holati ─────────────────────────────────────────────────────
+struct PressureChannel {
+    uint8_t channel;       // ADS1115 kanal (0–3)
+    float   ema_bar;       // EMA filtrdan o'tgan bosim (bar)
+    float   current_mA;    // Oxirgi tok o'qishi (mA)
+    bool    initialized;   // Birinchi o'qish bo'ldimi
+    bool    error;         // Sensor xatosi
+};
+
+// ─── Global holatlar ─────────────────────────────────────────────────────────
+static Adafruit_ADS1115 g_ads;
+static bool g_ads_ok = false;
+static PressureChannel g_ch_pressure = { 0, 0, 0, false, false };
+
 // ─── SensorData (gaz) ─────────────────────────────────────────────────────────
 struct SensorData {
     float pressure_bar;  // Gaz bosimi, bar
     float flow_rate;     // Oqim tezligi, m3/h
     float volume_m3;     // Jami hajm, m3
-    float temperature_c; // Harorat, C
+    float temperature_c; // Harorat, C (jismoniy sensor yo'q — doim NAN)
     bool  valid;
 };
 
-// ─── Yordamchi: ADC → bar ─────────────────────────────────────────────────────
-static float _adc_to_bar(int pin) {
-    long sum = 0;
-    for (int i = 0; i < SENSOR_ADC_SAMPLES; i++) {
-        sum += analogRead(pin);
+// ─── ADS1115 yordamchi funksiyalar ───────────────────────────────────────────
+
+/** ADC dan o'rtacha voltaj o'qish (V) */
+static float _ads_read_voltage(uint8_t ch) {
+    int32_t sum = 0;
+    for (int i = 0; i < ADC_OVERSAMPLE; i++) {
+        sum += g_ads.readADC_SingleEnded(ch);
         delayMicroseconds(500);
     }
-    float voltage = (sum / (float)SENSOR_ADC_SAMPLES) / 4095.0f * 3.3f;
-    float bar = (voltage - SENSOR_V_ZERO) / (SENSOR_V_FULL - SENSOR_V_ZERO) * SENSOR_MAX_BAR;
-    return bar < 0.0f ? 0.0f : (bar > SENSOR_MAX_BAR ? SENSOR_MAX_BAR : bar);
+    return ((float)sum / ADC_OVERSAMPLE) * MV_PER_BIT / 1000.0f;
+}
+
+/** Voltajdan tok (mA): I = V / R × 1000 */
+static inline float _voltage_to_mA(float v) {
+    return (v / SHUNT_OHM) * 1000.0f;
+}
+
+/** Tokdan bosim (bar): 4–20 mA → 0–max bar */
+static inline float _mA_to_bar(float mA) {
+    if (mA < SENSOR_MA_MIN) return 0.0f;
+    float bar = (mA - SENSOR_MA_MIN) / (SENSOR_MA_MAX - SENSOR_MA_MIN) * PRESSURE_MAX_BAR;
+    return constrain(bar, 0.0f, PRESSURE_MAX_BAR);
+}
+
+/** Bitta kanalni o'qish + EMA + xato tekshirish */
+static void _update_channel(PressureChannel& ch) {
+    float v = _ads_read_voltage(ch.channel);
+    ch.current_mA = _voltage_to_mA(v);
+
+    if (ch.current_mA < SENSOR_ERR_LO || ch.current_mA > SENSOR_ERR_HI) {
+        ch.error = true;
+        return;
+    }
+    ch.error = false;
+    float bar = _mA_to_bar(ch.current_mA);
+
+    if (!ch.initialized) {
+        ch.ema_bar = bar;
+        ch.initialized = true;
+    } else {
+        ch.ema_bar = EMA_ALPHA * bar + (1.0f - EMA_ALPHA) * ch.ema_bar;
+    }
 }
 
 // ─── Sensor API ───────────────────────────────────────────────────────────────
+
+// I2C avtobusini skanerlash — faqat ADS1115 kutilgan manzilda topilmasa
+// chaqiriladi (diagnostika: simlash/quvvat muammosini tezda ko'rsatadi).
+static void _i2c_scan_diagnostic() {
+    LOG_PRINTF("I2C skan (SDA=%d SCL=%d):\n", (int)ADS_SDA, (int)ADS_SCL);
+    int found_count = 0;
+    for (uint8_t addr = 1; addr < 127; addr++) {
+        Wire.beginTransmission(addr);
+        if (Wire.endTransmission() == 0) {
+            LOG_PRINTF("  0x%02X -> topildi\n", addr);
+            found_count++;
+        }
+    }
+    if (found_count == 0) LOG_PRINTLN("  -> hech narsa topilmadi (avtobus bo'sh yoki qotib qolgan)");
+}
+
 static void sensor_init() {
-    analogReadResolution(12);
-    analogSetAttenuation(ADC_11db);
-    pinMode(PIN_PRESSURE_GAS, INPUT);
+    // ADS1115 init
+    Wire.begin(ADS_SDA, ADS_SCL);
+    Wire.setTimeOut(50);  // ms — SDA/SCL qotib qolsa ham cheksiz osilib qolmasin
+
+    g_ads_ok = g_ads.begin(ADS_ADDR);
+    if (g_ads_ok) {
+        g_ads.setGain(GAIN_ONE);
+        g_ads.setDataRate(RATE_ADS1115_128SPS);
+        LOG_PRINTLN("ADS1115 tayyor (GAIN_ONE, 128SPS)");
+    } else {
+        LOG_PRINTLN("XATO: ADS1115 topilmadi (0x48)!");
+        _i2c_scan_diagnostic();
+    }
 
     // Pulse sensor
     pinMode(PIN_GAS_PULSE, INPUT_PULLUP);
-    
+
     // Preferencesdan yuklash
     Preferences prefs;
     prefs.begin("gas", false);
@@ -109,40 +206,42 @@ static void sensor_init() {
     g_last_read_pulses = g_gas_pulse_count;
     g_last_read_time_ms = millis();
 
-    analogRead(PIN_PRESSURE_GAS);
-    LOG_PRINTLN("Gaz bosim va impuls sensorlari tayyor");
-    LOG_PRINTF("  Pin: GPIO%d | Impuls: GPIO%d | Max: %.1f bar\n", PIN_PRESSURE_GAS, PIN_GAS_PULSE, SENSOR_MAX_BAR);
+    LOG_PRINTF("Gaz sensor: ADS1115(0x%02X) Shunt=%dOhm Max=%.1f bar | Impuls: GPIO%d\n",
+               ADS_ADDR, (int)SHUNT_OHM, PRESSURE_MAX_BAR, PIN_GAS_PULSE);
 }
 
 static bool sensor_connect() {
-    return true;
+    return g_ads_ok;
 }
 
 static bool sensor_read(SensorData& d) {
+    if (!g_ads_ok) { d.valid = false; return false; }
+
     if (g_cfg.test_mode) {
         d.pressure_bar  = 0.02f + (random(0, 100) / 5000.0f);     // 0.02 - 0.04 bar (low pressure)
         d.flow_rate     = 1.5f + (random(0, 100) / 100.0f);       // 1.5 - 2.5 m3/h
-        
+
         static float sim_volume = 1250.450f;
         sim_volume += (d.flow_rate / 3600.0f) * 30.0f;            // 30 soniyada o'tgan hajm m3 da
         d.volume_m3     = sim_volume;
-        d.temperature_c = 22.0f + (random(0, 10) / 10.0f);        // 22.0 - 23.0 C
+        d.temperature_c = NAN;
         d.valid = true;
-        
+
         LOG_PRINTF("[TEST MODE] Gaz: bosim=%.3f bar | oqim=%.3f m3/h | hajm=%.3f m3\n",
                       d.pressure_bar, d.flow_rate, d.volume_m3);
         return true;
     }
 
-    // Real rejimda o'qish
+    // ── Bosim o'qish (ADS1115, 4-20mA) ──────────────────────────────────────
+    _update_channel(g_ch_pressure);
+    d.pressure_bar = g_ch_pressure.error ? 0.0f : g_ch_pressure.ema_bar;
+
+    // ── Impuls — oqim tezligi (m3/h) ─────────────────────────────────────────
     unsigned long current_pulses = g_gas_pulse_count;
     unsigned long time_now = millis();
     unsigned long time_diff_ms = time_now - g_last_read_time_ms;
     unsigned long pulse_diff = current_pulses - g_last_read_pulses;
 
-    d.pressure_bar  = _adc_to_bar(PIN_PRESSURE_GAS);
-
-    // Oqim tezligi: m3/h
     if (time_diff_ms > 0) {
         float m3 = (float)pulse_diff * GAS_M3_PER_PULSE;
         d.flow_rate = (m3 / (float)time_diff_ms) * 3600000.0f;
@@ -150,9 +249,12 @@ static bool sensor_read(SensorData& d) {
         d.flow_rate = 0.0f;
     }
 
-    // Jami hajm: m3
+    // ── Jami hajm ────────────────────────────────────────────────────────────
     d.volume_m3 = g_initial_volume_m3 + ((float)current_pulses * GAS_M3_PER_PULSE);
     d.temperature_c = NAN;
+    // Bosim kanali xato bo'lsa ham (0 bar bilan) yuborilaveradi — jim qolib
+    // ketmasligi uchun. Faqat ADS1115 umuman topilmasa (g_ads_ok=false)
+    // sensor_read() yuqorida false qaytaradi va bu yerga yetib kelmaydi.
     d.valid = true;
 
     g_last_read_pulses = current_pulses;
@@ -170,8 +272,17 @@ static bool sensor_read(SensorData& d) {
         last_saved_time_ms = time_now;
     }
 
-    LOG_PRINTF("Gaz: bosim=%.3f bar | oqim=%.3f m3/h | jami=%.3f m3 (pulses=%lu)\n",
-                  d.pressure_bar, d.flow_rate, d.volume_m3, current_pulses);
+    // ── Log ──────────────────────────────────────────────────────────────────
+    if (g_ch_pressure.error) {
+        LOG_PRINTF("Gaz: XATO tok=%.2f mA (%s) | oqim=%.3f m3/h | jami=%.3f m3 (pulses=%lu)\n",
+                   g_ch_pressure.current_mA,
+                   g_ch_pressure.current_mA < SENSOR_ERR_LO ? "uzilgan" : "qisqa",
+                   d.flow_rate, d.volume_m3, current_pulses);
+    } else {
+        LOG_PRINTF("Gaz: bosim=%.3f bar (%.2f mA) | oqim=%.3f m3/h | jami=%.3f m3 (pulses=%lu)\n",
+                   g_ch_pressure.ema_bar, g_ch_pressure.current_mA,
+                   d.flow_rate, d.volume_m3, current_pulses);
+    }
     return true;
 }
 

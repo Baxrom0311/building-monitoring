@@ -1,16 +1,16 @@
 #pragma once
 /**
- * display/disp_soil.h — LCD display module for soil moisture sensor
+ * display/disp_heating.h — LCD display module for heating (DS18B20 x2) sensor
  *
  * Implements the standard 3-function display interface:
  *   disp_init()                    → lcd_init() + splash screen
- *   disp_show_reading(d)           → row 0: "Namlik:  55.0 %" or "Namlik:    -- %"
- *   disp_show_status(wifi, srv, lora) → row 1: "A1TECH" (hammasi OK bo'lsa)
+ *   disp_show_reading(d)           → row 0: "K:68.0 Ch:42.0" (kirish/chiqish)
+ *   disp_show_status(wifi, srv, lora) → row 1: "A1TECH  BRR" (hammasi OK bo'lsa)
  *                                        yoki "W:OK S:--" (muammo bo'lsa)
  *
  * Bu qurilmada LoRa umuman yo'q (faqat WiFi) — lora parametri ishlatilmaydi.
  *
- * Requires: SensorData from sensors/soil.h (has float humidity, bool valid)
+ * Requires: SensorData from sensors/heating.h (temperature_in_c/out_c, valid)
  */
 
 #include "display/lcd.h"
@@ -22,11 +22,14 @@ static void disp_init() {
 }
 
 static void disp_show_reading(const SensorData& d) {
+    char in_s[8], out_s[8];
+    if (!isnan(d.temperature_in_c))  snprintf(in_s,  sizeof(in_s),  "%.1f", d.temperature_in_c);
+    else                              snprintf(in_s,  sizeof(in_s),  "--.-");
+    if (!isnan(d.temperature_out_c)) snprintf(out_s, sizeof(out_s), "%.1f", d.temperature_out_c);
+    else                              snprintf(out_s, sizeof(out_s), "--.-");
+
     char row0[LCD_COLS + 1];
-    if (d.valid)
-        snprintf(row0, sizeof(row0), "Namlik: %5.1f %%", d.humidity);
-    else
-        snprintf(row0, sizeof(row0), "Namlik:    -- %%");
+    snprintf(row0, sizeof(row0), "K:%s Ch:%s", in_s, out_s);
     lcd_row(0, row0);
 }
 
