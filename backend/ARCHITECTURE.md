@@ -238,7 +238,6 @@ Maydonlar:
 - `gas_pressure_main`
 - `water_flow`
 - `gas_flow`
-- `gas_leak`
 
 Elektr measurement point:
 
@@ -307,7 +306,6 @@ Maydonlar:
 - `hardware_version`
 - `software_version`
 - `firmware_mode`
-- `ip`
 - `rssi`
 - `last_seen`
 - `status`: `online`, `offline`, `maintenance`
@@ -405,8 +403,6 @@ Maydonlar:
 - `flow_rate`
 - `volume_m3`
 - `temperature_c`
-- `leak_detected`
-- `valve_open`
 
 ## ESP32 Unified Firmware Framework
 
@@ -990,7 +986,6 @@ DB orqali sozlanadigan rule kindlari:
 - `water_low_pressure`
 - `water_not_reaching_top`
 - `gas_pressure`
-- `gas_leak`
 
 Rule maydonlari:
 

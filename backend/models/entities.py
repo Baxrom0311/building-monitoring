@@ -270,7 +270,6 @@ class Device(Base, TimestampMixin):
     baud_rate: Mapped[int | None] = mapped_column(Integer, default=9600)
     chip_model: Mapped[str | None] = mapped_column(String(64))
     rssi: Mapped[int | None] = mapped_column(Integer)
-    ip: Mapped[str | None] = mapped_column(String(64))
     fw_version: Mapped[str | None] = mapped_column(String(64))
 
     building_text: Mapped[str | None] = mapped_column("building", String(255))
@@ -356,8 +355,8 @@ class Reading(Base):
     flow_rate: Mapped[float | None] = mapped_column(Float)
     volume_m3: Mapped[float | None] = mapped_column(Float)
     temperature_c: Mapped[float | None] = mapped_column(Float)
-    leak_detected: Mapped[bool | None] = mapped_column(Boolean)
-    valve_open: Mapped[bool | None] = mapped_column(Boolean)
+    temperature_in_c: Mapped[float | None] = mapped_column(Float)   # Qozonxona kirish (DS18B20)
+    temperature_out_c: Mapped[float | None] = mapped_column(Float)  # Qozonxona chiqish (DS18B20)
     humidity: Mapped[float | None] = mapped_column(Float)
     level: Mapped[float | None] = mapped_column(Float)   # Ovoz darajasi (0–100%)
     raw_payload: Mapped[str | None] = mapped_column(Text)
@@ -390,7 +389,6 @@ class HourlyUtilityStats(Base):
     avg_pressure_top_bar: Mapped[float | None] = mapped_column(Float)
     avg_flow_rate: Mapped[float | None] = mapped_column(Float)
     max_volume_m3: Mapped[float | None] = mapped_column(Float)
-    leak_count: Mapped[int | None] = mapped_column(Integer)
     avg_humidity: Mapped[float | None] = mapped_column(Float)
     avg_level: Mapped[float | None] = mapped_column(Float)   # Ovoz o'rtachasi
     min_level: Mapped[float | None] = mapped_column(Float)

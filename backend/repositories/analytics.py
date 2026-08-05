@@ -81,7 +81,6 @@ class AnalyticsRepository(BaseRepository[HourlyUtilityStats]):
                     rnd(func.avg(Reading.pressure_bar), 4).label("avg_pressure_bar"),
                     rnd(func.min(Reading.pressure_bar), 4).label("min_pressure_bar"),
                     rnd(func.max(Reading.pressure_bar), 4).label("max_pressure_bar"),
-                    func.sum(Reading.leak_detected.cast(Integer)).label("leak_count"),
                 ).where(
                     and_(Reading.building_id == building_id, Reading.utility_type == "gas", Reading.ts > cutoff)
                 )
@@ -145,7 +144,6 @@ class AnalyticsRepository(BaseRepository[HourlyUtilityStats]):
                 func.avg(Reading.pressure_top_bar).label("avg_pressure_top_bar"),
                 func.avg(Reading.flow_rate).label("avg_flow_rate"),
                 func.max(Reading.volume_m3).label("max_volume_m3"),
-                func.sum(Reading.leak_detected.cast(Integer)).label("leak_count"),
                 func.avg(Reading.humidity).label("avg_humidity"),
                 func.avg(Reading.level).label("avg_level"),
                 func.min(Reading.level).label("min_level"),
@@ -176,7 +174,6 @@ class AnalyticsRepository(BaseRepository[HourlyUtilityStats]):
                     avg_pressure_top_bar=row["avg_pressure_top_bar"],
                     avg_flow_rate=row["avg_flow_rate"],
                     max_volume_m3=row["max_volume_m3"],
-                    leak_count=row["leak_count"],
                     avg_humidity=row["avg_humidity"],
                     avg_level=row["avg_level"],
                     min_level=row["min_level"],

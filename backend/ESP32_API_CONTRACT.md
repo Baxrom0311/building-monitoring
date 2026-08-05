@@ -136,7 +136,6 @@ Payload:
   "build_number": "2026.07.06.1",
   "chip_model": "ESP32-WROOM",
   "rssi": -61,
-  "ip": "192.168.1.50",
   "building_id": 1,
   "point_id": 10
 }
@@ -244,9 +243,7 @@ Suv fields:
   "pressure_top_bar": 0.8,
   "flow_rate": 1.2,
   "volume_m3": 129.4,
-  "temperature_c": 18.5,
-  "leak_detected": false,
-  "valve_open": true
+  "temperature_c": 18.5
 }
 ```
 
@@ -258,9 +255,7 @@ Gaz fields:
   "pressure_bar": 0.18,
   "flow_rate": 0.4,
   "volume_m3": 350.2,
-  "temperature_c": 20.1,
-  "leak_detected": false,
-  "valve_open": true
+  "temperature_c": 20.1
 }
 ```
 
@@ -316,7 +311,6 @@ Payload:
 ```json
 {
   "device_id": "esp32-water-top-01",
-  "ip": "192.168.1.50",
   "rssi": -61,
   "online": true,
   "hardware_version": "HW-1.0",

@@ -225,7 +225,7 @@ Ko'rib chiqish uchun ro'yxat:
 2. **v1/v2 sahifa nomutanosibligi** — Billing/Territory faqat v2'da, Demo faqat v1'da.
 3. **EX518 hisoblagichi hali ishlamayapti** — RS-485 aloqasi o'rnatilmagan, ishlab chiqaruvchi bilan bog'lanish kerak.
 4. **Passiv `relay_on` ustuni** — `Reading` jadvalida hali ham mavjud (DB'da), lekin IoT hech qachon to'ldirmaydi (real rele control funksiyasi olib tashlangandan keyin ham qoldirilgan — atayin, tarixiy ma'lumot uchun).
-5. **`ip` ustuni** — `Device` javob sxemasida hali ham bor (tarixiy ko'rsatish uchun saqlangan), lekin backend endi uni faol yangilamaydi.
+5. ~~`ip` ustuni~~ — 2026-08-02 da butunlay olib tashlandi (model, schema, qidiruv, hujjatlar, DB migration).
 6. Gaz sensori: bosim (analog, 4-20mA) + oqim (flow, impuls hisoblagich GPIO26) mavjud, lekin harorat kanali suv sensori bilan bir xil holatda — `temperature_c` doim `NAN` (jismoniy sensor ulanmagan, kod tayyor lekin ishlatilmayapti).
 
 ---

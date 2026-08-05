@@ -291,7 +291,7 @@ async def list_devices(
         if query:
             haystack = " ".join(
                 str(payload.get(key) or "")
-                for key in ("id", "name", "ip", "meter_serial", "meter_type", "utility_type", "building_text")
+                for key in ("id", "name", "meter_serial", "meter_type", "utility_type", "building_text")
             ).lower()
             if query not in haystack:
                 continue

@@ -10,6 +10,7 @@ class UtilityType(StrEnum):
     gas = "gas"
     soil = "soil"
     sound = "sound"
+    heating = "heating"
     gateway = "gateway"
 
 
@@ -20,9 +21,10 @@ class MeasurementRole(StrEnum):
     gas_pressure_main = "gas_pressure_main"
     water_flow = "water_flow"
     gas_flow = "gas_flow"
-    gas_leak = "gas_leak"
     soil_moisture = "soil_moisture"
     sound_level = "sound_level"
+    heating_supply_temp = "heating_supply_temp"
+    heating_return_temp = "heating_return_temp"
 
 
 class DeviceRole(StrEnum):
@@ -33,6 +35,7 @@ class DeviceRole(StrEnum):
     soil_outdoor = "soil_outdoor"
     soil_basement = "soil_basement"
     sound_node = "sound_node"
+    heating_node = "heating_node"
 
 
 class FirmwareMode(StrEnum):
@@ -41,6 +44,7 @@ class FirmwareMode(StrEnum):
     gas = "gas"
     soil = "soil"
     sound = "sound"
+    heating = "heating"
     lora_gateway = "lora_gateway"
     auto = "auto"
 
@@ -115,8 +119,9 @@ class BuildingUpdate(BaseModel):
     construction_year: Optional[int] = Field(None, ge=1800, le=2100)
     # Urganchshahar integratsiya
     organization_name: Optional[str] = Field(None, max_length=255)
-    mahalla_name: Optional[str] = Field(None, max_length=255)
-    street_name: Optional[str] = Field(None, max_length=255)
+    # mahalla_name/street_name atayin yo'q: ular street_id'dan (yoki qurilishda
+    # erkin matn sifatida) bir marta o'rnatiladi va boshqa o'zgartirilmaydi —
+    # aks holda territory/billing sahifalari bilan sinxronsizlik chiqadi.
     object_type: Optional[str] = Field(None, max_length=255)
     polygon_coordinate: Optional[str] = None
     is_official: Optional[bool] = None
@@ -471,7 +476,6 @@ class DeviceResponse(BaseModel):
     baud_rate: Optional[int] = None
     chip_model: Optional[str] = None
     rssi: Optional[int] = None
-    ip: Optional[str] = None
     fw_version: Optional[str] = None
     # Entity uses building_text/floor_text (Python attrs) mapped to "building"/"floor" DB columns
     building: Optional[str] = Field(None, validation_alias=AliasChoices("building", "building_text"))
@@ -948,8 +952,8 @@ class MeterReading(BaseModel):
     flow_rate: Optional[float] = None
     volume_m3: Optional[float] = None
     temperature_c: Optional[float] = None
-    leak_detected: Optional[bool] = None
-    valve_open: Optional[bool] = None
+    temperature_in_c: Optional[float] = None   # Qozonxona kirish suvi (DS18B20)
+    temperature_out_c: Optional[float] = None  # Qozonxona chiqish suvi (DS18B20)
 
     humidity: Optional[float] = None
     level: Optional[float] = None  # Ovoz darajasi (0–100%)
@@ -1010,8 +1014,8 @@ class ReadingResponse(BaseModel):
     flow_rate: Optional[float] = None
     volume_m3: Optional[float] = None
     temperature_c: Optional[float] = None
-    leak_detected: Optional[bool] = None
-    valve_open: Optional[bool] = None
+    temperature_in_c: Optional[float] = None
+    temperature_out_c: Optional[float] = None
     humidity: Optional[float] = None
     level: Optional[float] = None
     raw_payload: Optional[str] = None
@@ -1072,7 +1076,6 @@ class HourlyUtilityStatResponse(BaseModel):
     avg_pressure_top_bar: Optional[float] = None
     avg_flow_rate: Optional[float] = None
     max_volume_m3: Optional[float] = None
-    leak_count: Optional[int] = None
     avg_humidity: Optional[float] = None
     avg_level: Optional[float] = None
     min_level: Optional[float] = None
@@ -1119,7 +1122,6 @@ class BuildingGasAnalyticsResponse(BaseModel):
     avg_pressure_bar: Optional[float] = None
     min_pressure_bar: Optional[float] = None
     max_pressure_bar: Optional[float] = None
-    leak_count: Optional[int] = None
 
 
 class BuildingSoilAnalyticsResponse(BaseModel):

@@ -68,7 +68,6 @@ const alertRuleOptions = {
   ],
   gas: [
     { value: 'gas_pressure', label: 'Gaz bosimi normadan tashqari' },
-    { value: 'gas_leak', label: 'Gaz sizishi' },
   ],
   soil: [
     { value: 'soil_dry', label: 'Tuproq qurib qoldi' },

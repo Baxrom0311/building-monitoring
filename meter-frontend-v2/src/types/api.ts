@@ -76,7 +76,6 @@ export interface Device {
   baud_rate: number | null
   chip_model: string | null
   rssi: number | null
-  ip: string | null
   fw_version: string | null
   building: string | null
   floor: string | null
@@ -124,8 +123,6 @@ export interface Reading {
   flow_rate: number | null
   volume_m3: number | null
   temperature_c: number | null
-  leak_detected: boolean | null
-  valve_open: boolean | null
   humidity: number | null
   level?: number | null
   raw_payload: string | null
@@ -232,7 +229,6 @@ export interface HourlyUtilityStat {
   avg_pressure_top_bar: number | null
   avg_flow_rate: number | null
   max_volume_m3: number | null
-  leak_count: number | null
   avg_humidity: number | null
   min_humidity: number | null
   max_humidity: number | null

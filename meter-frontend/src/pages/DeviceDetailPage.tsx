@@ -571,17 +571,6 @@ export default function DeviceDetailPage() {
                       <span className="text-2xl font-extrabold text-purple-650 dark:text-purple-400 mt-2 font-mono">{latestReading.level.toFixed(1)} <span className="text-sm font-normal text-gray-500">%</span></span>
                     </div>
                   )}
-                  {latestReading.leak_detected !== undefined && latestReading.leak_detected !== null && (
-                    <div className={`glass-card border rounded-2xl p-4 flex flex-col justify-between shadow-sm ${latestReading.leak_detected ? 'border-red-500/30 bg-red-500/5' : 'border-green-500/20 bg-green-500/5'}`}>
-                      <span className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold flex items-center gap-1.5">
-                        <AlertTriangle className={`w-3.5 h-3.5 ${latestReading.leak_detected ? 'text-red-500' : 'text-green-500'}`} />
-                        Leak
-                      </span>
-                      <span className={`text-2xl font-extrabold mt-2 ${latestReading.leak_detected ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
-                        {latestReading.leak_detected ? 'Aniqlandi' : "Yo'q"}
-                      </span>
-                    </div>
-                  )}
                 </div>
               ) : (
                 <EmptyBlock

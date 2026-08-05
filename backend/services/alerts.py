@@ -18,7 +18,6 @@ ALERT_RULE_KINDS = {
     "water_low_pressure",
     "water_not_reaching_top",
     "gas_pressure",
-    "gas_leak",
     "soil_dry",
     "soil_wet",
     "sound_high_level",
@@ -219,22 +218,6 @@ async def check_alerts(session, reading: MeterReading) -> list[dict]:
                     ),
                 ),
                 gas_pressure_rule,
-            )
-        if reading.leak_detected:
-            gas_leak_rule = rules.get("gas_leak")
-            _queue_alert(
-                alerts,
-                Alert(
-                    device_id=reading.device_id,
-                    building_id=reading.building_id,
-                    point_id=reading.point_id,
-                    utility_type="gas",
-                    severity=_rule_severity(gas_leak_rule, "critical"),
-                    ts=ts,
-                    kind="gas_leak",
-                    message=_rule_message(gas_leak_rule, "Gaz sizishi aniqlandi"),
-                ),
-                gas_leak_rule,
             )
     elif reading.utility_type == "soil":
         if reading.humidity is not None:

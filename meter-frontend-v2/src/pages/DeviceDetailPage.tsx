@@ -345,14 +345,6 @@ export default function DeviceDetailPage() {
       items.push({ key: 'humidity', title: 'Namlik', value: `${r.humidity.toFixed(1)} %`, icon: Sprout, tone: 'success' })
     if (r.level !== null && r.level !== undefined)
       items.push({ key: 'level', title: 'Ovoz darajasi', value: `${r.level.toFixed(1)} %`, icon: Volume2 })
-    if (r.leak_detected !== null && r.leak_detected !== undefined)
-      items.push({
-        key: 'leak_detected',
-        title: 'Leak',
-        value: r.leak_detected ? 'Aniqlandi' : "Yo'q",
-        icon: AlertTriangle,
-        tone: r.leak_detected ? 'destructive' : 'success',
-      })
     return items
   }, [latestReading])
 
