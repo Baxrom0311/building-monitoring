@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Columns3, Download, Link2, MoreHorizontal, Plus, Search } from 'lucide-react'
+import { Columns3, Download, Eye, Link2, Plus, Search } from 'lucide-react'
 import { useDevicesList, useBuildings, qk } from '@/hooks/queries'
 import { useAuth } from '@/contexts/AuthContext'
 import apiClient from '@/lib/api'
@@ -396,37 +396,44 @@ export default function DevicesPage() {
                     )}
                     {isColumnVisible('actions') && (
                       <TableCell onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center justify-end gap-2">
-                          {/* Biriktirilmagan qurilma uchun — aniq "Biriktirish" tugmasi */}
-                          {device.building_id === null && !device.is_test_device && isAdmin && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-8 gap-1.5 border-amber-500/40 text-amber-600 hover:bg-amber-500/10 dark:text-amber-400"
-                              onClick={() => openAssign(device)}
-                            >
-                              <Link2 className="h-3.5 w-3.5" />
-                              Biriktirish
-                            </Button>
-                          )}
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" aria-label="Amallar">
-                                <MoreHorizontal className="h-4 w-4" />
+                        <div className="flex items-center justify-end gap-1.5">
+                          {/* Batafsil — aniq ikon */}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            aria-label="Batafsil ko'rish"
+                            title="Batafsil ko'rish"
+                            onClick={() => navigate(`/devices/${device.id}`)}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          {/* Biriktirish / qayta biriktirish — doim aniq ikon */}
+                          {!device.is_test_device && isAdmin && (
+                            device.building_id === null ? (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-8 gap-1.5 border-amber-500/40 text-amber-600 hover:bg-amber-500/10 dark:text-amber-400"
+                                onClick={() => openAssign(device)}
+                                title="Binoga biriktirish"
+                              >
+                                <Link2 className="h-3.5 w-3.5" />
+                                Biriktirish
                               </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => navigate(`/devices/${device.id}`)}>
-                                Batafsil ko'rish
-                              </DropdownMenuItem>
-                              {device.building_id !== null && !device.is_test_device && isAdmin && (
-                                <DropdownMenuItem onClick={() => openAssign(device)}>
-                                  <Link2 className="h-4 w-4" />
-                                  Boshqa binoga biriktirish
-                                </DropdownMenuItem>
-                              )}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                            ) : (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                onClick={() => openAssign(device)}
+                                aria-label="Boshqa binoga biriktirish"
+                                title="Boshqa binoga biriktirish"
+                              >
+                                <Link2 className="h-4 w-4" />
+                              </Button>
+                            )
+                          )}
                         </div>
                       </TableCell>
                     )}
