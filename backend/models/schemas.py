@@ -911,6 +911,9 @@ class ReadyResponse(BaseModel):
 
 class MeterReading(BaseModel):
     device_id: str
+    # RS-485 bridge o'zi nomidan yuborganda leaf sensorining asl MAC'i — faqat
+    # traceability uchun (alohida qurilma yaratmaydi).
+    source_id: Optional[str] = None
     reading_id: Optional[str] = None
     sequence_no: Optional[int] = None
     building_id: Optional[int] = None

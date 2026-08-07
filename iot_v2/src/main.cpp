@@ -710,7 +710,6 @@ void setup() {
 
 #ifndef RS485_BRIDGE
     server_ok = server_check();
-    if (server_ok) ota_check(device_id, FW_VERSION);
 #endif
 
     // ── Sensor ───────────────────────────────────────────────────────────────
@@ -765,8 +764,7 @@ void setup() {
     rs485_bridge_init();
 #endif
 
-    // Watchdog va OTA rollback
-    ota_mark_valid();
+    // Watchdog (OTA butunlay olib tashlandi)
     wdt_init();
 
     LOG_PRINTLN("Tayyor!\n");
@@ -826,7 +824,6 @@ void loop() {
         if (server_ok && !prev) {
             if (!registered) registered = do_register();
             buf_flush();
-            ota_check(device_id, FW_VERSION);
         }
     }
 

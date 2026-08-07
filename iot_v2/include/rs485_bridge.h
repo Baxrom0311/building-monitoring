@@ -84,16 +84,25 @@ static void rs485_bridge_init() {
 // (yoki WiFi/server yo'q bo'lsa offline buferga saqlaydi) — main.cpp'dagi
 // o'zining reading yuborish yo'li bilan bir xil mantiq.
 static void rs485_bridge_forward(const char* json_in) {
-    String json(json_in);
-    char _ts[25];
-    if (diag_timestamp(_ts, sizeof(_ts))) {
-        int _lb = json.lastIndexOf('}');
-        if (_lb > 0) {
-            char _ts_frag[50];
-            snprintf(_ts_frag, sizeof(_ts_frag), ",\"timestamp\":\"%s\"}", _ts);
-            json = json.substring(0, _lb) + _ts_frag;
-        }
+    // Leaf o'qishini BRIDGE nomidan yuboramiz — backend'da faqat bitta qurilma
+    // (bu bridge) ko'rinadi, leaf'lar alohida qurilma sifatida chiqmaydi.
+    // utility_type saqlanadi, shuning uchun bino ko'rinishida har sensor turi
+    // (elektr/suv/gaz/issiqlik...) baribir ajraladi. Leaf'ning asl MAC'i
+    // source_id sifatida saqlanadi (traceability uchun, ixtiyoriy).
+    StaticJsonDocument<512> doc;
+    if (deserializeJson(doc, json_in)) {
+        buf_push(String(json_in));   // parse bo'lmasa o'z holicha buferga
+        return;
     }
+    const char* leaf_mac = doc["device_id"] | "";
+    if (leaf_mac[0]) doc["source_id"] = leaf_mac;
+    doc["device_id"] = device_id;    // bridge (yagona qurilma)
+
+    char _ts[25];
+    if (diag_timestamp(_ts, sizeof(_ts))) doc["timestamp"] = _ts;
+
+    String json;
+    serializeJson(doc, json);
     if (WiFi.status() == WL_CONNECTED && server_ok) {
         if (!http_post("/api/readings", json)) buf_push(json);
     } else {
