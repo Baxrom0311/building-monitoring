@@ -23,19 +23,25 @@ async def public_display(building_id: Optional[int] = None):
         return result["stats"]
 
     building_info = None
-    if building_id is not None:
-        async with SessionLocal() as session:
-            building = await BuildingRepository(session).get(building_id)
-        if building:
-            building_info = {"id": building.id, "name": building.name, "address": building.address}
+    async with SessionLocal() as session:
+        repo = BuildingRepository(session)
+        if building_id is not None:
+            building = await repo.get(building_id)
+            if building:
+                building_info = {"id": building.id, "name": building.name, "address": building.address}
+        # Displey ekranida bino tanlash uchun aktiv binolar ro'yxati (id + nom)
+        all_buildings = await repo.list_active()
+    buildings = [{"id": b.id, "name": b.name} for b in all_buildings]
 
     return {
         "building": building_info,
+        "buildings": buildings,
         "electricity": await stats("electricity"),
         "water": await stats("water"),
         "gas": await stats("gas"),
         "soil": await stats("soil"),
         "sound": await stats("sound"),
+        "heating": await stats("heating"),
     }
 
 

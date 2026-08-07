@@ -22,11 +22,13 @@ const BASE = API_BASE_URL || window.location.origin
 
 interface DisplayData {
   building?: { id: number; name: string; address?: string | null } | null
+  buildings?: { id: number; name: string }[]
   electricity: HourlyUtilityStat[]
   water: HourlyUtilityStat[]
   gas: HourlyUtilityStat[]
   soil: HourlyUtilityStat[]
   sound: HourlyUtilityStat[]
+  heating?: HourlyUtilityStat[]
 }
 
 // ?building_id=3 bo'lsa kiosk faqat shu bino ma'lumotini ko'rsatadi
@@ -218,6 +220,24 @@ export default function DisplayPage() {
         </div>
 
         <div className="flex items-center gap-6">
+          {/* Bino tanlagich — displey bino kesimida ko'rsatiladi */}
+          {data?.buildings && data.buildings.length > 0 && (
+            <select
+              value={BUILDING_ID ?? ''}
+              onChange={(e) => {
+                const v = e.target.value
+                window.location.search = v ? `?building_id=${v}` : ''
+              }}
+              className="max-w-[220px] rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm text-slate-200 outline-none focus:border-blue-500"
+            >
+              <option value="">Barcha binolar</option>
+              {data.buildings.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+          )}
           <div className="flex items-center gap-3 text-slate-400">
             <LiveDot ok={online} />
             {lastUpdate && (
