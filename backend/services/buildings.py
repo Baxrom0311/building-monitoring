@@ -43,8 +43,10 @@ async def create_building(body: BuildingCreate) -> dict:
 
 
 async def list_buildings() -> dict:
+    # Faqat aktiv (o'chirilmagan) binolar — soft-delete qilingan/eski orphan
+    # binolar ro'yxatni chalkashtirmasin.
     async with SessionLocal() as session:
-        rows = await BuildingRepository(session).list_ordered()
+        rows = await BuildingRepository(session).list_active()
     return {"buildings": [model_to_dict(row) for row in rows]}
 
 

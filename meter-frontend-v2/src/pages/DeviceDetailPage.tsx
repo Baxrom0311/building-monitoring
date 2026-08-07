@@ -441,7 +441,15 @@ export default function DeviceDetailPage() {
                     label="Oxirgi ko'rilgan"
                     value={device.last_seen ? new Date(device.last_seen * 1000).toLocaleString('uz-UZ') : '—'}
                   />
-                  <InfoField label="Bino" value={device.building ?? '—'} />
+                  <InfoField
+                    label="Bino"
+                    value={
+                      device.building_id
+                        ? (buildings?.find((b) => b.id === device.building_id)?.name ??
+                           `#${device.building_id}`)
+                        : (device.building ?? '—')
+                    }
+                  />
                   <InfoField
                     label="Qavat / Xona"
                     value={
