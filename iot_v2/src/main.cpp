@@ -324,6 +324,193 @@ void loop() {
     processChannel(ch_water);
 }
 
+#elif defined(RS485_SELFTEST)
+// RS-485 SELF-TEST — bitta ESP32 bilan rs485_bus.h freym protokolini sinash.
+// Har 1.5s da raqamli test freymi yuboradi, keyin o'sha freymni qabul
+// qilishga urinadi va natijani Serial'ga chiqaradi. WiFi/sensor YO'Q.
+//
+// Ulanish (2 variant):
+//   A) TEZ (protokol/firmware testi) — modulni CHETLAB O'TIB, GPIO33 (TX) ni
+//      to'g'ridan-to'g'ri GPIO32 (RX) ga jumper bilan ulang. Freym qaytib
+//      keladi → protokol 100% ishlaydi.
+//   B) MODUL bilan (haqiqiy) — MAX485 da RE(pin2) ni GND ga uling (qabul doim
+//      yoniq), DE(pin3) ni GPIO25 ga. A/B tashqi ulanish shart emas (modul o'z
+//      A/B sini o'zi eshitadi). Shunda modul orqali echo bo'ladi.
+#include <Arduino.h>
+#include "core/log.h"
+#include "rs485_bus.h"
+
+void setup() {
+    Serial.begin(115200);
+    unsigned long _t = millis(); while (millis() - _t < 300) yield();
+    rs485_init();
+    LOG_PRINTLN();
+    LOG_PRINTLN("=== RS-485 SELF-TEST ===");
+    LOG_PRINTF("Bus: RX=%d TX=%d DE=%d @%lu baud\n",
+               RS485_BUS_RX, RS485_BUS_TX, RS485_BUS_DE, (unsigned long)RS485_BAUD);
+    LOG_PRINTLN("Har 1.5s da freym yuboriladi va qaytishi tekshiriladi.\n");
+}
+
+void loop() {
+    static uint32_t counter = 0;
+    char msg[48];
+    int len = snprintf(msg, sizeof(msg), "{\"test\":%lu,\"hello\":\"A1TECH\"}",
+                       (unsigned long)counter++);
+
+    LOG_PRINTF("TX -> %s\n", msg);
+    rs485_send_frame((const uint8_t*)msg, (uint16_t)len);
+
+    // Yuborilgan freymni qaytishini kutamiz (loopback)
+    uint8_t rx[64];
+    uint16_t n = rs485_recv_frame(rx, sizeof(rx) - 1, 500);
+    if (n > 0) {
+        rx[n] = '\0';
+        bool ok = (n == (uint16_t)len && memcmp(rx, msg, len) == 0);
+        LOG_PRINTF("RX <- (%d bayt) %s  [%s]\n", (int)n, (const char*)rx,
+                   ok ? "MOS ✓" : "FARQLI ✗");
+    } else {
+        LOG_PRINTLN("RX <- (qaytmadi — loopback/ulanishni tekshiring)");
+    }
+    LOG_PRINTLN("");
+
+    unsigned long t = millis(); while (millis() - t < 1500) yield();
+}
+
+#elif defined(RS485_MASTER_TEST)
+// RS-485 MASTER TEST — bridge o'rnida, LEKIN meter/WiFi/server YO'Q. Faqat
+// shinaga DISCOVER + adresli POLL yuborib, leaf javoblarini Serial'ga chiqaradi.
+// 2 ta ESP32 (biri shu master, biri RS485_LEAF) A-A/B-B ulanganda shinada
+// ma'lumot almashinuvini isbotlaydi. Bus pinlarini env'da override qilish mumkin
+// (masalan master moduli 16/17/4 da bo'lsa).
+#include <Arduino.h>
+#include <ArduinoJson.h>
+#include <string.h>
+#include "core/log.h"
+#include "rs485_bus.h"
+#ifdef HAVE_LCD
+  #include "display/lcd.h"
+#endif
+
+void setup() {
+    Serial.begin(115200);
+    unsigned long _t = millis(); while (millis() - _t < 300) yield();
+    rs485_init();
+#ifdef HAVE_LCD
+    lcd_init();
+    lcd_row(0, "RS485 Master");
+    lcd_row(1, "Leaf kutilmoqda");
+#endif
+    LOG_PRINTLN();
+    LOG_PRINTLN("=== RS-485 MASTER TEST ===");
+    LOG_PRINTF("Bus: RX=%d TX=%d DE=%d @%lu baud\n",
+               RS485_BUS_RX, RS485_BUS_TX, RS485_BUS_DE, (unsigned long)RS485_BAUD);
+    LOG_PRINTLN("DISCOVER + adresli POLL. Leaf javoblari kutilmoqda...\n");
+}
+
+static char m_roster[8][13];
+static int  m_roster_n = 0;
+
+static bool m_extract_id(const char* json, char* out) {
+    StaticJsonDocument<512> doc;
+    if (deserializeJson(doc, json)) return false;
+    const char* id = doc["device_id"];
+    if (!id || strlen(id) != 12) return false;
+    strncpy(out, id, 13); out[12] = '\0';
+    return true;
+}
+
+#ifdef HAVE_LCD
+// Kelgan o'qishni LCD'da ko'rsatadi (iot/'dagi kabi — 0-qatorda qiymat,
+// 1-qatorda "A1TECH  BRR"). utility_type'ga qarab formatlaydi.
+static void m_lcd_show(const char* json) {
+    StaticJsonDocument<512> doc;
+    if (deserializeJson(doc, json)) return;
+    const char* ut = doc["utility_type"] | "";
+    char row0[LCD_COLS + 1];
+
+    if (!strcmp(ut, "electricity")) {
+        float v = doc["voltage_l1"] | 0.0f;
+        float a = doc["current_l1"] | 0.0f;
+        int   w = doc["power_w"]    | 0;
+        snprintf(row0, sizeof(row0), "%.0fV %.2fA %dW", v, a, w);
+    } else if (!strcmp(ut, "soil")) {
+        float h = doc["humidity"] | 0.0f;
+        snprintf(row0, sizeof(row0), "Namlik: %.0f %%", h);
+    } else if (!strcmp(ut, "water")) {
+        float p = doc["pressure_bottom_bar"] | 0.0f;
+        snprintf(row0, sizeof(row0), "Suv: %.2f bar", p);
+    } else if (!strcmp(ut, "gas")) {
+        float p = doc["pressure_bar"] | 0.0f;
+        snprintf(row0, sizeof(row0), "Gaz: %.2f bar", p);
+    } else if (!strcmp(ut, "sound")) {
+        float l = doc["level"] | 0.0f;
+        snprintf(row0, sizeof(row0), "Ovoz: %.0f %%", l);
+    } else if (!strcmp(ut, "heating")) {
+        float ti = doc["temperature_in_c"]  | 0.0f;
+        float to = doc["temperature_out_c"] | 0.0f;
+        snprintf(row0, sizeof(row0), "K:%.0f Ch:%.0f", ti, to);
+    } else {
+        snprintf(row0, sizeof(row0), "%-16s", ut);
+    }
+    lcd_row(0, row0);
+    lcd_row(1, "A1TECH  BRR");
+}
+#endif
+
+void loop() {
+    // 1) DISCOVER — yangi leaflarni topamiz
+    uint8_t cmd = RS485_CMD_DISCOVER;
+    rs485_send_frame(&cmd, 1);
+    LOG_PRINTLN("→ DISCOVER yuborildi");
+
+    unsigned long win = millis();
+    while (millis() - win < 1200) {
+        uint8_t buf[RS485_MAX_FRAME + 1];
+        uint16_t n = rs485_recv_frame(buf, RS485_MAX_FRAME, 300);
+        if (n == 0) continue;
+        buf[n] = '\0';
+        char id[13];
+        if (m_extract_id((const char*)buf, id)) {
+            LOG_PRINTF("  ← javob: %s\n", (const char*)buf);
+#ifdef HAVE_LCD
+            m_lcd_show((const char*)buf);
+#endif
+            bool bor = false;
+            for (int i = 0; i < m_roster_n; i++) if (!strcmp(m_roster[i], id)) bor = true;
+            if (!bor && m_roster_n < 8) { strncpy(m_roster[m_roster_n++], id, 13);
+                LOG_PRINTF("  + ro'yxatga qo'shildi: %s (jami %d)\n", id, m_roster_n); }
+        } else {
+            LOG_PRINTF("  ← yaroqsiz (%d bayt) MATN: [%s]\n", (int)n, (const char*)buf);
+            LOG_PRINT("     HEX:");
+            for (uint16_t _i = 0; _i < n && _i < 40; _i++) LOG_PRINTF(" %02X", buf[_i]);
+            LOG_PRINTLN("");
+        }
+    }
+
+    // 2) Adresli POLL — har leafni navbat bilan so'raymiz
+    for (int i = 0; i < m_roster_n; i++) {
+        uint8_t p[13]; p[0] = RS485_CMD_POLL; memcpy(p + 1, m_roster[i], 12);
+        rs485_send_frame(p, 13);
+        LOG_PRINTF("→ POLL %s\n", m_roster[i]);
+        unsigned long w = millis(); bool got = false;
+        while (millis() - w < 350) {
+            uint8_t buf[RS485_MAX_FRAME + 1];
+            uint16_t n = rs485_recv_frame(buf, RS485_MAX_FRAME, 300);
+            if (n == 0) continue;
+            buf[n] = '\0';
+            LOG_PRINTF("  ← %s\n", (const char*)buf);
+#ifdef HAVE_LCD
+            m_lcd_show((const char*)buf);
+#endif
+            got = true; break;
+        }
+        if (!got) LOG_PRINTF("  ← (javob yo'q — %s)\n", m_roster[i]);
+    }
+
+    LOG_PRINTF("Sikl tugadi — %d leaf ma'lum.\n\n", m_roster_n);
+    unsigned long t = millis(); while (millis() - t < 3000) yield();
+}
+
 #elif defined(RS485_LEAF)
 // RS-485 LEAF MODE — bino ichidagi "ahmoq" sensor kontrolleri, WiFi yo'q.
 // Ma'lumotni RS-485 shinasiga JSON sifatida chiqaradi, bridge (RS485_BRIDGE,
@@ -501,11 +688,15 @@ void setup() {
     {
         bool wifi_ok = wifi_connect_boot(DEFAULT_WIFI_SSID, DEFAULT_WIFI_PASS);
         if (!wifi_ok) {
-#if defined(HAVE_LCD) && !defined(SENSOR_ELECTRICITY)
+#if defined(HAVE_LCD) && defined(SENSOR_ELECTRICITY)
+            // Elektr/bridge LCD (elec_lcd_row) — foydalanuvchi AP nomini ko'rsin
+            elec_lcd_row(0, "WiFi Sozlash:");
+            elec_lcd_row(1, WIFI_AP_NAME);
+#elif defined(HAVE_LCD)
             lcd_row(0, "WiFi AP Portal");
             lcd_row(1, WIFI_AP_NAME);
 #endif
-            LOG_PRINTLN("WiFi: Ulanish bo'lmadi — AP Sozlash Portali ochilmoqda...");
+            LOG_PRINTF("WiFi: Ulanish bo'lmadi — AP '%s' Sozlash Portali ochilmoqda...\n", WIFI_AP_NAME);
             wifi_portal(WIFI_AP_NAME, WIFI_AP_PASS, device_id, g_cfg.meter_serial);
         }
     }
@@ -513,11 +704,22 @@ void setup() {
     // NTP vaqt sinxronlash (WiFi ulangandan keyin)
     if (WiFi.status() == WL_CONNECTED) ntp_init();
 
+#ifndef RS485_BRIDGE
     server_ok = server_check();
     if (server_ok) ota_check(device_id, FW_VERSION);
+#endif
 
     // ── Sensor ───────────────────────────────────────────────────────────────
-#ifdef SENSOR_ELECTRICITY
+#if defined(RS485_BRIDGE)
+    // Sof COLLECTOR — o'z meterini o'qimaydi (leaf'lardan yig'adi). sensor_init
+    // faqat LCD/Serial2 sozlaydi, sekin DLMS ulanish urinishlari YO'Q (aks holda
+    // "Yuklanmoqda"da 10-15s qotib turardi).
+    sensor_init();
+  #if defined(HAVE_LCD)
+    elec_lcd_row(0, "");
+    elec_lcd_row(1, "A1TECH  BRR");
+  #endif
+#elif defined(SENSOR_ELECTRICITY)
     sensor_init();
     wifi_pause();
 
@@ -540,12 +742,17 @@ void setup() {
     sensor_init();
 #endif
 
+#ifdef RS485_BRIDGE
+    // Collector — setup'da server_check YO'Q (TLS ~4s kutmaymiz). loop birinchi
+    // iteratsiyada darhol tekshiradi; LCD esa poll'dan keyin darhol data ko'rsatadi.
+#else
     server_ok = server_check();
     if (server_ok) {
         registered = do_register();
         buf_flush();
     }
-#ifdef SENSOR_ELECTRICITY
+#endif
+#if defined(SENSOR_ELECTRICITY) && !defined(RS485_BRIDGE)
     if (server_ok) lora_check();
     disp_show_status(WiFi.status() == WL_CONNECTED, server_ok, g_lora_ok);
 #endif
@@ -595,15 +802,20 @@ void loop() {
 #endif
 
     // Sensor o'qish vaqti tekshirish
-#ifdef SENSOR_ELECTRICITY
+#if defined(RS485_BRIDGE)
+    // Sof collector — o'z sensori/meterini o'qimaydi, faqat leaf'lardan yig'adi.
+    bool meter_time = false;
+#elif defined(SENSOR_ELECTRICITY)
     bool meter_time = (now - last_read_ms >= meter_retry_ms || last_read_ms == 0);
 #else
     bool meter_time = (now - last_read_ms >= g_cfg.read_interval_ms || last_read_ms == 0);
 #endif
 
-    // Server health check (har 60s, faqat WiFi bor bo'lsa)
+    // Server health check (birinchi marta DARHOL, keyin har 60s) — faqat WiFi bor bo'lsa.
+    // Birinchisi tez bo'lgani uchun collector setup'da TLS'ni kutmasdan ishga
+    // tushadi, LCD data'ni darhol ko'rsatadi, server tekshiruvi fonda bo'ladi.
     if (!meter_time && WiFi.status() == WL_CONNECTED &&
-        now - last_health_ms >= HEALTH_CHECK_MS) {
+        (last_health_ms == 0 || now - last_health_ms >= HEALTH_CHECK_MS)) {
         last_health_ms = now;
         bool prev = server_ok;
         server_ok = server_check();

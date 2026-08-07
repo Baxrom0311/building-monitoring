@@ -33,7 +33,6 @@ static bool wifi_has_saved_creds() {
     wifi_config_t conf;
     if (esp_wifi_get_config(WIFI_IF_STA, &conf) != ESP_OK) return false;
     if (conf.sta.ssid[0] == 0) return false;
-    if (strcmp((const char*)conf.sta.ssid, "12") == 0) return false;
     return true;
 }
 
@@ -42,7 +41,7 @@ static bool wifi_connect_boot(const char* def_ssid, const char* def_pass) {
     WiFi.mode(WIFI_STA);
     WiFi.setSleep(false);
 
-    bool has_def = (def_ssid && def_ssid[0] && strcmp(def_ssid, "12") != 0);
+    bool has_def = (def_ssid && def_ssid[0]);
     bool saved = wifi_has_saved_creds();
     if (saved) {
         WiFi.begin();  // saqlangan creds bilan

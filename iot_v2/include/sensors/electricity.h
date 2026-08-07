@@ -23,7 +23,7 @@
 #define ELEC_LCD_SCL   22
 
 // ─── LCD drayver (WiFi firmware — o'zi boshqaradi, LoRa node — display modul) ──
-#if !defined(LORA_NODE) || defined(HAVE_LCD)
+#if (!defined(LORA_NODE) && !defined(RS485_LEAF)) || defined(HAVE_LCD)
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 
@@ -76,7 +76,7 @@ struct SensorData {
 static SensorData g_sensor_meta;
 
 // ─── LCD: elektr ko'rsatkichlari ──────────────────────────────────────────────
-#if !defined(LORA_NODE) || defined(HAVE_LCD)
+#if (!defined(LORA_NODE) && !defined(RS485_LEAF)) || defined(HAVE_LCD)
 static void lcd_show_electricity(const SensorData& d) {
     if (!g_elec_lcd_ok || !d.valid) return;
     char row0[ELEC_LCD_COLS + 1];
@@ -104,7 +104,7 @@ static void sensor_init() {
 
 // LCD: WiFi rejimda doim, LoRa node da faqat HAVE_LCD bilan
 // (ilgari electricity_lora_lcd env da ekran hech qachon init bo'lmasdi)
-#if !defined(LORA_NODE) || defined(HAVE_LCD)
+#if (!defined(LORA_NODE) && !defined(RS485_LEAF)) || defined(HAVE_LCD)
     Wire.begin(ELEC_LCD_SDA, ELEC_LCD_SCL);
     unsigned long t = millis(); while (millis() - t < 50) yield();
     uint8_t lcd_addr = 0;
@@ -255,7 +255,7 @@ static String sensor_build_json(const char* device_id,
     return out;
 }
 
-#ifndef LORA_NODE
+#if !defined(LORA_NODE) && !defined(RS485_LEAF)
 static bool sensor_do_register(const char* device_id, const char* fw_version) {
     return app_register(device_id, "electricity",
         g_sensor_meta.sensor_type[0] ? g_sensor_meta.sensor_type : "te71",

@@ -240,6 +240,46 @@ static void gw_buf_flush() {
 
 // ─── Elektr uplink qabul → buferga yozish (HTTP blokirovka qilmaydi) ─────────
 // true = qabul qilindi (ACK yuboriladi), false = joy yo'q (node qayta yuboradi)
+// ─── Eski (v1) elektr paket moslashuvi ────────────────────────────────────────
+// Mesh'dan OLDINGI firmware (seq maydoni yo'q, pf_pct=int8) 46-bayt paket
+// yuboradi. Bunday eski node'larni ham qabul qilib, joriy 51-baytli LoRaUplink
+// ga "tarjima" qilamiz — node'ni qayta flash qilmasdan ma'lumot yo'qolmasin.
+struct __attribute__((packed)) LoRaUplinkV1 {
+    uint8_t  pkt_type;          // 0x01
+    uint8_t  mac[6];
+    uint8_t  flags;             // bit0=te73, bit1=test (TTL yo'q)
+    char     meter_serial[13];
+    int16_t  v_l1, v_l2, v_l3;
+    int16_t  i_l1, i_l2, i_l3;
+    int32_t  power_w;
+    int16_t  freq_chz;
+    int32_t  energy_wh;
+    int8_t   pf_pct;            // int8! (yangi formatda int16)
+    uint16_t crc;
+};  // Jami: 46 bayt
+
+static LoRaUplink gw_upconvert_v1(const LoRaUplinkV1& o) {
+    LoRaUplink n;
+    memset(&n, 0, sizeof(n));
+    n.pkt_type = o.pkt_type;
+    memcpy(n.mac, o.mac, 6);
+    n.flags = o.flags;
+    // Eski node'da seq yo'q — reading_id barcha o'qishlarda bir xil bo'lib
+    // backend ularni duplikat deb tashlamasligi uchun epoch soniyani beramiz
+    // (node 5 daq'da bir yuboradi — soniya aniqligi yetarli).
+    time_t _now = time(nullptr);
+    n.seq = (_now > 1609459200) ? (uint32_t)_now : (uint32_t)millis();
+    memcpy(n.meter_serial, o.meter_serial, 13);
+    n.meter_serial[12] = '\0';
+    n.v_l1 = o.v_l1; n.v_l2 = o.v_l2; n.v_l3 = o.v_l3;
+    n.i_l1 = o.i_l1; n.i_l2 = o.i_l2; n.i_l3 = o.i_l3;
+    n.power_w = o.power_w;
+    n.freq_chz = o.freq_chz;
+    n.energy_wh = o.energy_wh;
+    n.pf_pct = o.pf_pct;        // int8 → int16 kengaytirish
+    return n;
+}
+
 static bool gw_handle_uplink(const LoRaUplink& pkt, int rssi) {
     NodeState* node = gw_get_node(pkt.mac);
     if (!node) return false;
@@ -593,11 +633,10 @@ void setup() {
         }
     }
 
-    // Server + OTA
+    // Server (OTA gateway'da o'chirilgan)
     gw_server_ok = server_check();
     if (gw_server_ok) {
         gw_registered = true;
-        ota_check(gw_id, FW_VERSION);
     }
 
     // LoRa init
@@ -628,9 +667,8 @@ void setup() {
     LOG_PRINTF( "│  Server     : %-26s│\n", g_cfg.server_url);
     LOG_PRINTF( "│  Max nodes  : %-26d│\n", GW_MAX_NODES);
     LOG_PRINTLN("└──────────────────────────────────────────┘");
-    // NTP + Watchdog + OTA rollback
+    // NTP + Watchdog (OTA gateway'da o'chirilgan)
     ntp_init();
-    ota_mark_valid();
     wdt_init();
     LOG_PRINTLN("Tinglayapman...\n");
 }
@@ -694,6 +732,11 @@ void loop() {
                         accepted = gw_handle_soil_uplink(*(const LoRaSoilUplink*)dec, rssi);
                     } else if (pkt_size == (int)sizeof(LoRaSoundUplink) && ptype == PKT_UPLINK_SOUND) {
                         accepted = gw_handle_sound_uplink(*(const LoRaSoundUplink*)dec, rssi);
+                    } else if (ptype == PKT_UPLINK && pkt_size == (int)sizeof(LoRaUplinkV1)) {
+                        // Eski (v1, 46-bayt) elektr paket — tarjima qilib qabul
+                        LOG_PRINTLN("GW: eski v1 elektr paket (46-bayt) — moslashuv rejimi");
+                        LoRaUplink _conv = gw_upconvert_v1(*(const LoRaUplinkV1*)dec);
+                        accepted = gw_handle_uplink(_conv, rssi);
                     } else {
                         known = false;
                         LOG_PRINTF("GW: noma'lum paket (hajm=%d, type=0x%02X)\n",
@@ -757,6 +800,5 @@ void loop() {
         _sd["firmware_mode"]    = "lora_gateway";
         String _sb; serializeJson(_sd, _sb);
         http_post("/api/device-status", _sb);
-        ota_check(gw_id, FW_VERSION);
     }
 }

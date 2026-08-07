@@ -37,7 +37,15 @@
 #ifndef RS485_MAX_FRAME
   #define RS485_MAX_FRAME  384   // Eng katta JSON (elektr emas, u alohida bus'da) uchun zaxira bilan
 #endif
-#define RS485_POLL_BYTE   0xF0   // Bridge -> leaf: "javob ber" broadcast kadri
+// ─── Bridge -> leaf komanda baytlari ─────────────────────────────────────────
+// Adresli poll (Modbus uslubi) — to'qnashuvni butunlay yo'qotadi:
+//   DISCOVER (broadcast) — hamma leaf o'z ID sini qaytaradi (bridge ro'yxat
+//     tuzadi). Faqat vaqti-vaqti bilan; bu yagona kollizion bo'lishi mumkin
+//     bosqich, shuning uchun jitter + bir necha marta takrorlanadi.
+//   POLL <id> — faqat ID si mos leaf javob beradi; bir vaqtda bittasi gapiradi.
+#define RS485_CMD_DISCOVER  0xF1   // payload: [0xF1]
+#define RS485_CMD_POLL      0xF2   // payload: [0xF2][id_str...]  (id — ASCII MAC)
+#define RS485_POLL_BYTE     0xF0   // ESKI broadcast (moslik uchun qoldirildi)
 
 static void rs485_init() {
     pinMode(RS485_BUS_DE, OUTPUT);

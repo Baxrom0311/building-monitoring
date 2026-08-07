@@ -23,7 +23,12 @@
 
 #define WIFI_RECONNECT_MS     15000UL
 #define WIFI_BOOT_TIMEOUT_MS   8000UL
-#define WIFI_PORTAL_TIMEOUT_S    120
+// Sozlash portali qancha ochiq turadi (soniya). 0 = doim ochiq (sozlanmaguncha).
+// Bridge/collector uchun 0 qilinadi (build flag bilan) — WiFi bo'lmasa baribir
+// ishlay olmaydi, shuning uchun AP doim ochiq tursin.
+#ifndef WIFI_PORTAL_TIMEOUT_S
+  #define WIFI_PORTAL_TIMEOUT_S    120
+#endif
 
 static unsigned long _wifi_reconnect_ms = 0;
 
@@ -33,7 +38,6 @@ static bool wifi_has_saved_creds() {
     wifi_config_t conf;
     if (esp_wifi_get_config(WIFI_IF_STA, &conf) != ESP_OK) return false;
     if (conf.sta.ssid[0] == 0) return false;
-    if (strcmp((const char*)conf.sta.ssid, "12") == 0) return false;
     return true;
 }
 
@@ -42,7 +46,7 @@ static bool wifi_connect_boot(const char* def_ssid, const char* def_pass) {
     WiFi.mode(WIFI_STA);
     WiFi.setSleep(false);
 
-    bool has_def = (def_ssid && def_ssid[0] && strcmp(def_ssid, "12") != 0);
+    bool has_def = (def_ssid && def_ssid[0]);
     bool saved = wifi_has_saved_creds();
     if (saved) {
         WiFi.begin();  // saqlangan creds bilan
