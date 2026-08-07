@@ -328,6 +328,9 @@ class Reading(Base):
     building_id: Mapped[int | None] = mapped_column(ForeignKey("buildings.id"))
     point_id: Mapped[int | None] = mapped_column(ForeignKey("measurement_points.id"))
     utility_type: Mapped[str] = mapped_column(String(32), default="electricity", nullable=False)
+    # RS-485 bridge o'z nomidan yuborganda leaf sensorining asl MAC'i —
+    # bitta bridge qurilma ichida sensorlarni ajratish uchun.
+    source_id: Mapped[str | None] = mapped_column(String(64))
     sensor_type: Mapped[str | None] = mapped_column(String(64))
     meter_serial: Mapped[str | None] = mapped_column(String(128))
     ts: Mapped[int] = mapped_column(Integer, nullable=False)

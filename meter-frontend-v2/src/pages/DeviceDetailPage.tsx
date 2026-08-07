@@ -21,7 +21,8 @@ import {
   Zap,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { useBuildings, useDeviceById, useDeviceHistory, useDeviceLatest, qk } from '@/hooks/queries'
+import { useBuildings, useDeviceById, useDeviceHistory, useDeviceLatest, useDeviceSensors, qk } from '@/hooks/queries'
+import type { DeviceSensor } from '@/hooks/queries'
 import { MetricBarChart } from '@/components/charts/MetricBarChart'
 import { useAuth } from '@/contexts/AuthContext'
 import apiClient from '@/lib/api'
@@ -82,6 +83,7 @@ const UTILITY_LABELS: Record<string, string> = {
   gas: 'Gaz',
   soil: "Yerto'la namligi",
   sound: 'Ovoz',
+  heating: 'Issiqlik',
 }
 
 const UTILITY_ICONS: Record<string, LucideIcon> = {
@@ -90,6 +92,28 @@ const UTILITY_ICONS: Record<string, LucideIcon> = {
   gas: Flame,
   soil: Sprout,
   sound: Volume2,
+  heating: Thermometer,
+}
+
+// Bitta sensor kartasi uchun qisqa qiymat matni (utility_type'ga qarab)
+function formatSensorValue(s: DeviceSensor): string {
+  const r = s.last_reading
+  switch (s.utility_type) {
+    case 'electricity':
+      return `${r.voltage_l1 ?? '—'} V · ${r.power_w ?? '—'} W`
+    case 'water':
+      return `${r.pressure_bottom_bar ?? r.pressure_bar ?? '—'} bar`
+    case 'gas':
+      return `${r.pressure_bar ?? '—'} bar`
+    case 'soil':
+      return r.humidity != null ? `${r.humidity.toFixed(1)} %` : '—'
+    case 'sound':
+      return r.level != null ? `${r.level.toFixed(1)} %` : '—'
+    case 'heating':
+      return `${r.temperature_in_c ?? '—'} / ${r.temperature_out_c ?? '—'} °C`
+    default:
+      return '—'
+  }
 }
 
 interface KpiItem {
@@ -126,6 +150,7 @@ export default function DeviceDetailPage() {
     refetch,
   } = useDeviceById(id || '')
   const { data: latestReading } = useDeviceLatest(id || '')
+  const { data: deviceSensors } = useDeviceSensors(id || '')
   const { data: chartHistoryData } = useDeviceHistory(id || '', 24, 1, 100)
   const { data: historyData } = useDeviceHistory(id || '', 24, historyPage, historyPageSize)
   const { data: buildings } = useBuildings()
@@ -571,6 +596,32 @@ export default function DeviceDetailPage() {
               </CardContent>
             </Card>
           </div>
+
+          {/* ── Ulangan sensorlar (RS-485 bridge ostidagi leaf'lar) ── */}
+          {deviceSensors && deviceSensors.length > 1 && (
+            <div className="space-y-4">
+              <h2 className="flex items-center gap-2 text-lg font-semibold">
+                <Activity className="h-4 w-4 text-muted-foreground" />
+                Ulangan sensorlar ({deviceSensors.length})
+              </h2>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {deviceSensors.map((s: DeviceSensor) => {
+                  const SIcon = UTILITY_ICONS[s.utility_type] ?? Activity
+                  const label = UTILITY_LABELS[s.utility_type] ?? s.utility_type
+                  const value = formatSensorValue(s)
+                  return (
+                    <KPICard
+                      key={`${s.source_id ?? ''}-${s.utility_type}`}
+                      title={label}
+                      value={value}
+                      icon={SIcon}
+                      subtitle={s.source_id ? `ID: ${s.source_id}` : undefined}
+                    />
+                  )
+                })}
+              </div>
+            </div>
+          )}
 
           {/* ── Real-vaqtdagi ko'rsatkichlar ── */}
           <div className="space-y-4">

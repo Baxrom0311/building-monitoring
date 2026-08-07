@@ -135,6 +135,7 @@ async def _save_reading_internal(session: AsyncSession, body: MeterReading, ts: 
         building_id=None if device.is_test_device else body.building_id,
         point_id=None if device.is_test_device else body.point_id,
         utility_type=body.utility_type,
+        source_id=body.source_id,
         sensor_type=body.sensor_type,
         meter_serial=body.meter_serial,
         ts=_effective_reading_ts(body, ts),
@@ -256,6 +257,24 @@ async def latest_reading(device_id: str) -> dict:
     if not row:
         raise HTTPException(404, "Ma'lumot yo'q")
     return model_to_dict(row)
+
+
+async def device_sensors(device_id: str) -> dict:
+    """Qurilma ichidagi sensorlar (RS-485 bridge ostidagi leaf'lar) — har biri
+    uchun oxirgi o'qish. Oddiy bitta-sensorli qurilmada bitta yozuv qaytadi."""
+    async with SessionLocal() as session:
+        rows = await ReadingRepository(session).latest_per_sensor(device_id)
+    sensors = [
+        {
+            "source_id": r.source_id,
+            "utility_type": r.utility_type,
+            "sensor_type": r.sensor_type,
+            "last_reading": model_to_dict(r),
+            "ts": r.ts,
+        }
+        for r in rows
+    ]
+    return {"device_id": device_id, "sensors": sensors}
 
 
 async def reading_history(device_id: str, page: int, limit: int, hours: int | None) -> dict:

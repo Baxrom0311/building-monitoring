@@ -157,6 +157,11 @@ async def device_latest(device_id: str, _: dict = Depends(current_token_payload)
     return await reading_service.latest_reading(device_id)
 
 
+@router.get("/devices/{device_id}/sensors")
+async def device_sensors(device_id: str, _: dict = Depends(current_token_payload)):
+    return await reading_service.device_sensors(device_id)
+
+
 @router.get("/devices/{device_id}/history", response_model=ReadingHistoryResponse)
 async def device_history(
     device_id: str,

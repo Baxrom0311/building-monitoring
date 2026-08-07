@@ -184,6 +184,26 @@ export function useDeviceLatest(id: string): UseQueryResult<Reading> {
   })
 }
 
+export interface DeviceSensor {
+  source_id: string | null
+  utility_type: string
+  sensor_type: string | null
+  ts: number
+  last_reading: Reading
+}
+
+export function useDeviceSensors(id: string): UseQueryResult<DeviceSensor[]> {
+  return useQuery({
+    queryKey: ['device-sensors', id],
+    queryFn: async () => {
+      const { data } = await apiClient.get(`/api/devices/${id}/sensors`)
+      return data.sensors as DeviceSensor[]
+    },
+    enabled: !!id,
+    refetchInterval: REALTIME_FALLBACK_INTERVAL_MS,
+  })
+}
+
 export function useDeviceHistory(id: string, hours = 24, page = 1, limit = 100): UseQueryResult<DeviceHistoryResponse> {
   return useQuery({
     queryKey: qk.deviceHistory(id, hours, page, limit),

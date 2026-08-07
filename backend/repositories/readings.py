@@ -13,6 +13,17 @@ class ReadingRepository(BaseRepository[Reading]):
             select(Reading).where(Reading.device_id == device_id).order_by(desc(Reading.ts)).limit(1)
         )
 
+    async def latest_per_sensor(self, device_id: str) -> list[Reading]:
+        """Bitta qurilma ichidagi har sensor (source_id + utility_type) uchun
+        oxirgi o'qish — RS-485 bridge ostidagi leaf sensorlarni ko'rsatish uchun."""
+        stmt = (
+            select(Reading)
+            .where(Reading.device_id == device_id)
+            .distinct(Reading.source_id, Reading.utility_type)
+            .order_by(Reading.source_id, Reading.utility_type, desc(Reading.ts))
+        )
+        return list((await self.session.scalars(stmt)).all())
+
     async def exists_external_id(self, device_id: str, reading_id: str) -> bool:
         existing = await self.session.scalar(
             select(Reading.id).where(and_(Reading.device_id == device_id, Reading.reading_id == reading_id))

@@ -992,6 +992,7 @@ class ReadingResponse(BaseModel):
     building_id: Optional[int] = None
     point_id: Optional[int] = None
     utility_type: str
+    source_id: Optional[str] = None
     sensor_type: Optional[str] = None
     meter_serial: Optional[str] = None
     ts: int
