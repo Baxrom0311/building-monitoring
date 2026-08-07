@@ -19,8 +19,13 @@ venv/bin/alembic upgrade head
 
 echo "=== 4. Frontend v2 build (Asosiy production) ==="
 cd ../meter-frontend-v2
-pnpm install --silent 2>/dev/null || npm install --silent 2>/dev/null
-pnpm run build 2>&1 | tail -3 || npx vite build 2>&1 | tail -3
+# pnpm ko'pincha non-interactive ssh PATH'da bo'lmaydi — npm/npx ishonchli
+npm install --silent 2>/dev/null
+npx vite build 2>&1 | tail -5
+if [ ! -f dist/index.html ]; then
+    echo "XATO: frontend build muvaffaqiyatsiz (dist/index.html yo'q) — deploy to'xtatildi"
+    exit 1
+fi
 rm -rf ../backend/frontend/*
 cp -r dist/* ../backend/frontend/
 
