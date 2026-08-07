@@ -396,24 +396,38 @@ export default function DevicesPage() {
                     )}
                     {isColumnVisible('actions') && (
                       <TableCell onClick={(e) => e.stopPropagation()}>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" aria-label="Amallar">
-                              <MoreHorizontal className="h-4 w-4" />
+                        <div className="flex items-center justify-end gap-2">
+                          {/* Biriktirilmagan qurilma uchun — aniq "Biriktirish" tugmasi */}
+                          {device.building_id === null && !device.is_test_device && isAdmin && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 gap-1.5 border-amber-500/40 text-amber-600 hover:bg-amber-500/10 dark:text-amber-400"
+                              onClick={() => openAssign(device)}
+                            >
+                              <Link2 className="h-3.5 w-3.5" />
+                              Biriktirish
                             </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => navigate(`/devices/${device.id}`)}>
-                              Batafsil ko'rish
-                            </DropdownMenuItem>
-                            {device.building_id === null && !device.is_test_device && isAdmin && (
-                              <DropdownMenuItem onClick={() => openAssign(device)}>
-                                <Link2 className="h-4 w-4" />
-                                Binoga biriktirish
+                          )}
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" aria-label="Amallar">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => navigate(`/devices/${device.id}`)}>
+                                Batafsil ko'rish
                               </DropdownMenuItem>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                              {device.building_id !== null && !device.is_test_device && isAdmin && (
+                                <DropdownMenuItem onClick={() => openAssign(device)}>
+                                  <Link2 className="h-4 w-4" />
+                                  Boshqa binoga biriktirish
+                                </DropdownMenuItem>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
                       </TableCell>
                     )}
                   </TableRow>
