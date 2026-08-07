@@ -21,12 +21,14 @@ flowchart TB
         GLEAF["🔥 Gas leaf — ESP32<br/>ADS1115 (I2C: SDA21/SCL22)<br/>MAX485: RX32/TX33/DE25"]
         SLEAF["🌱 Soil leaf — ESP32<br/>ADC: GPIO34<br/>MAX485: RX32/TX33/DE25"]
         NDLEAF["🔊 Sound leaf — ESP32<br/>ADC: GPIO34<br/>MAX485: RX32/TX33/DE25"]
+        HLEAF["♨️ Heating leaf — ESP32<br/>DS18B20 (1-Wire: GPIO4/GPIO5)<br/>MAX485: RX32/TX33/DE25"]
     end
 
     WLEAF <-.->|"A/B"| RSLINE
     GLEAF <-.->|"A/B"| RSLINE
     SLEAF <-.->|"A/B"| RSLINE
     NDLEAF <-.->|"A/B"| RSLINE
+    HLEAF <-.->|"A/B"| RSLINE
 
     RSLINE <-.->|"A/B (bridge = master)"| BRPORT["Bridge RS-485 port<br/>Serial1: RX32/TX33/DE25<br/>@19200 baud"]
 

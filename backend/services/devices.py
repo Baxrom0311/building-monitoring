@@ -4,6 +4,7 @@ from core.config import settings
 from core.database import SessionLocal
 from core.security import generate_secret_token, hash_password, verify_password_async
 from core.time import now_ts
+from core.translit import uzbek_search_match
 from models.entities import Device, DeviceProvisioningToken
 from models.schemas import DeviceCreate, DeviceProvisioningTokenCreate, DeviceRegister, DeviceStatus, DeviceUpdate
 from repositories.base import model_to_dict
@@ -292,8 +293,8 @@ async def list_devices(
             haystack = " ".join(
                 str(payload.get(key) or "")
                 for key in ("id", "name", "meter_serial", "meter_type", "utility_type", "building_text")
-            ).lower()
-            if query not in haystack:
+            )
+            if not uzbek_search_match(haystack, q):
                 continue
         devices.append(payload)
 

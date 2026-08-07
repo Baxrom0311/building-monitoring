@@ -22,6 +22,10 @@ import { useTheme } from '@/contexts/ThemeContext'
 import apiClient from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/errors'
 import { notifyError, notifySuccess } from '@/lib/toast'
+import { translitIncludes } from '@/lib/translit'
+import { StatusPulse } from '@/components/ui/StatusPulse'
+import { SpotlightCard } from '@/components/ui/SpotlightCard'
+import { StaggerContainer } from '@/components/ui/StaggerContainer'
 import type { Building } from '@/types/api'
 import { EmptyBlock, ErrorBlock, LoadingBlock } from '@/components/StateBlock'
 import { Pagination } from '@/components/Pagination'
@@ -336,15 +340,14 @@ export default function BuildingsPage() {
 
   const filteredBuildings = useMemo(() => {
     if (!buildings) return []
-    const q = searchQuery.toLowerCase().trim()
-    if (!q) return buildings
+    if (!searchQuery.trim()) return buildings
     return buildings.filter(
       (b) =>
-        b.name.toLowerCase().includes(q) ||
-        (b.address ?? '').toLowerCase().includes(q) ||
-        (b.organization_name ?? '').toLowerCase().includes(q) ||
-        (b.mahalla_name ?? '').toLowerCase().includes(q) ||
-        (b.description ?? '').toLowerCase().includes(q),
+        translitIncludes(b.name, searchQuery) ||
+        translitIncludes(b.address, searchQuery) ||
+        translitIncludes(b.organization_name, searchQuery) ||
+        translitIncludes(b.mahalla_name, searchQuery) ||
+        translitIncludes(b.description, searchQuery),
     )
   }, [buildings, searchQuery])
 
@@ -496,16 +499,15 @@ export default function BuildingsPage() {
         <EmptyBlock title="Ma'lumot topilmadi" message="Ushbu filtrga mos binolar topilmadi" />
       ) : viewMode === 'card' ? (
         <div className="space-y-4">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <StaggerContainer className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             {pagedBuildings.map((building) => {
               const st = getBuildingStatus(building)
               return (
-                <Link key={building.id} to={`/buildings/${building.id}`} className="group block">
-                  <Card className="relative h-full gap-3 transition-colors hover:border-primary/40">
-                    <span
-                      className={`absolute right-4 top-4 h-2.5 w-2.5 rounded-full ${STATUS_DOT[st]}`}
-                      title={STATUS_LABEL[st]}
-                    />
+                <Link key={building.id} to={`/buildings/${building.id}`} className="group block h-full">
+                  <SpotlightCard className="relative h-full gap-3 hover-lift transition-all hover:border-primary/50">
+                    <div className="absolute right-4 top-4 z-20" title={STATUS_LABEL[st]}>
+                      <StatusPulse status={st === 'online' ? 'online' : st === 'unknown' ? 'warning' : 'offline'} size="sm" />
+                    </div>
                     <CardContent className="space-y-3">
                       <div className="flex items-start gap-3 pr-5">
                         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -548,11 +550,11 @@ export default function BuildingsPage() {
                         <ArrowRight className="h-4 w-4 shrink-0 text-primary opacity-0 transition-all group-hover:translate-x-1 group-hover:opacity-100" />
                       </div>
                     </CardContent>
-                  </Card>
+                  </SpotlightCard>
                 </Link>
               )
             })}
-          </div>
+          </StaggerContainer>
           <Pagination
             page={page}
             pages={totalPages}

@@ -532,8 +532,10 @@ void loop() {
   #include "sensors/soil.h"
 #elif defined(SENSOR_SOUND)
   #include "sensors/sound.h"
+#elif defined(SENSOR_HEATING)
+  #include "sensors/heating.h"
 #else
-  #error "Sensor flag kerak: -DSENSOR_ELECTRICITY | _WATER | _GAS | _SOIL | _SOUND"
+  #error "Sensor flag kerak: -DSENSOR_ELECTRICITY | _WATER | _GAS | _SOIL | _SOUND | _HEATING"
 #endif
 
 // ─── Display ─────────────────────────────────────────────────────────────────
@@ -541,6 +543,8 @@ void loop() {
   #include "display/disp_soil.h"
 #elif defined(HAVE_LCD) && defined(SENSOR_SOUND)
   #include "display/disp_sound.h"
+#elif defined(HAVE_LCD) && defined(SENSOR_HEATING)
+  #include "display/disp_heating.h"
 #elif defined(HAVE_LCD) && defined(SENSOR_ELECTRICITY)
   #include "display/disp_elec.h"
 #else

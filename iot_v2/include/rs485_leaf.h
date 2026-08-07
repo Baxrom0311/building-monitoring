@@ -38,6 +38,9 @@ static AppConfig g_cfg = { false };
 #elif defined(SENSOR_GAS)
   #include "sensors/gas.h"
   #define LEAF_SENSOR_NAME "Gaz"
+#elif defined(SENSOR_HEATING)
+  #include "sensors/heating.h"
+  #define LEAF_SENSOR_NAME "Isitish"
 #elif defined(SENSOR_ELECTRICITY)
   // Tok leaf — "DLMS→JSON tarjimon": metrni Serial2 (16/17/4) da DLMS bilan
   // o'qiydi, natijani Serial1 (leaf shina) ga JSON qilib chiqaradi. 2 MAX485.
@@ -45,7 +48,7 @@ static AppConfig g_cfg = { false };
   #define LEAF_SENSOR_NAME "Elektr"
   #define LEAF_NEEDS_CONNECT 1
 #else
-  #error "RS-485 leaf uchun sensor turi kerak: -DSENSOR_SOIL/_SOUND/_WATER/_GAS/_ELECTRICITY"
+  #error "RS-485 leaf uchun sensor turi kerak: -DSENSOR_SOIL/_SOUND/_WATER/_GAS/_HEATING/_ELECTRICITY"
 #endif
 
 #include "rs485_bus.h"

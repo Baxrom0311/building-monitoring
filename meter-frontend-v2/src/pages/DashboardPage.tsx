@@ -20,6 +20,8 @@ import {
 import { useAlerts, useDevices, useHourlyStats, useSummary } from '@/hooks/queries'
 import type { HourlyUtilityStat } from '@/types/api'
 import { KPICard } from '@/components/KPICard'
+import { AnimatedNumber } from '@/components/ui/AnimatedNumber'
+import { StatusPulse } from '@/components/ui/StatusPulse'
 import { MetricBarChart } from '@/components/charts/MetricBarChart'
 import { ChartSkeleton, EmptyBlock, KPISkeletonGrid, TableSkeleton } from '@/components/StateBlock'
 import { Badge } from '@/components/ui/badge'
@@ -324,13 +326,13 @@ export default function DashboardPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Badge variant="outline" className="gap-1.5">
-            <Wifi className="h-3.5 w-3.5 text-emerald-500" />
-            {onlinePercent}% online
+          <Badge variant="outline" className="gap-1.5 py-1 px-2.5">
+            <StatusPulse status={onlinePercent > 0} size="sm" />
+            <AnimatedNumber value={onlinePercent} suffix="% online" />
           </Badge>
-          <Badge variant="outline" className="gap-1.5">
-            <Bell className="h-3.5 w-3.5 text-red-500" />
-            {summary?.alerts_active || 0} alert
+          <Badge variant="outline" className="gap-1.5 py-1 px-2.5">
+            <StatusPulse status={summary?.alerts_active ? 'warning' : 'offline'} size="sm" />
+            <AnimatedNumber value={summary?.alerts_active || 0} suffix=" alert" />
           </Badge>
         </div>
       </div>
@@ -340,33 +342,41 @@ export default function DashboardPage() {
         <KPISkeletonGrid />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <KPICard
-            title="Jami qurilmalar"
-            value={summary?.devices_total || 0}
-            subtitle={`${summary?.devices_online || 0} online`}
-            icon={Zap}
-          />
-          <KPICard
-            title="Jami binolar"
-            value={summary?.buildings || 0}
-            subtitle="Ro'yxatdagi binolar"
-            icon={Home}
-            tone="success"
-          />
-          <KPICard
-            title="Faol ogohlantirishlar"
-            value={summary?.alerts_active || 0}
-            subtitle={`${criticalAlerts} kritik`}
-            icon={AlertCircle}
-            tone={summary?.alerts_active ? 'destructive' : 'default'}
-          />
-          <KPICard
-            title="O'lchovlar (soatlik)"
-            value={summary?.reads_last_hour || 0}
-            subtitle="So'ngi soat"
-            icon={TrendingUp}
-            tone="warning"
-          />
+          <div className="hover-lift">
+            <KPICard
+              title="Jami qurilmalar"
+              value={summary?.devices_total || 0}
+              subtitle={`${summary?.devices_online || 0} online`}
+              icon={Zap}
+            />
+          </div>
+          <div className="hover-lift">
+            <KPICard
+              title="Jami binolar"
+              value={summary?.buildings || 0}
+              subtitle="Ro'yxatdagi binolar"
+              icon={Home}
+              tone="success"
+            />
+          </div>
+          <div className="hover-lift">
+            <KPICard
+              title="Faol ogohlantirishlar"
+              value={summary?.alerts_active || 0}
+              subtitle={`${criticalAlerts} kritik`}
+              icon={AlertCircle}
+              tone={summary?.alerts_active ? 'destructive' : 'default'}
+            />
+          </div>
+          <div className="hover-lift">
+            <KPICard
+              title="O'lchovlar (soatlik)"
+              value={summary?.reads_last_hour || 0}
+              subtitle="So'ngi soat"
+              icon={TrendingUp}
+              tone="warning"
+            />
+          </div>
         </div>
       )}
 
@@ -393,17 +403,21 @@ export default function DashboardPage() {
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') navigate(`/devices?utility=${u.key}`)
                   }}
-                  className="cursor-pointer transition-colors hover:bg-accent/50"
+                  className="cursor-pointer hover-lift transition-all hover:bg-accent/50"
                 >
                   <CardContent className="p-4">
                     <div className="mb-3 flex items-center justify-between">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-card">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-card shadow-xs">
                         <Icon className="h-4 w-4" style={{ color: u.color }} />
                       </div>
-                      <span className="text-xs font-semibold text-muted-foreground">{pct}%</span>
+                      <span className="text-xs font-semibold text-muted-foreground">
+                        <AnimatedNumber value={pct} suffix="%" />
+                      </span>
                     </div>
                     <p className="text-xs uppercase tracking-wide text-muted-foreground">{u.label}</p>
-                    <p className="mt-1 font-mono text-2xl font-semibold">{u.total}</p>
+                    <p className="mt-1 font-mono text-2xl font-semibold">
+                      <AnimatedNumber value={u.total} />
+                    </p>
                     <Progress value={pct} className="mt-2.5 h-1.5" />
                     <div className="mt-2 flex items-center justify-between text-xs font-medium">
                       <span className="flex items-center gap-1 text-emerald-500">

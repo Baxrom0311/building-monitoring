@@ -30,6 +30,7 @@ const AnalyticsPage = lazy(() => import('@/pages/AnalyticsPage'))
 const BillingPage = lazy(() => import('@/pages/BillingPage'))
 const TerritoryPage = lazy(() => import('@/pages/TerritoryPage'))
 const DisplayPage = lazy(() => import('@/pages/DisplayPage'))
+const DemoPage = lazy(() => import('@/pages/DemoPage'))
 
 const queryClient = new QueryClient({
   queryCache: new QueryCache({
@@ -75,6 +76,7 @@ export default function App() {
                 <Routes>
                   <Route path="/login" element={<LoginPage />} />
                   <Route path="/display" element={<DisplayPage />} />
+                  <Route path="/demo" element={<DemoPage />} />
                   <Route
                     element={
                       <ProtectedRoute>

@@ -128,11 +128,11 @@ async def list_users(
     async with SessionLocal() as session:
         users = await UserRepository(session).list_ordered()
     rows = [_public_user(user) for user in users]
-    query = (q or "").strip().lower()
-    if query:
+    if q and q.strip():
+        from core.translit import uzbek_search_match
         rows = [
             row for row in rows
-            if query in row["username"].lower() or query in row["role"].lower() or query in str(row["id"])
+            if uzbek_search_match(row["username"], q) or uzbek_search_match(row["role"], q) or q.strip() in str(row["id"])
         ]
     if role:
         rows = [row for row in rows if row["role"] == role]

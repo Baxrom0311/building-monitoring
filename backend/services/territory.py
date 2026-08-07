@@ -213,12 +213,19 @@ async def list_apartments(
         if mahalla_id:
             stmt = stmt.where(Street.mahalla_id == mahalla_id)
         if search:
-            like = f"%{search.strip()}%"
-            stmt = stmt.where(
-                (Apartment.owner_name.ilike(like))
-                | (Apartment.apartment_no.ilike(like))
-                | (Apartment.account_no.ilike(like))
-            )
+            from sqlalchemy import or_
+            from core.translit import get_search_variants
+            variants = get_search_variants(search)
+            conditions = []
+            for v in variants:
+                like = f"%{v}%"
+                conditions.extend([
+                    Apartment.owner_name.ilike(like),
+                    Apartment.apartment_no.ilike(like),
+                    Apartment.account_no.ilike(like),
+                    Building.name.ilike(like),
+                ])
+            stmt = stmt.where(or_(*conditions))
         total = await session.scalar(select(func.count()).select_from(stmt.subquery()))
         stmt = (
             stmt.order_by(Building.name, Apartment.apartment_no)

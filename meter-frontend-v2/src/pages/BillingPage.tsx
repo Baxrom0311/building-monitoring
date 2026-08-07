@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import apiClient from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/errors'
 import { notifyError, notifySuccess } from '@/lib/toast'
+import { translitIncludes } from '@/lib/translit'
 import { EmptyBlock, ErrorBlock, TableSkeleton } from '@/components/StateBlock'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -236,12 +237,11 @@ export default function BillingPage() {
 
   const filteredBuildings = useMemo(() => {
     const rows = summaryData?.buildings ?? []
-    const q = summarySearch.trim().toLowerCase()
-    if (!q) return rows
+    if (!summarySearch.trim()) return rows
     return rows.filter(
       (b) =>
-        b.building_name.toLowerCase().includes(q) ||
-        (b.mahalla_name ?? '').toLowerCase().includes(q),
+        translitIncludes(b.building_name, summarySearch) ||
+        translitIncludes(b.mahalla_name, summarySearch),
     )
   }, [summaryData, summarySearch])
 

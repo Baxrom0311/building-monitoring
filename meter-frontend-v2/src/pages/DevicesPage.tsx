@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils'
 import type { Device } from '@/types/api'
 import { EmptyBlock, ErrorBlock, TableSkeleton } from '@/components/StateBlock'
 import { Pagination } from '@/components/Pagination'
+import { StatusPulse } from '@/components/ui/StatusPulse'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -77,13 +78,18 @@ type StatusFilter = 'all' | 'online' | 'offline'
 type SortBy = 'name' | 'type' | 'status' | 'last_seen'
 
 function OnlineBadge({ online }: { online: boolean | null }) {
-  return online ? (
-    <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-500">
-      Online
-    </Badge>
-  ) : (
-    <Badge variant="outline" className="border-red-500/30 bg-red-500/10 text-red-500">
-      Offline
+  return (
+    <Badge
+      variant="outline"
+      className={cn(
+        'gap-1.5 py-0.5 px-2 font-medium',
+        online
+          ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-500'
+          : 'border-muted bg-muted/30 text-muted-foreground',
+      )}
+    >
+      <StatusPulse status={Boolean(online)} size="sm" />
+      <span>{online ? 'Online' : 'Offline'}</span>
     </Badge>
   )
 }

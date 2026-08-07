@@ -11,6 +11,8 @@ import {
 } from 'recharts'
 import { Droplets, Flame, RefreshCw, Sprout, Volume2, Zap } from 'lucide-react'
 import { API_BASE_URL } from '@/lib/env'
+import { AnimatedNumber } from '@/components/ui/AnimatedNumber'
+import { StatusPulse } from '@/components/ui/StatusPulse'
 import type { HourlyUtilityStat } from '@/types/api'
 
 // PUBLIC kiosk sahifa — AppLayout tashqarisida, autentifikatsiyasiz.
@@ -143,12 +145,7 @@ function LiveClock() {
 function LiveDot({ ok }: { ok: boolean }) {
   return (
     <span className="flex items-center gap-1.5 text-xs font-semibold">
-      <span className="relative flex h-2.5 w-2.5">
-        {ok && (
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-        )}
-        <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${ok ? 'bg-emerald-400' : 'bg-red-500'}`} />
-      </span>
+      <StatusPulse status={ok} size="sm" />
       <span className={ok ? 'text-emerald-400' : 'text-red-400'}>{ok ? 'JONLI' : 'UZILDI'}</span>
     </span>
   )
@@ -272,7 +269,11 @@ export default function DisplayPage() {
                 {/* Joriy qiymat */}
                 <div className="text-right">
                   <div className="font-mono text-4xl font-black tabular-nums" style={{ color: cfg.color }}>
-                    {cfg.latest != null ? cfg.latest : '—'}
+                    {cfg.latest != null ? (
+                      <AnimatedNumber value={cfg.latest} decimals={2} />
+                    ) : (
+                      '—'
+                    )}
                     <span className="ml-1.5 text-xl font-bold text-slate-400">{cfg.unit}</span>
                   </div>
                   {cfg.nominal != null && (

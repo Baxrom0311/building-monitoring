@@ -71,7 +71,7 @@ export function TableSkeleton({ rows = 5 }: { rows?: number }) {
   return (
     <div className="space-y-2">
       {Array.from({ length: rows }).map((_, i) => (
-        <Skeleton key={i} className="h-12 w-full" />
+        <Skeleton key={i} className="h-12 w-full animate-shimmer-wave rounded-lg" />
       ))}
     </div>
   )
@@ -81,12 +81,12 @@ export function KPISkeletonGrid({ count = 4 }: { count?: number }) {
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       {Array.from({ length: count }).map((_, i) => (
-        <Skeleton key={i} className="h-28 w-full" />
+        <Skeleton key={i} className="h-28 w-full animate-shimmer-wave rounded-xl" />
       ))}
     </div>
   )
 }
 
 export function ChartSkeleton() {
-  return <Skeleton className="h-72 w-full" />
+  return <Skeleton className="h-72 w-full animate-shimmer-wave rounded-xl" />
 }

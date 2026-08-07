@@ -1,5 +1,5 @@
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import {
   Activity,
@@ -18,15 +18,17 @@ import {
   MessageSquare,
   Moon,
   ScrollText,
+  Search,
   Settings,
   Sun,
   Users,
-  Wifi,
-  WifiOff,
   Zap,
   type LucideIcon,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
+import { GlobalSearchModal } from '@/components/GlobalSearchModal'
+import { PageTransition } from '@/components/layout/PageTransition'
+import { StatusPulse } from '@/components/ui/StatusPulse'
 import { orgUtility } from '@/lib/roles'
 import { useTheme } from '@/contexts/ThemeContext'
 import { useAlerts } from '@/hooks/queries'
@@ -114,6 +116,8 @@ function AppSidebar({ openAlerts }: { openAlerts: number }) {
             { label: 'Qurilmalar', path: '/devices', icon: Cpu },
             { label: 'Test qurilmalar', path: '/devices/test', icon: FlaskConical, adminOnly: true },
             { label: 'Analitika', path: '/analytics', icon: Activity },
+            { label: 'Displey Ekran', path: '/display', icon: Gauge },
+            { label: 'Demo Stend', path: '/demo', icon: Activity },
           ],
         },
         {
@@ -196,18 +200,22 @@ function WsStatusIndicator() {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <div className="flex items-center gap-1.5 text-muted-foreground">
-          {connected ? <Wifi className="h-4 w-4 text-emerald-500" /> : <WifiOff className="h-4 w-4 text-amber-500" />}
+        <div className="flex items-center gap-1.5 px-2 py-1 rounded-full border bg-muted/20 text-muted-foreground cursor-pointer">
+          <StatusPulse status={connected ? 'online' : 'warning'} size="sm" />
+          <span className="text-[11px] font-medium hidden sm:inline">
+            {connected ? 'Live Online' : status}
+          </span>
         </div>
       </TooltipTrigger>
       <TooltipContent>
-        {connected ? 'Jonli yangilanish ulangan' : `Jonli yangilanish: ${status}`}
+        {connected ? 'Jonli yangilanish (WebSocket Active)' : `Jonli yangilanish: ${status}`}
       </TooltipContent>
     </Tooltip>
   )
 }
 
 export function AppLayout() {
+  const [searchOpen, setSearchOpen] = useState(false)
   const location = useLocation()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -237,6 +245,27 @@ export function AppLayout() {
           <Separator orientation="vertical" className="h-5" />
           <h1 className="truncate text-sm font-semibold">{title}</h1>
           <div className="ml-auto flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSearchOpen(true)}
+              className="hidden md:flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground h-8 px-2.5 rounded-lg border bg-muted/30"
+            >
+              <Search className="h-3.5 w-3.5" />
+              <span>Qidiruv...</span>
+              <kbd className="pointer-events-none inline-flex h-4 select-none items-center gap-0.5 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100">
+                <span className="text-xs">⌘</span>K
+              </kbd>
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setSearchOpen(true)}
+              className="md:hidden"
+              aria-label="Qidiruv"
+            >
+              <Search className="h-4 w-4" />
+            </Button>
             <WsStatusIndicator />
             <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label="Tema almashtirish">
               {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
@@ -266,12 +295,15 @@ export function AppLayout() {
             </DropdownMenu>
           </div>
         </header>
-        <main className="flex-1 p-4 md:p-6">
+        <main className="flex-1 p-4 md:p-6 overflow-hidden">
           <div className="mx-auto w-full max-w-[1600px]">
-            <Outlet />
+            <PageTransition>
+              <Outlet />
+            </PageTransition>
           </div>
         </main>
       </SidebarInset>
+      <GlobalSearchModal open={searchOpen} onOpenChange={setSearchOpen} />
     </SidebarProvider>
   )
 }

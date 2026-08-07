@@ -7,39 +7,36 @@ Bu hujjat butun loyihaning joriy holatini tasvirlaydi: backend, ikkita frontend,
 ## 1. Umumiy ko'rinish
 
 ```
-┌──────────────┐   HTTP (WiFi)              ┌──────────────────┐
-│ ESP32 sensor │ ─────────────────────────► │                   │
-│ (soil/water/ │   X-Device-Token           │                   │
-│ gas/sound/   │                             │                   │
-│ electricity) │                             │   FastAPI backend │
-└──────────────┘                             │   (Python 3.12,   │
-                                               │   SQLAlchemy      │
-┌──────────────┐   LoRa 433MHz (mesh v2)     │   async, Postgres) │
-│ ESP32 sensor │ ──► ┌──────────────┐  HTTP  │                   │
-│ (LoRa node)  │      │ ESP32        │──────►│                   │
-└──────────────┘      │ LoRa gateway │        └─────────┬─────────┘
-                       └──────────────┘                  │
-                                                          │ SQLAlchemy async
-                                                          ▼
-                                                   ┌──────────────┐
-                                                   │  PostgreSQL   │
-                                                   └──────────────┘
-                                                          ▲
-                                                          │ REST + WebSocket
-                       ┌──────────────────────────────────┴───────────────────┐
-                       ▼                                                      ▼
-              ┌─────────────────┐                                  ┌─────────────────┐
-              │ meter-frontend  │  ss.boos.uz (v1, legacy)          │ meter-frontend-v2│  sss.boos.uz (v2, shadcn)
-              │ React + Vite    │                                   │ React + Vite      │
-              └─────────────────┘                                  └─────────────────┘
+┌─────────────────────────────────────────┐   HTTP (WiFi / Ethernet)   ┌──────────────────┐
+│ Bridge ESP32 (Bino boshqaruvchisi)      │ ─────────────────────────► │                  │
+│ O'z DLMS elektr metrini o'qiydi va      │   X-Device-Token           │                  │
+│ bino ichi RS-485 leaf o'qishlarini yuboradi                         │  FastAPI backend │
+└────────────────────▲────────────────────┘                            │  (Python 3.12,   │
+                     │ RS-485 (A/B shina)                              │  SQLAlchemy      │
+┌────────────────────┴────────────────────┐                            │  async, Postgres)│
+│ Leaf kontrollerlar (iot_v2, RS-485):    │                            └─────────┬────────┘
+│ Water, Gas, Soil, Sound, Heating        │                                      │
+└─────────────────────────────────────────┘                                      │ SQLAlchemy async
+                                                                                 ▼
+┌─────────────────────────────────────────┐                            ┌──────────────────┐
+│ [LEGACY / ARCHIVE] iot (v1 LoRa mesh)   │ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─► │  PostgreSQL      │
+│ (Faqat eskilik uchun saqlangan)         │                            └─────────┬────────┘
+└─────────────────────────────────────────┘                                      ▲
+                                                                                 │ REST + WebSocket
+                       ┌─────────────────────────────────────────────────────────┴───────────────────┐
+                       ▼                                                                             ▼
+              ┌─────────────────┐                                                         ┌─────────────────┐
+              │ meter-frontend  │  ss.boos.uz (v1, legacy)                                │ meter-frontend-v2│  sss.boos.uz (v2, shadcn)
+              │ React + Vite    │                                                         │ React + Vite      │
+              └─────────────────┘                                                         └─────────────────┘
 
 ┌──────────────────┐
-│ PyQt6 desktop app │  RS-485/DLMS orqali hisoblagichni to'g'ridan-to'g'ri test qilish,
+│ PyQt6 desktop app │  RS-485/DLMS orqali hisoblagichni to'g mezoniy test qilish,
 │ (meter testing)   │  ESP32 firmware flash qilish uchun
 └──────────────────┘
 ```
 
-Bitta backend, bitta Postgres baza — ikkala frontend ham xuddi shu API'ga ulanadi. IoT tomonda ikki mustaqil aloqa yo'li bor: **WiFi/HTTP** (to'g'ridan-to'g'ri) va **LoRa mesh** (node → gateway → HTTP).
+Bitta backend, bitta Postgres baza — ikkala frontend ham xuddi shu API'ga ulanadi. IoT tomonda asosiy proshivka **`iot_v2`** (bino ichi RS-485 shinasidan bitta WiFi Bridge'ga ma'lumot yig'ib HTTP POST qilish). Eski `iot` (v1 LoRa mesh) faqat arxiv sifatida qoldirilgan.
 
 ---
 
@@ -110,9 +107,11 @@ migrations/ → Alembic versiyalari (hozircha 24 ta migratsiya)
 
 ---
 
-## 3. IoT Firmware (`iot/`)
+## 3. IoT Firmware (`iot_v2/` — ASOSIY PRODUCTION, `iot/` — LEGACY/ARCHIVE)
 
-**Stack**: PlatformIO + Arduino framework (ESP32). Bitta `main.cpp` — ko'plab `#ifdef` rejimlar orqali turli firmware turlarini quradi (bitta faylda ko'p mode, alohida binary'lar).
+Asosiy ishchi proshivka **`iot_v2`** papkasida joylashgan (LoRa'siz, bino ichi RS-485 shinasi + WiFi Bridge). Eski `iot` (v1 LoRa mesh) loyihada faqat arxiv sifatida saqlangan.
+
+**Stack**: PlatformIO + Arduino framework (ESP32). `src/main.cpp` faylida `#ifdef` orqali proshivka rejimlari belgilangan.
 
 ### 3.1 Umumiy fayl tuzilishi
 
@@ -175,20 +174,20 @@ TE73 o'rniga test uchun **EX518** (ishlab chiqaruvchi: "Elektron Xisoblagich" MC
 
 ---
 
-## 4. Frontend — ikkita mustaqil ilova
+## 4. Frontend (`meter-frontend-v2` — ASOSIY PRODUCTION, `meter-frontend` — LEGACY/ARCHIVE)
 
-Ikkalasi ham bir xil backend API'ga ulanadi, lekin **sahifalar to'plami bir xil emas**:
+Asosiy va rasmiy frontend **`meter-frontend-v2`** (React 19 + Vite + TypeScript + `shadcn/ui` + Tailwind CSS) hisoblanadi. Eski `meter-frontend` (v1, legacy custom UI) loyihada arxiv sifatida qoldirilgan.
 
-| Sahifa | v1 (`meter-frontend`, ss.boos.uz) | v2 (`meter-frontend-v2`, sss.boos.uz) |
+barcha sahifalar to'liqlicha **`meter-frontend-v2`** tarkibiga o'tkazildi va birlashtirildi:
+
+| Sahifa | `meter-frontend-v2` (ASOSIY) | Izoh |
 |---|---|---|
-| Dashboard, Devices, Buildings, Alerts, Analytics, Audit, Chat, Firmware, Settings, Users, Login, DeviceDetail, BuildingDetail, TestDevices, Display | ✅ | ✅ |
-| **DemoPage** (TV-devor displey, mock ma'lumotlar bilan) | ✅ | ❌ |
-| **BillingPage** (kommunal hisobot import/eksport) | ❌ | ✅ |
-| **TerritoryPage** (mahalla/ko'cha/xonadon CRUD) | ❌ | ✅ |
-
-**⚠️ Nomutanosiblik**: Billing/Territory funksiyalari faqat v2'da bor — agar v1 foydalanuvchilari ham shu funksiyaga muhtoj bo'lsa, v1'ga qo'shish kerak bo'ladi. DemoPage esa faqat v1'da — agar v2 uchun ham kerak bo'lsa, port qilish kerak.
-
-**Texnologiya**: ikkalasi ham React 19 + Vite + TypeScript. v1 — qo'lda yozilgan Tailwind-based UI (eski, "glass-card" uslub). v2 — shadcn/ui komponentlar asosida (yangi, tizimli dizayn tizimi).
+| **Dashboard, Devices, Buildings, Alerts, Analytics** | ✅ | Asosiy monitoring va grafiklar |
+| **BuildingDetail, DeviceDetail, TestDevices** | ✅ | Binolar va qurilmalar detallari hamda test paneli |
+| **BillingPage** (Kommunal hisobotlar) | ✅ | F3, reestr va Excel import/eksport |
+| **TerritoryPage** (Xonadonlar & Mahalla) | ✅ | Mahalla/ko'cha/xonadonlar boshqaruvi |
+| **Firmware, Audit, Chat, Settings, Users, Login** | ✅ | OTA, audit, AI Chat (Gemini/DeepSeek), tizim sozlamalari |
+| **DisplayPage & DemoPage** | ✅ | TV displey ekrani va 5-in-1 Jonli Demo stendi |
 
 ---
 
