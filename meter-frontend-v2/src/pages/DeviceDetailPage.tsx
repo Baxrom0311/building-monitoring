@@ -267,6 +267,8 @@ export default function DeviceDetailPage() {
       volume: number
       humidity: number
       level: number
+      tempIn: number
+      tempOut: number
     }
     const buckets = new Map<number, Acc>()
     for (const r of chartHistoryData.readings) {
@@ -274,6 +276,7 @@ export default function DeviceDetailPage() {
       const acc = buckets.get(hour) ?? {
         ts: hour, n: 0, power: 0, voltage: 0, pressure: 0,
         pressureTop: 0, flow: 0, volume: 0, humidity: 0, level: 0,
+        tempIn: 0, tempOut: 0,
       }
       acc.n += 1
       acc.power += r.power_w ?? 0
@@ -284,6 +287,8 @@ export default function DeviceDetailPage() {
       acc.volume = Math.max(acc.volume, r.volume_m3 ?? 0)
       acc.humidity += r.humidity ?? 0
       acc.level += r.level ?? 0
+      acc.tempIn += r.temperature_in_c ?? 0
+      acc.tempOut += r.temperature_out_c ?? 0
       buckets.set(hour, acc)
     }
     return Array.from(buckets.values())
@@ -298,6 +303,8 @@ export default function DeviceDetailPage() {
         volume: b.volume,
         humidity: Number((b.humidity / b.n).toFixed(1)),
         level: Number((b.level / b.n).toFixed(1)),
+        tempIn: Number((b.tempIn / b.n).toFixed(1)),
+        tempOut: Number((b.tempOut / b.n).toFixed(1)),
       }))
   }, [chartHistoryData])
 
@@ -310,7 +317,9 @@ export default function DeviceDetailPage() {
           ? { title: "Yerto'la namligi grafigi", subtitle: "Oxirgi 24 soatdagi namlik o'zgarishi" }
           : device?.utility_type === 'sound'
             ? { title: 'Ovoz darajasi grafigi', subtitle: "Oxirgi 24 soatdagi ovoz darajasi o'zgarishi" }
-            : { title: 'Elektr quvvati grafigi', subtitle: "Oxirgi 24 soatdagi Power W o'zgarishi" }
+            : device?.utility_type === 'heating'
+              ? { title: 'Qozonxona harorati grafigi', subtitle: "Oxirgi 24 soatdagi kirish/chiqish harorati" }
+              : { title: 'Elektr quvvati grafigi', subtitle: "Oxirgi 24 soatdagi Power W o'zgarishi" }
 
   // So'nggi ko'rsatkich KPI kartalari
   const kpis = useMemo<KpiItem[]>(() => {
@@ -339,6 +348,10 @@ export default function DeviceDetailPage() {
       items.push({ key: 'flow_rate', title: 'Oqim', value: `${r.flow_rate}`, icon: Droplets })
     if (r.volume_m3 !== null && r.volume_m3 !== undefined)
       items.push({ key: 'volume_m3', title: 'Hajm', value: `${r.volume_m3} m³`, icon: Droplets, tone: 'success' })
+    if (r.temperature_in_c !== null && r.temperature_in_c !== undefined)
+      items.push({ key: 'temperature_in_c', title: 'Kirish harorati', value: `${r.temperature_in_c} °C`, icon: Thermometer, tone: 'warning' })
+    if (r.temperature_out_c !== null && r.temperature_out_c !== undefined)
+      items.push({ key: 'temperature_out_c', title: 'Chiqish harorati', value: `${r.temperature_out_c} °C`, icon: Thermometer, tone: 'success' })
     if (r.temperature_c !== null && r.temperature_c !== undefined)
       items.push({ key: 'temperature_c', title: 'Harorat', value: `${r.temperature_c} °C`, icon: Thermometer })
     if (r.humidity !== null && r.humidity !== undefined)
@@ -621,7 +634,14 @@ export default function DeviceDetailPage() {
                                 ]
                               : device.utility_type === 'soil'
                                 ? [{ key: 'humidity', name: 'Namlik (%)', color: '#22C55E' }]
-                                : [{ key: 'level', name: 'Ovoz darajasi (%)', color: '#A855F7' }]
+                                : device.utility_type === 'heating'
+                                  ? [
+                                      { key: 'tempIn', name: 'Kirish (°C)', color: '#F97316' },
+                                      { key: 'tempOut', name: 'Chiqish (°C)', color: '#06B6D4' },
+                                    ]
+                                  : device.utility_type === 'sound'
+                                    ? [{ key: 'level', name: 'Ovoz darajasi (%)', color: '#A855F7' }]
+                                    : [{ key: 'power', name: 'Power (W)', color: '#EAB308' }]
                       }
                 />
               </CardContent>
@@ -658,6 +678,11 @@ export default function DeviceDetailPage() {
                         <TableHead>Namlik (%)</TableHead>
                       ) : device.utility_type === 'sound' ? (
                         <TableHead>Ovoz darajasi (%)</TableHead>
+                      ) : device.utility_type === 'heating' ? (
+                        <>
+                          <TableHead>Kirish (°C)</TableHead>
+                          <TableHead>Chiqish (°C)</TableHead>
+                        </>
                       ) : (
                         <>
                           <TableHead>Bosim (bar)</TableHead>
@@ -696,6 +721,11 @@ export default function DeviceDetailPage() {
                           <TableCell className="font-mono">
                             {r.level !== null && r.level !== undefined ? `${r.level.toFixed(1)}%` : '—'}
                           </TableCell>
+                        ) : device.utility_type === 'heating' ? (
+                          <>
+                            <TableCell className="font-mono">{r.temperature_in_c ?? '—'}</TableCell>
+                            <TableCell className="font-mono">{r.temperature_out_c ?? '—'}</TableCell>
+                          </>
                         ) : (
                           <>
                             <TableCell className="font-mono">{r.pressure_bar ?? '—'}</TableCell>

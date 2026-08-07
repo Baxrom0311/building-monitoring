@@ -123,6 +123,8 @@ export interface Reading {
   flow_rate: number | null
   volume_m3: number | null
   temperature_c: number | null
+  temperature_in_c?: number | null
+  temperature_out_c?: number | null
   humidity: number | null
   level?: number | null
   raw_payload: string | null
