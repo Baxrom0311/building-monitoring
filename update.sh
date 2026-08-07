@@ -21,6 +21,7 @@ echo "=== 4. Frontend v2 build (Asosiy production) ==="
 cd ../meter-frontend-v2
 # pnpm ko'pincha non-interactive ssh PATH'da bo'lmaydi — npm/npx ishonchli
 npm install --silent 2>/dev/null
+rm -rf dist   # eski build qolib ketmasin (aks holda o'zgarishlar chiqmaydi)
 npx vite build 2>&1 | tail -5
 if [ ! -f dist/index.html ]; then
     echo "XATO: frontend build muvaffaqiyatsiz (dist/index.html yo'q) — deploy to'xtatildi"
