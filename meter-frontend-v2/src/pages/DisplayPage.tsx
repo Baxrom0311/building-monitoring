@@ -9,7 +9,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { Droplets, Flame, RefreshCw, Sprout, Volume2, Zap } from 'lucide-react'
+import { Droplets, Flame, RefreshCw, Sprout, Thermometer, Volume2, Zap } from 'lucide-react'
 import { API_BASE_URL } from '@/lib/env'
 import { AnimatedNumber } from '@/components/ui/AnimatedNumber'
 import { StatusPulse } from '@/components/ui/StatusPulse'
@@ -122,6 +122,17 @@ const CHARTS = [
     color: '#A855F7',
     glow: 'rgba(168,85,247,0.35)',
     bg: 'from-purple-950/60 to-slate-950/80',
+    nominal: null as number | null,
+  },
+  {
+    key: 'heating' as const,
+    dataKey: 'avg_temperature_in_c' as keyof HourlyUtilityStat,
+    label: 'Qozonxona kirish harorati',
+    unit: '°C',
+    icon: Thermometer,
+    color: '#F97316',
+    glow: 'rgba(249,115,22,0.35)',
+    bg: 'from-orange-950/60 to-slate-950/80',
     nominal: null as number | null,
   },
 ]
@@ -255,7 +266,7 @@ export default function DisplayPage() {
       </header>
 
       {/* Grafiklar — 5 teng qator */}
-      <div className="grid flex-1 grid-rows-5 gap-0 overflow-hidden">
+      <div className="grid flex-1 grid-rows-6 gap-0 overflow-hidden">
         {charts.map((cfg) => {
           const Icon = cfg.icon
           const hasData = cfg.points.some((p) => p.value != null)

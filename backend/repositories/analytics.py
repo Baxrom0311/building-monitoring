@@ -148,6 +148,8 @@ class AnalyticsRepository(BaseRepository[HourlyUtilityStats]):
                 func.avg(Reading.level).label("avg_level"),
                 func.min(Reading.level).label("min_level"),
                 func.max(Reading.level).label("max_level"),
+                func.avg(Reading.temperature_in_c).label("avg_temperature_in_c"),
+                func.avg(Reading.temperature_out_c).label("avg_temperature_out_c"),
             )
             .join(Device, Device.id == Reading.device_id)
             .where(and_(Reading.ts >= cutoff, Device.is_test_device.is_(False)))
@@ -178,6 +180,8 @@ class AnalyticsRepository(BaseRepository[HourlyUtilityStats]):
                     avg_level=row["avg_level"],
                     min_level=row["min_level"],
                     max_level=row["max_level"],
+                    avg_temperature_in_c=row["avg_temperature_in_c"],
+                    avg_temperature_out_c=row["avg_temperature_out_c"],
                     created_at=ts,
                     updated_at=ts,
                 )

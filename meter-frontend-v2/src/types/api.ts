@@ -237,6 +237,8 @@ export interface HourlyUtilityStat {
   avg_level: number | null
   min_level: number | null
   max_level: number | null
+  avg_temperature_in_c?: number | null
+  avg_temperature_out_c?: number | null
   created_at: number | null
   updated_at: number | null
 }

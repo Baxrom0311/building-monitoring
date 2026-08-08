@@ -1084,6 +1084,8 @@ class HourlyUtilityStatResponse(BaseModel):
     avg_level: Optional[float] = None
     min_level: Optional[float] = None
     max_level: Optional[float] = None
+    avg_temperature_in_c: Optional[float] = None
+    avg_temperature_out_c: Optional[float] = None
     created_at: Optional[int] = None
     updated_at: Optional[int] = None
 

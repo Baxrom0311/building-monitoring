@@ -396,6 +396,8 @@ class HourlyUtilityStats(Base):
     avg_level: Mapped[float | None] = mapped_column(Float)   # Ovoz o'rtachasi
     min_level: Mapped[float | None] = mapped_column(Float)
     max_level: Mapped[float | None] = mapped_column(Float)
+    avg_temperature_in_c: Mapped[float | None] = mapped_column(Float)   # Issiqlik kirish
+    avg_temperature_out_c: Mapped[float | None] = mapped_column(Float)  # Issiqlik chiqish
     created_at: Mapped[int | None] = mapped_column(Integer)
     updated_at: Mapped[int | None] = mapped_column(Integer)
 
