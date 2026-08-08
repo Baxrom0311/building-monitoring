@@ -11,6 +11,7 @@ import {
   Flame,
   Link2,
   MapPin,
+  MonitorPlay,
   Pencil,
   Plus,
   Trash2,
@@ -551,22 +552,32 @@ export default function BuildingDetailPage() {
               <h1 className="text-2xl font-semibold">{building.name}</h1>
               {!building.is_active && <Badge variant="destructive">Nofaol</Badge>}
             </div>
-            {isAdmin && (
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" onClick={openEditDialog}>
-                  <Pencil className="h-4 w-4" />
-                  Tahrirlash
-                </Button>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => setConfirmAction({ type: 'delete' })}
-                >
-                  <Trash2 className="h-4 w-4" />
-                  O'chirish
-                </Button>
-              </div>
-            )}
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => window.open(`/display?building_id=${building.id}`, '_blank')}
+              >
+                <MonitorPlay className="h-4 w-4" />
+                Display
+              </Button>
+              {isAdmin && (
+                <>
+                  <Button variant="outline" size="sm" onClick={openEditDialog}>
+                    <Pencil className="h-4 w-4" />
+                    Tahrirlash
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => setConfirmAction({ type: 'delete' })}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    O'chirish
+                  </Button>
+                </>
+              )}
+            </div>
           </div>
 
           <Tabs defaultValue="overview">
