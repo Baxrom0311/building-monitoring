@@ -265,8 +265,9 @@ export default function DisplayPage() {
         </div>
       </header>
 
-      {/* Grafiklar — 5 teng qator */}
-      <div className="grid flex-1 grid-rows-6 gap-0 overflow-hidden">
+      {/* Grafiklar — scroll qilinadigan chiroyli kartalar to'ri */}
+      <div className="flex-1 overflow-y-auto p-5 sm:p-6">
+        <div className="mx-auto grid max-w-7xl gap-5 sm:grid-cols-2 xl:grid-cols-3">
         {charts.map((cfg) => {
           const Icon = cfg.icon
           const hasData = cfg.points.some((p) => p.value != null)
@@ -274,49 +275,53 @@ export default function DisplayPage() {
           return (
             <div
               key={cfg.key}
-              className={`relative flex flex-col overflow-hidden border-b border-slate-800/40 bg-gradient-to-r ${cfg.bg}`}
+              className={`group relative flex flex-col overflow-hidden rounded-2xl border border-slate-800/60 bg-gradient-to-br ${cfg.bg} shadow-lg shadow-black/20 transition-all duration-300 hover:-translate-y-1 hover:border-slate-700`}
             >
               {/* Glow */}
               <div
-                className="pointer-events-none absolute inset-0 opacity-20"
-                style={{ background: `radial-gradient(ellipse 60% 50% at 50% 0%, ${cfg.glow}, transparent)` }}
+                className="pointer-events-none absolute inset-0 opacity-25"
+                style={{ background: `radial-gradient(ellipse 70% 60% at 50% 0%, ${cfg.glow}, transparent)` }}
               />
 
               {/* Sarlavha */}
-              <div className="relative z-10 flex shrink-0 items-center justify-between px-8 pb-2 pt-4">
+              <div className="relative z-10 flex shrink-0 items-center justify-between gap-3 px-5 pb-1 pt-5">
                 <div className="flex items-center gap-3">
                   <div
-                    className="flex h-10 w-10 items-center justify-center rounded-xl"
+                    className="flex h-11 w-11 items-center justify-center rounded-xl"
                     style={{ background: cfg.glow, border: `1px solid ${cfg.color}40` }}
                   >
                     <Icon className="h-5 w-5" style={{ color: cfg.color }} />
                   </div>
                   <div>
-                    <div className="text-base font-extrabold text-white">{cfg.label}</div>
-                    <div className="text-xs text-slate-400">Oxirgi 24 soat</div>
+                    <div className="text-sm font-bold text-white">{cfg.label}</div>
+                    <div className="text-[11px] text-slate-400">Oxirgi 24 soat</div>
                   </div>
                 </div>
+                <span
+                  className={`h-2.5 w-2.5 rounded-full ${hasData ? 'animate-pulse' : ''}`}
+                  style={{ background: hasData ? cfg.color : '#475569' }}
+                />
+              </div>
 
-                {/* Joriy qiymat */}
-                <div className="text-right">
-                  <div className="font-mono text-4xl font-black tabular-nums" style={{ color: cfg.color }}>
-                    {cfg.latest != null ? (
-                      <AnimatedNumber value={cfg.latest} decimals={2} />
-                    ) : (
-                      '—'
-                    )}
-                    <span className="ml-1.5 text-xl font-bold text-slate-400">{cfg.unit}</span>
-                  </div>
-                  {cfg.nominal != null && (
-                    <div className="text-xs text-slate-500">
-                      nominal: {cfg.nominal} {cfg.unit}
-                    </div>
+              {/* Joriy qiymat */}
+              <div className="relative z-10 px-5 pt-1">
+                <div className="font-mono text-5xl font-black tabular-nums leading-none" style={{ color: cfg.color }}>
+                  {cfg.latest != null ? (
+                    <AnimatedNumber value={cfg.latest} decimals={2} />
+                  ) : (
+                    '—'
                   )}
+                  <span className="ml-1.5 text-lg font-bold text-slate-500">{cfg.unit}</span>
                 </div>
+                {cfg.nominal != null && (
+                  <div className="mt-1 text-[11px] text-slate-500">
+                    nominal: {cfg.nominal} {cfg.unit}
+                  </div>
+                )}
               </div>
 
               {/* Grafik */}
-              <div className="relative z-10 min-h-0 flex-1 px-4 pb-3">
+              <div className="relative z-10 mt-2 h-44 px-2 pb-3">
                 {!hasData ? (
                   <div className="flex h-full items-center justify-center">
                     <span className="text-sm text-slate-500">O'lchov ma'lumoti kutilmoqda...</span>
@@ -374,6 +379,7 @@ export default function DisplayPage() {
             </div>
           )
         })}
+        </div>
       </div>
     </div>
   )
