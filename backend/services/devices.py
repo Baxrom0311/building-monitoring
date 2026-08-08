@@ -239,8 +239,11 @@ async def update_device_status(body: DeviceStatus, test_mode: bool = False) -> d
         device_repo = DeviceRepository(session)
         device = await device_repo.get(body.device_id)
         if not device:
-            device = Device(id=body.device_id, name=body.device_id, registered=ts, created_at=ts)
-            device_repo.add(device)
+            # Status ping YANGI qurilma yaratmaydi — aks holda faqat ping
+            # yuboradigan, lekin hech qachon o'qish bermaydigan "arvoh"
+            # qurilmalar paydo bo'ladi. Qurilma /api/readings yoki /api/register
+            # orqali (haqiqiy ma'lumot bilan) yaratiladi.
+            return {"ok": True, "ignored": "unknown_device"}
         device.utility_type = body.utility_type or device.utility_type
         device.rssi = body.rssi if body.rssi is not None else device.rssi
         device.hardware_version = body.hardware_version or device.hardware_version
