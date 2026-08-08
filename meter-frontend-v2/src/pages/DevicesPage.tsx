@@ -12,6 +12,7 @@ import { downloadCsv, useColumnVisibility, type TableColumn } from '@/lib/table'
 import { cn } from '@/lib/utils'
 import type { Device } from '@/types/api'
 import { EmptyBlock, ErrorBlock, TableSkeleton } from '@/components/StateBlock'
+import { BuildingCombobox } from '@/components/BuildingCombobox'
 import { Pagination } from '@/components/Pagination'
 import { StatusPulse } from '@/components/ui/StatusPulse'
 import { Badge } from '@/components/ui/badge'
@@ -491,19 +492,11 @@ export default function DevicesPage() {
               </div>
               <div className="space-y-2">
                 <Label>Bino</Label>
-                <Select value={assignBuildingId} onValueChange={setAssignBuildingId}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="— Binoni tanlang —" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">— Binoni tanlang —</SelectItem>
-                    {buildings?.map((b) => (
-                      <SelectItem key={b.id} value={String(b.id)}>
-                        {b.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <BuildingCombobox
+                  buildings={buildings}
+                  value={assignBuildingId}
+                  onChange={setAssignBuildingId}
+                />
               </div>
               {assignMutation.isError && (
                 <p className="text-xs text-red-500">{getApiErrorMessage(assignMutation.error)}</p>
