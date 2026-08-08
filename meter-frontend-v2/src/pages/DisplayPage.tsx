@@ -75,9 +75,9 @@ const CHARTS = [
     label: 'Elektr kuchlanishi',
     unit: 'V',
     icon: Zap,
-    color: '#FACC15',
-    glow: 'rgba(250,204,21,0.35)',
-    bg: 'from-yellow-950/60 to-slate-950/80',
+    color: '#FDE047',
+    glow: 'rgba(253,224,71,0.5)',
+    bg: 'from-amber-500/20 via-slate-900/80 to-slate-950',
     nominal: 220 as number | null,
   },
   {
@@ -86,9 +86,9 @@ const CHARTS = [
     label: 'Suv bosimi',
     unit: 'bar',
     icon: Droplets,
-    color: '#22D3EE',
-    glow: 'rgba(34,211,238,0.35)',
-    bg: 'from-cyan-950/60 to-slate-950/80',
+    color: '#38BDF8',
+    glow: 'rgba(56,189,248,0.5)',
+    bg: 'from-sky-500/20 via-slate-900/80 to-slate-950',
     nominal: null as number | null,
   },
   {
@@ -98,8 +98,8 @@ const CHARTS = [
     unit: 'bar',
     icon: Flame,
     color: '#FB923C',
-    glow: 'rgba(251,146,60,0.35)',
-    bg: 'from-orange-950/60 to-slate-950/80',
+    glow: 'rgba(251,146,60,0.5)',
+    bg: 'from-orange-500/20 via-slate-900/80 to-slate-950',
     nominal: null as number | null,
   },
   {
@@ -108,9 +108,9 @@ const CHARTS = [
     label: "Yerto'la namligi",
     unit: '%',
     icon: Sprout,
-    color: '#22C55E',
-    glow: 'rgba(34,197,94,0.35)',
-    bg: 'from-green-950/60 to-slate-950/80',
+    color: '#34D399',
+    glow: 'rgba(52,211,153,0.5)',
+    bg: 'from-emerald-500/20 via-slate-900/80 to-slate-950',
     nominal: null as number | null,
   },
   {
@@ -119,9 +119,9 @@ const CHARTS = [
     label: 'Ovoz darajasi',
     unit: '%',
     icon: Volume2,
-    color: '#A855F7',
-    glow: 'rgba(168,85,247,0.35)',
-    bg: 'from-purple-950/60 to-slate-950/80',
+    color: '#C084FC',
+    glow: 'rgba(192,132,252,0.5)',
+    bg: 'from-violet-500/20 via-slate-900/80 to-slate-950',
     nominal: null as number | null,
   },
   {
@@ -130,9 +130,9 @@ const CHARTS = [
     label: 'Qozonxona kirish harorati',
     unit: '°C',
     icon: Thermometer,
-    color: '#F97316',
-    glow: 'rgba(249,115,22,0.35)',
-    bg: 'from-orange-950/60 to-slate-950/80',
+    color: '#FB7185',
+    glow: 'rgba(251,113,133,0.5)',
+    bg: 'from-rose-500/20 via-slate-900/80 to-slate-950',
     nominal: null as number | null,
   },
 ]
@@ -265,9 +265,8 @@ export default function DisplayPage() {
         </div>
       </header>
 
-      {/* Grafiklar — scroll qilinadigan chiroyli kartalar to'ri */}
-      <div className="flex-1 overflow-y-auto p-5 sm:p-6">
-        <div className="mx-auto grid max-w-7xl gap-5 sm:grid-cols-2 xl:grid-cols-3">
+      {/* Grafiklar — to'liq ekranni to'ldiradigan 3×2 grid (bo'sh joy qolmaydi) */}
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 p-3 sm:grid-cols-2 sm:gap-4 sm:p-4 xl:grid-cols-3">
         {charts.map((cfg) => {
           const Icon = cfg.icon
           const hasData = cfg.points.some((p) => p.value != null)
@@ -275,53 +274,53 @@ export default function DisplayPage() {
           return (
             <div
               key={cfg.key}
-              className={`group relative flex flex-col overflow-hidden rounded-2xl border border-slate-800/60 bg-gradient-to-br ${cfg.bg} shadow-lg shadow-black/20 transition-all duration-300 hover:-translate-y-1 hover:border-slate-700`}
+              className={`group relative flex min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-800/60 bg-gradient-to-br ${cfg.bg} shadow-lg shadow-black/30 transition-colors hover:border-slate-700`}
             >
               {/* Glow */}
               <div
-                className="pointer-events-none absolute inset-0 opacity-25"
-                style={{ background: `radial-gradient(ellipse 70% 60% at 50% 0%, ${cfg.glow}, transparent)` }}
+                className="pointer-events-none absolute inset-0 opacity-40"
+                style={{ background: `radial-gradient(ellipse 80% 60% at 50% 0%, ${cfg.glow}, transparent)` }}
               />
 
               {/* Sarlavha */}
-              <div className="relative z-10 flex shrink-0 items-center justify-between gap-3 px-5 pb-1 pt-5">
+              <div className="relative z-10 flex shrink-0 items-center justify-between gap-3 px-6 pb-1 pt-5">
                 <div className="flex items-center gap-3">
                   <div
-                    className="flex h-11 w-11 items-center justify-center rounded-xl"
-                    style={{ background: cfg.glow, border: `1px solid ${cfg.color}40` }}
+                    className="flex h-14 w-14 items-center justify-center rounded-2xl"
+                    style={{ background: cfg.glow, border: `1px solid ${cfg.color}55` }}
                   >
-                    <Icon className="h-5 w-5" style={{ color: cfg.color }} />
+                    <Icon className="h-7 w-7" style={{ color: cfg.color }} />
                   </div>
                   <div>
-                    <div className="text-sm font-bold text-white">{cfg.label}</div>
-                    <div className="text-[11px] text-slate-400">Oxirgi 24 soat</div>
+                    <div className="text-lg font-bold text-white">{cfg.label}</div>
+                    <div className="text-xs text-slate-400">Oxirgi 24 soat</div>
                   </div>
                 </div>
                 <span
-                  className={`h-2.5 w-2.5 rounded-full ${hasData ? 'animate-pulse' : ''}`}
-                  style={{ background: hasData ? cfg.color : '#475569' }}
+                  className={`h-3 w-3 rounded-full ${hasData ? 'animate-pulse' : ''}`}
+                  style={{ background: hasData ? cfg.color : '#475569', boxShadow: hasData ? `0 0 12px ${cfg.color}` : 'none' }}
                 />
               </div>
 
               {/* Joriy qiymat */}
-              <div className="relative z-10 px-5 pt-1">
-                <div className="font-mono text-5xl font-black tabular-nums leading-none" style={{ color: cfg.color }}>
+              <div className="relative z-10 shrink-0 px-6 pt-1">
+                <div className="font-mono text-6xl font-black tabular-nums leading-none" style={{ color: cfg.color }}>
                   {cfg.latest != null ? (
                     <AnimatedNumber value={cfg.latest} decimals={2} />
                   ) : (
                     '—'
                   )}
-                  <span className="ml-1.5 text-lg font-bold text-slate-500">{cfg.unit}</span>
+                  <span className="ml-2 text-2xl font-bold text-slate-400">{cfg.unit}</span>
                 </div>
                 {cfg.nominal != null && (
-                  <div className="mt-1 text-[11px] text-slate-500">
+                  <div className="mt-1 text-xs text-slate-500">
                     nominal: {cfg.nominal} {cfg.unit}
                   </div>
                 )}
               </div>
 
-              {/* Grafik */}
-              <div className="relative z-10 mt-2 h-44 px-2 pb-3">
+              {/* Grafik — qolgan bo'sh joyni to'liq to'ldiradi */}
+              <div className="relative z-10 mt-2 min-h-0 flex-1 px-2 pb-3">
                 {!hasData ? (
                   <div className="flex h-full items-center justify-center">
                     <span className="text-sm text-slate-500">O'lchov ma'lumoti kutilmoqda...</span>
@@ -379,7 +378,6 @@ export default function DisplayPage() {
             </div>
           )
         })}
-        </div>
       </div>
     </div>
   )
