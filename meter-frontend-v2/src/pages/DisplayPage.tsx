@@ -160,7 +160,7 @@ const CHARTS = [
     color: '#C084FC',
     glow: 'rgba(192,132,252,0.5)',
     bg: 'from-violet-500/20 via-slate-900/80 to-slate-950',
-    nominal: null as number | null,
+    nominal: 40 as number | null,
     fake: null as { base: number; amp: number } | null,
   },
   {
