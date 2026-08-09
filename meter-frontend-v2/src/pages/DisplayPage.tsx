@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
-  Area,
-  AreaChart,
+  Bar,
+  BarChart,
   CartesianGrid,
   ReferenceLine,
   ResponsiveContainer,
@@ -368,11 +368,11 @@ export default function DisplayPage() {
                   </div>
                 ) : (
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={cfg.points} margin={{ top: 6, right: 16, left: 0, bottom: 0 }}>
+                    <BarChart data={cfg.points} margin={{ top: 6, right: 16, left: 0, bottom: 0 }} barCategoryGap="20%">
                       <defs>
                         <linearGradient id={`kiosk_${cfg.key}`} x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor={cfg.color} stopOpacity={0.45} />
-                          <stop offset="100%" stopColor={cfg.color} stopOpacity={0.02} />
+                          <stop offset="0%" stopColor={cfg.color} stopOpacity={1} />
+                          <stop offset="100%" stopColor={cfg.color} stopOpacity={0.3} />
                         </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 8" stroke="rgba(148,163,184,0.08)" vertical={false} />
@@ -403,7 +403,7 @@ export default function DisplayPage() {
                         }}
                         labelStyle={{ color: '#94a3b8', fontWeight: 700, marginBottom: 4 }}
                         formatter={(v) => [`${Number(v ?? 0)} ${cfg.unit}`, cfg.label]}
-                        cursor={{ stroke: cfg.color, strokeWidth: 1, strokeOpacity: 0.3 }}
+                        cursor={{ fill: 'rgba(148,163,184,0.08)' }}
                       />
                       {cfg.nominal != null && (
                         <ReferenceLine
@@ -414,17 +414,8 @@ export default function DisplayPage() {
                           label={{ value: `${cfg.nominal}${cfg.unit}`, fill: cfg.color, fontSize: 10, opacity: 0.6 }}
                         />
                       )}
-                      <Area
-                        type="monotone"
-                        dataKey="value"
-                        stroke={cfg.color}
-                        strokeWidth={2.5}
-                        fill={`url(#kiosk_${cfg.key})`}
-                        connectNulls
-                        dot={false}
-                        activeDot={{ r: 5, fill: cfg.color, stroke: '#0f172a', strokeWidth: 2 }}
-                      />
-                    </AreaChart>
+                      <Bar dataKey="value" fill={`url(#kiosk_${cfg.key})`} radius={[6, 6, 0, 0]} maxBarSize={28} />
+                    </BarChart>
                   </ResponsiveContainer>
                 )}
               </div>
