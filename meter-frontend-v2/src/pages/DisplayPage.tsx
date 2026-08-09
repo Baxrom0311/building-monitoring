@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
-  Bar,
-  BarChart,
+  Area,
+  AreaChart,
   CartesianGrid,
   ReferenceLine,
   ResponsiveContainer,
@@ -9,7 +9,18 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { Droplets, Flame, RefreshCw, Sprout, Thermometer, Volume2, Zap } from 'lucide-react'
+import {
+  Building2,
+  Droplets,
+  Flame,
+  RefreshCw,
+  Sprout,
+  Thermometer,
+  TrendingDown,
+  TrendingUp,
+  Volume2,
+  Zap,
+} from 'lucide-react'
 import { API_BASE_URL } from '@/lib/env'
 import { AnimatedNumber } from '@/components/ui/AnimatedNumber'
 import { StatusPulse } from '@/components/ui/StatusPulse'
@@ -195,31 +206,42 @@ export default function DisplayPage() {
     return () => clearInterval(id)
   }, [fetchData])
 
-  const charts = CHARTS.map((cfg) => ({
-    ...cfg,
+  const charts = CHARTS.map((cfg) => {
     // data[cfg.key] serverdan kelmasa ham sahifa yiqilmasligi uchun ?? [] guard
-    points: data ? buildPoints(data[cfg.key] ?? [], cfg.dataKey) : [],
-    latest: data
-      ? (() => {
-          const arr = data[cfg.key] ?? []
-          if (!arr.length) return null
-          const sorted = [...arr].sort((a, b) => b.bucket_ts - a.bucket_ts)
-          const v = sorted[0][cfg.dataKey] as number | null
-          return v != null ? Number(v.toFixed(2)) : null
-        })()
-      : null,
-  }))
+    const points = data ? buildPoints(data[cfg.key] ?? [], cfg.dataKey) : []
+    // Oxirgi ikki mavjud (null bo'lmagan) qiymat orqali joriy qiymat + trend
+    const vals = points.map((p) => p.value).filter((v): v is number => v != null)
+    const latest = vals.length ? vals[vals.length - 1] : null
+    const prev = vals.length > 1 ? vals[vals.length - 2] : null
+    const trend = latest != null && prev != null ? latest - prev : null
+    return { ...cfg, points, latest, trend }
+  })
 
   return (
-    <div className="flex h-screen w-screen select-none flex-col overflow-hidden bg-slate-950 text-white">
+    <div className="relative flex h-screen w-screen select-none flex-col overflow-hidden bg-slate-950 text-white">
+      {/* Ambient fon — yumshoq rangli nurlar */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute -left-40 -top-40 h-96 w-96 rounded-full bg-blue-600/10 blur-3xl" />
+        <div className="absolute -right-40 top-1/3 h-96 w-96 rounded-full bg-indigo-600/10 blur-3xl" />
+        <div className="absolute bottom-0 left-1/3 h-96 w-96 rounded-full bg-cyan-600/10 blur-3xl" />
+        <div
+          className="absolute inset-0 opacity-[0.15]"
+          style={{
+            backgroundImage:
+              'linear-gradient(rgba(148,163,184,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,0.06) 1px, transparent 1px)',
+            backgroundSize: '48px 48px',
+          }}
+        />
+      </div>
+
       {/* Sarlavha */}
-      <header className="flex shrink-0 items-center justify-between border-b border-slate-800/60 bg-slate-950/80 px-8 py-4 backdrop-blur">
+      <header className="relative z-20 flex shrink-0 items-center justify-between gap-4 border-b border-white/5 bg-slate-950/60 px-8 py-4 backdrop-blur-xl">
         <div className="flex items-center gap-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg shadow-blue-500/30">
-            <Zap className="h-5 w-5 text-white" />
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg shadow-blue-500/40 ring-1 ring-white/10">
+            <Building2 className="h-6 w-6 text-white" />
           </div>
           <div>
-            <div className="text-xl font-extrabold tracking-tight text-white">
+            <div className="text-2xl font-extrabold tracking-tight text-white">
               {data?.building?.name ?? 'SmartBino'}
             </div>
             <div className="text-xs text-slate-400">
@@ -230,7 +252,7 @@ export default function DisplayPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-5">
           {/* Bino tanlagich — displey bino kesimida ko'rsatiladi */}
           {data?.buildings && data.buildings.length > 0 && (
             <select
@@ -239,25 +261,29 @@ export default function DisplayPage() {
                 const v = e.target.value
                 window.location.search = v ? `?building_id=${v}` : ''
               }}
-              className="max-w-[220px] rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm text-slate-200 outline-none focus:border-blue-500"
+              className="max-w-[220px] rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-200 outline-none backdrop-blur transition-colors hover:border-white/20 focus:border-blue-500"
             >
-              <option value="">Barcha binolar</option>
+              <option value="" className="bg-slate-900">
+                Barcha binolar
+              </option>
               {data.buildings.map((b) => (
-                <option key={b.id} value={b.id}>
+                <option key={b.id} value={b.id} className="bg-slate-900">
                   {b.name}
                 </option>
               ))}
             </select>
           )}
-          <div className="flex items-center gap-3 text-slate-400">
+          <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-slate-400 backdrop-blur">
             <LiveDot ok={online} />
             {lastUpdate && (
               <span className="hidden text-xs sm:block">
-                Yangilandi:{' '}
                 {lastUpdate.toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
               </span>
             )}
-            <button onClick={fetchData} className="rounded-lg p-1.5 transition-colors hover:bg-slate-800">
+            <button
+              onClick={fetchData}
+              className="rounded-lg p-1 text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
+            >
               <RefreshCw className={`h-4 w-4 ${spinning ? 'animate-spin' : ''}`} />
             </button>
           </div>
@@ -266,28 +292,34 @@ export default function DisplayPage() {
       </header>
 
       {/* Grafiklar — to'liq ekranni to'ldiradigan 3×2 grid (bo'sh joy qolmaydi) */}
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 p-3 sm:grid-cols-2 sm:gap-4 sm:p-4 xl:grid-cols-3">
+      <div className="relative z-10 grid min-h-0 flex-1 grid-cols-1 gap-4 p-4 sm:grid-cols-2 xl:grid-cols-3">
         {charts.map((cfg) => {
           const Icon = cfg.icon
           const hasData = cfg.points.some((p) => p.value != null)
+          const TrendIcon = cfg.trend == null || cfg.trend === 0 ? null : cfg.trend > 0 ? TrendingUp : TrendingDown
 
           return (
             <div
               key={cfg.key}
-              className={`group relative flex min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-800/60 bg-gradient-to-br ${cfg.bg} shadow-lg shadow-black/30 transition-colors hover:border-slate-700`}
+              className="group relative flex min-h-0 flex-col overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03] shadow-2xl shadow-black/40 backdrop-blur-xl transition-all duration-300 hover:border-white/20 hover:bg-white/[0.05]"
             >
+              {/* Tepa aksent chizig'i */}
+              <div
+                className="absolute inset-x-0 top-0 h-1"
+                style={{ background: `linear-gradient(90deg, transparent, ${cfg.color}, transparent)` }}
+              />
               {/* Glow */}
               <div
-                className="pointer-events-none absolute inset-0 opacity-40"
-                style={{ background: `radial-gradient(ellipse 80% 60% at 50% 0%, ${cfg.glow}, transparent)` }}
+                className="pointer-events-none absolute inset-0 opacity-50 transition-opacity duration-300 group-hover:opacity-70"
+                style={{ background: `radial-gradient(ellipse 90% 55% at 50% 0%, ${cfg.glow}, transparent)` }}
               />
 
               {/* Sarlavha */}
               <div className="relative z-10 flex shrink-0 items-center justify-between gap-3 px-6 pb-1 pt-5">
                 <div className="flex items-center gap-3">
                   <div
-                    className="flex h-14 w-14 items-center justify-center rounded-2xl"
-                    style={{ background: cfg.glow, border: `1px solid ${cfg.color}55` }}
+                    className="flex h-14 w-14 items-center justify-center rounded-2xl border"
+                    style={{ background: cfg.glow, borderColor: `${cfg.color}55`, boxShadow: `0 8px 24px -8px ${cfg.color}` }}
                   >
                     <Icon className="h-7 w-7" style={{ color: cfg.color }} />
                   </div>
@@ -298,12 +330,12 @@ export default function DisplayPage() {
                 </div>
                 <span
                   className={`h-3 w-3 rounded-full ${hasData ? 'animate-pulse' : ''}`}
-                  style={{ background: hasData ? cfg.color : '#475569', boxShadow: hasData ? `0 0 12px ${cfg.color}` : 'none' }}
+                  style={{ background: hasData ? cfg.color : '#475569', boxShadow: hasData ? `0 0 14px ${cfg.color}` : 'none' }}
                 />
               </div>
 
-              {/* Joriy qiymat */}
-              <div className="relative z-10 shrink-0 px-6 pt-1">
+              {/* Joriy qiymat + trend */}
+              <div className="relative z-10 flex shrink-0 items-end justify-between gap-3 px-6 pt-1">
                 <div className="font-mono text-6xl font-black tabular-nums leading-none" style={{ color: cfg.color }}>
                   {cfg.latest != null ? (
                     <AnimatedNumber value={cfg.latest} decimals={2} />
@@ -312,26 +344,35 @@ export default function DisplayPage() {
                   )}
                   <span className="ml-2 text-2xl font-bold text-slate-400">{cfg.unit}</span>
                 </div>
-                {cfg.nominal != null && (
-                  <div className="mt-1 text-xs text-slate-500">
-                    nominal: {cfg.nominal} {cfg.unit}
+                {TrendIcon && cfg.trend != null && (
+                  <div
+                    className="mb-1 flex items-center gap-1 rounded-full px-2.5 py-1 text-sm font-bold"
+                    style={{ background: `${cfg.color}1a`, color: cfg.color }}
+                  >
+                    <TrendIcon className="h-4 w-4" />
+                    {Math.abs(cfg.trend).toFixed(1)}
                   </div>
                 )}
               </div>
+              {cfg.nominal != null && (
+                <div className="relative z-10 px-6 pt-1 text-xs text-slate-500">
+                  nominal: {cfg.nominal} {cfg.unit}
+                </div>
+              )}
 
               {/* Grafik — qolgan bo'sh joyni to'liq to'ldiradi */}
-              <div className="relative z-10 mt-2 min-h-0 flex-1 px-2 pb-3">
+              <div className="relative z-10 mt-2 min-h-0 flex-1 px-1 pb-1">
                 {!hasData ? (
                   <div className="flex h-full items-center justify-center">
                     <span className="text-sm text-slate-500">O'lchov ma'lumoti kutilmoqda...</span>
                   </div>
                 ) : (
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={cfg.points} margin={{ top: 4, right: 24, left: 0, bottom: 0 }} barCategoryGap="25%">
+                    <AreaChart data={cfg.points} margin={{ top: 6, right: 16, left: 0, bottom: 0 }}>
                       <defs>
                         <linearGradient id={`kiosk_${cfg.key}`} x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor={cfg.color} stopOpacity={0.95} />
-                          <stop offset="100%" stopColor={cfg.color} stopOpacity={0.35} />
+                          <stop offset="0%" stopColor={cfg.color} stopOpacity={0.45} />
+                          <stop offset="100%" stopColor={cfg.color} stopOpacity={0.02} />
                         </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 8" stroke="rgba(148,163,184,0.08)" vertical={false} />
@@ -341,25 +382,28 @@ export default function DisplayPage() {
                         tickLine={false}
                         axisLine={false}
                         interval="preserveStartEnd"
+                        minTickGap={40}
                       />
                       <YAxis
                         tick={{ fontSize: 11, fill: '#64748b' }}
                         tickLine={false}
                         axisLine={false}
-                        width={48}
+                        width={44}
+                        domain={['auto', 'auto']}
                         tickFormatter={(v) => `${v}`}
                       />
                       <Tooltip
                         contentStyle={{
-                          background: '#0f172a',
+                          background: 'rgba(15,23,42,0.9)',
                           border: `1px solid ${cfg.color}40`,
-                          borderRadius: 10,
+                          borderRadius: 12,
                           fontSize: 13,
                           color: '#f1f5f9',
+                          backdropFilter: 'blur(8px)',
                         }}
                         labelStyle={{ color: '#94a3b8', fontWeight: 700, marginBottom: 4 }}
                         formatter={(v) => [`${Number(v ?? 0)} ${cfg.unit}`, cfg.label]}
-                        cursor={{ fill: 'rgba(148,163,184,0.08)' }}
+                        cursor={{ stroke: cfg.color, strokeWidth: 1, strokeOpacity: 0.3 }}
                       />
                       {cfg.nominal != null && (
                         <ReferenceLine
@@ -370,8 +414,17 @@ export default function DisplayPage() {
                           label={{ value: `${cfg.nominal}${cfg.unit}`, fill: cfg.color, fontSize: 10, opacity: 0.6 }}
                         />
                       )}
-                      <Bar dataKey="value" fill={`url(#kiosk_${cfg.key})`} radius={[5, 5, 0, 0]} maxBarSize={26} />
-                    </BarChart>
+                      <Area
+                        type="monotone"
+                        dataKey="value"
+                        stroke={cfg.color}
+                        strokeWidth={2.5}
+                        fill={`url(#kiosk_${cfg.key})`}
+                        connectNulls
+                        dot={false}
+                        activeDot={{ r: 5, fill: cfg.color, stroke: '#0f172a', strokeWidth: 2 }}
+                      />
+                    </AreaChart>
                   </ResponsiveContainer>
                 )}
               </div>
