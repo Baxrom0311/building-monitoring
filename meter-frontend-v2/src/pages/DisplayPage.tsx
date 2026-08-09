@@ -54,27 +54,31 @@ function fmt(ts: number) {
   return new Date(ts * 1000).toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' })
 }
 
-function buildPoints(stats: HourlyUtilityStat[], key: keyof HourlyUtilityStat): ChartPoint[] {
-  const map = new Map<number, { sum: number; n: number }>()
+// Bir nechta seriya (masalan qozonxona kirish+chiqish) uchun soatlik o'rtacha.
+// Har bir nuqta: { label, v0, v1, ... } — Bar dataKey={`v${i}`} bilan chiziladi.
+type MultiPoint = { label: string } & Record<`v${number}`, number | null>
+function buildMultiPoints(stats: HourlyUtilityStat[], keys: (keyof HourlyUtilityStat)[]): MultiPoint[] {
+  const maps = keys.map(() => new Map<number, { sum: number; n: number }>())
   for (const s of stats) {
-    const v = s[key] as number | null
-    if (v == null) continue
-    const cur = map.get(s.bucket_ts) ?? { sum: 0, n: 0 }
-    cur.sum += v
-    cur.n += 1
-    map.set(s.bucket_ts, cur)
+    keys.forEach((k, i) => {
+      const v = s[k] as number | null
+      if (v == null) return
+      const cur = maps[i].get(s.bucket_ts) ?? { sum: 0, n: 0 }
+      cur.sum += v
+      cur.n += 1
+      maps[i].set(s.bucket_ts, cur)
+    })
   }
-
   const now = Math.floor(Date.now() / 1000)
   const start = now - 24 * 3600
-  const points: ChartPoint[] = []
-
+  const points: MultiPoint[] = []
   for (let ts = start - (start % 3600); ts <= now; ts += 3600) {
-    const entry = map.get(ts)
-    points.push({
-      label: fmt(ts),
-      value: entry ? Number((entry.sum / entry.n).toFixed(2)) : null,
+    const p = { label: fmt(ts) } as MultiPoint
+    keys.forEach((_, i) => {
+      const e = maps[i].get(ts)
+      p[`v${i}`] = e ? Number((e.sum / e.n).toFixed(2)) : null
     })
+    points.push(p)
   }
   return points
 }
@@ -230,21 +234,33 @@ export default function DisplayPage() {
   }, [fetchData])
 
   const charts = CHARTS.map((cfg) => {
+    // Qozonxona uchun ikki seriya (kirish yashil, chiqish qizil), qolganlar bitta seriya
+    const seriesDefs =
+      cfg.key === 'heating'
+        ? [
+            { key: 'avg_temperature_in_c' as keyof HourlyUtilityStat, label: 'Kirish', color: '#34D399' },
+            { key: 'avg_temperature_out_c' as keyof HourlyUtilityStat, label: 'Chiqish', color: '#F87171' },
+          ]
+        : [{ key: cfg.dataKey, label: cfg.label, color: cfg.color }]
+
     // data[cfg.key] serverdan kelmasa ham sahifa yiqilmasligi uchun ?? [] guard
-    let points = data ? buildPoints(data[cfg.key] ?? [], cfg.dataKey) : []
-    const hasReal = points.some((p) => p.value != null)
+    let points = data ? buildMultiPoints(data[cfg.key] ?? [], seriesDefs.map((s) => s.key)) : []
+    const hasReal = points.some((p) => seriesDefs.some((_, i) => p[`v${i}`] != null))
     // Real ma'lumot yo'q, lekin fake sozlangan bo'lsa (suv/gaz) — namunaviy bosim ko'rsatiladi
     let isFake = false
     if (!hasReal && cfg.fake && data) {
-      points = fakePoints(cfg.fake.base, cfg.fake.amp)
+      points = fakePoints(cfg.fake.base, cfg.fake.amp).map((p) => ({ label: p.label, v0: p.value }))
       isFake = true
     }
-    // Oxirgi ikki mavjud (null bo'lmagan) qiymat orqali joriy qiymat + trend
-    const vals = points.map((p) => p.value).filter((v): v is number => v != null)
-    const latest = vals.length ? vals[vals.length - 1] : null
-    const prev = vals.length > 1 ? vals[vals.length - 2] : null
-    const trend = latest != null && prev != null ? latest - prev : null
-    return { ...cfg, points, latest, trend, isFake }
+
+    // Har bir seriya uchun joriy qiymat + trend
+    const series = seriesDefs.map((sd, i) => {
+      const vals = points.map((p) => p[`v${i}`]).filter((v): v is number => v != null)
+      const latest = vals.length ? vals[vals.length - 1] : null
+      const prev = vals.length > 1 ? vals[vals.length - 2] : null
+      return { ...sd, index: i, latest, trend: latest != null && prev != null ? latest - prev : null }
+    })
+    return { ...cfg, points, series, isFake }
   })
 
   return (
@@ -325,8 +341,11 @@ export default function DisplayPage() {
       <div className="relative z-10 grid min-h-0 flex-1 grid-cols-1 gap-4 p-4 sm:grid-cols-2 xl:grid-cols-3">
         {charts.map((cfg) => {
           const Icon = cfg.icon
-          const hasData = cfg.points.some((p) => p.value != null)
-          const TrendIcon = cfg.trend == null || cfg.trend === 0 ? null : cfg.trend > 0 ? TrendingUp : TrendingDown
+          const hasData = cfg.series.some((s) => s.latest != null)
+          const single = cfg.series.length === 1
+          const s0 = cfg.series[0]
+          const TrendIcon =
+            single && s0.trend != null && s0.trend !== 0 ? (s0.trend > 0 ? TrendingUp : TrendingDown) : null
 
           return (
             <div
@@ -364,29 +383,44 @@ export default function DisplayPage() {
                 />
               </div>
 
-              {/* Joriy qiymat + trend */}
-              <div className="relative z-10 flex shrink-0 items-end justify-between gap-3 px-6 pt-1">
-                <div className="font-mono text-6xl font-black tabular-nums leading-none" style={{ color: cfg.color }}>
-                  {cfg.latest != null ? (
-                    <AnimatedNumber value={cfg.latest} decimals={2} />
-                  ) : (
-                    '—'
-                  )}
-                  <span className="ml-2 text-2xl font-bold text-slate-400">{cfg.unit}</span>
-                </div>
-                {TrendIcon && cfg.trend != null && (
-                  <div
-                    className="mb-1 flex items-center gap-1 rounded-full px-2.5 py-1 text-sm font-bold"
-                    style={{ background: `${cfg.color}1a`, color: cfg.color }}
-                  >
-                    <TrendIcon className="h-4 w-4" />
-                    {Math.abs(cfg.trend).toFixed(1)}
+              {/* Joriy qiymat(lar) + trend */}
+              {single ? (
+                <>
+                  <div className="relative z-10 flex shrink-0 items-end justify-between gap-3 px-6 pt-1">
+                    <div className="font-mono text-6xl font-black tabular-nums leading-none" style={{ color: cfg.color }}>
+                      {s0.latest != null ? <AnimatedNumber value={s0.latest} decimals={2} /> : '—'}
+                      <span className="ml-2 text-2xl font-bold text-slate-400">{cfg.unit}</span>
+                    </div>
+                    {TrendIcon && s0.trend != null && (
+                      <div
+                        className="mb-1 flex items-center gap-1 rounded-full px-2.5 py-1 text-sm font-bold"
+                        style={{ background: `${cfg.color}1a`, color: cfg.color }}
+                      >
+                        <TrendIcon className="h-4 w-4" />
+                        {Math.abs(s0.trend).toFixed(1)}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-              {cfg.nominal != null && (
-                <div className="relative z-10 px-6 pt-1 text-xs text-slate-500">
-                  nominal: {cfg.nominal} {cfg.unit}
+                  {cfg.nominal != null && (
+                    <div className="relative z-10 px-6 pt-1 text-xs text-slate-500">
+                      nominal: {cfg.nominal} {cfg.unit}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="relative z-10 flex shrink-0 flex-wrap items-end gap-x-8 gap-y-1 px-6 pt-1">
+                  {cfg.series.map((s) => (
+                    <div key={s.index}>
+                      <div className="flex items-center gap-1.5 text-xs font-bold" style={{ color: s.color }}>
+                        <span className="h-2 w-2 rounded-full" style={{ background: s.color }} />
+                        {s.label}
+                      </div>
+                      <div className="font-mono text-4xl font-black tabular-nums leading-none" style={{ color: s.color }}>
+                        {s.latest != null ? <AnimatedNumber value={s.latest} decimals={1} /> : '—'}
+                        <span className="ml-1 text-lg font-bold text-slate-400">{cfg.unit}</span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
 
@@ -400,10 +434,12 @@ export default function DisplayPage() {
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={cfg.points} margin={{ top: 6, right: 16, left: 0, bottom: 0 }} barCategoryGap="20%">
                       <defs>
-                        <linearGradient id={`kiosk_${cfg.key}`} x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor={cfg.color} stopOpacity={1} />
-                          <stop offset="100%" stopColor={cfg.color} stopOpacity={0.3} />
-                        </linearGradient>
+                        {cfg.series.map((s) => (
+                          <linearGradient key={s.index} id={`kiosk_${cfg.key}_${s.index}`} x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor={s.color} stopOpacity={1} />
+                            <stop offset="100%" stopColor={s.color} stopOpacity={0.3} />
+                          </linearGradient>
+                        ))}
                       </defs>
                       <CartesianGrid strokeDasharray="3 8" stroke="rgba(148,163,184,0.08)" vertical={false} />
                       <XAxis
@@ -432,7 +468,7 @@ export default function DisplayPage() {
                           backdropFilter: 'blur(8px)',
                         }}
                         labelStyle={{ color: '#94a3b8', fontWeight: 700, marginBottom: 4 }}
-                        formatter={(v) => [`${Number(v ?? 0)} ${cfg.unit}`, cfg.label]}
+                        formatter={(v, name) => [`${Number(v ?? 0)} ${cfg.unit}`, name]}
                         cursor={{ fill: 'rgba(148,163,184,0.08)' }}
                       />
                       {cfg.nominal != null && (
@@ -452,7 +488,16 @@ export default function DisplayPage() {
                           }}
                         />
                       )}
-                      <Bar dataKey="value" fill={`url(#kiosk_${cfg.key})`} radius={[6, 6, 0, 0]} maxBarSize={28} />
+                      {cfg.series.map((s) => (
+                        <Bar
+                          key={s.index}
+                          dataKey={`v${s.index}`}
+                          name={s.label}
+                          fill={`url(#kiosk_${cfg.key}_${s.index})`}
+                          radius={[6, 6, 0, 0]}
+                          maxBarSize={single ? 28 : 16}
+                        />
+                      ))}
                     </BarChart>
                   </ResponsiveContainer>
                 )}
