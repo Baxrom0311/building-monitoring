@@ -79,6 +79,21 @@ function buildPoints(stats: HourlyUtilityStat[], key: keyof HourlyUtilityStat): 
   return points
 }
 
+// Real ma'lumot bo'lmaganda namunaviy (fake) qatorlar yaratadi.
+// Soat timestampiga bog'liq deterministik — har 30s yangilanishda sakramaydi.
+function fakePoints(base: number, amp: number): ChartPoint[] {
+  const now = Math.floor(Date.now() / 1000)
+  const start = now - 24 * 3600
+  const points: ChartPoint[] = []
+  for (let ts = start - (start % 3600); ts <= now; ts += 3600) {
+    const h = Math.floor(ts / 3600)
+    const wave = Math.sin(h * 0.7) * 0.6 + Math.sin(h * 1.9) * 0.4
+    const v = base + wave * amp
+    points.push({ label: fmt(ts), value: Number(v.toFixed(2)) })
+  }
+  return points
+}
+
 const CHARTS = [
   {
     key: 'electricity' as const,
@@ -90,6 +105,7 @@ const CHARTS = [
     glow: 'rgba(253,224,71,0.5)',
     bg: 'from-amber-500/20 via-slate-900/80 to-slate-950',
     nominal: 220 as number | null,
+    fake: null as { base: number; amp: number } | null,
   },
   {
     key: 'water' as const,
@@ -100,7 +116,9 @@ const CHARTS = [
     color: '#38BDF8',
     glow: 'rgba(56,189,248,0.5)',
     bg: 'from-sky-500/20 via-slate-900/80 to-slate-950',
-    nominal: null as number | null,
+    nominal: 4 as number | null,
+    // Real ma'lumot bo'lmasa — normal suv bosimi (~4 bar) namunaviy ko'rsatiladi
+    fake: { base: 4, amp: 0.25 } as { base: number; amp: number } | null,
   },
   {
     key: 'gas' as const,
@@ -111,7 +129,9 @@ const CHARTS = [
     color: '#FB923C',
     glow: 'rgba(251,146,60,0.5)',
     bg: 'from-orange-500/20 via-slate-900/80 to-slate-950',
-    nominal: null as number | null,
+    nominal: 0.3 as number | null,
+    // Real ma'lumot bo'lmasa — normal gaz bosimi (~0.3 bar) namunaviy ko'rsatiladi
+    fake: { base: 0.3, amp: 0.03 } as { base: number; amp: number } | null,
   },
   {
     key: 'soil' as const,
@@ -123,6 +143,7 @@ const CHARTS = [
     glow: 'rgba(52,211,153,0.5)',
     bg: 'from-emerald-500/20 via-slate-900/80 to-slate-950',
     nominal: null as number | null,
+    fake: null as { base: number; amp: number } | null,
   },
   {
     key: 'sound' as const,
@@ -134,6 +155,7 @@ const CHARTS = [
     glow: 'rgba(192,132,252,0.5)',
     bg: 'from-violet-500/20 via-slate-900/80 to-slate-950',
     nominal: null as number | null,
+    fake: null as { base: number; amp: number } | null,
   },
   {
     key: 'heating' as const,
@@ -145,6 +167,7 @@ const CHARTS = [
     glow: 'rgba(251,113,133,0.5)',
     bg: 'from-rose-500/20 via-slate-900/80 to-slate-950',
     nominal: null as number | null,
+    fake: null as { base: number; amp: number } | null,
   },
 ]
 
@@ -208,13 +231,20 @@ export default function DisplayPage() {
 
   const charts = CHARTS.map((cfg) => {
     // data[cfg.key] serverdan kelmasa ham sahifa yiqilmasligi uchun ?? [] guard
-    const points = data ? buildPoints(data[cfg.key] ?? [], cfg.dataKey) : []
+    let points = data ? buildPoints(data[cfg.key] ?? [], cfg.dataKey) : []
+    const hasReal = points.some((p) => p.value != null)
+    // Real ma'lumot yo'q, lekin fake sozlangan bo'lsa (suv/gaz) — namunaviy bosim ko'rsatiladi
+    let isFake = false
+    if (!hasReal && cfg.fake && data) {
+      points = fakePoints(cfg.fake.base, cfg.fake.amp)
+      isFake = true
+    }
     // Oxirgi ikki mavjud (null bo'lmagan) qiymat orqali joriy qiymat + trend
     const vals = points.map((p) => p.value).filter((v): v is number => v != null)
     const latest = vals.length ? vals[vals.length - 1] : null
     const prev = vals.length > 1 ? vals[vals.length - 2] : null
     const trend = latest != null && prev != null ? latest - prev : null
-    return { ...cfg, points, latest, trend }
+    return { ...cfg, points, latest, trend, isFake }
   })
 
   return (
@@ -325,7 +355,7 @@ export default function DisplayPage() {
                   </div>
                   <div>
                     <div className="text-lg font-bold text-white">{cfg.label}</div>
-                    <div className="text-xs text-slate-400">Oxirgi 24 soat</div>
+                    <div className="text-xs text-slate-400">{cfg.isFake ? 'Namunaviy · normal bosim' : 'Oxirgi 24 soat'}</div>
                   </div>
                 </div>
                 <span
