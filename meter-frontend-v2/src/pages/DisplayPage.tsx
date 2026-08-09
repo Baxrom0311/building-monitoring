@@ -142,7 +142,7 @@ const CHARTS = [
     color: '#34D399',
     glow: 'rgba(52,211,153,0.5)',
     bg: 'from-emerald-500/20 via-slate-900/80 to-slate-950',
-    nominal: null as number | null,
+    nominal: 60 as number | null,
     fake: null as { base: number; amp: number } | null,
   },
   {
@@ -166,7 +166,7 @@ const CHARTS = [
     color: '#FB7185',
     glow: 'rgba(251,113,133,0.5)',
     bg: 'from-rose-500/20 via-slate-900/80 to-slate-950',
-    nominal: null as number | null,
+    nominal: 60 as number | null,
     fake: null as { base: number; amp: number } | null,
   },
 ]
@@ -439,9 +439,17 @@ export default function DisplayPage() {
                         <ReferenceLine
                           y={cfg.nominal}
                           stroke={cfg.color}
-                          strokeDasharray="6 4"
-                          strokeOpacity={0.4}
-                          label={{ value: `${cfg.nominal}${cfg.unit}`, fill: cfg.color, fontSize: 10, opacity: 0.6 }}
+                          strokeDasharray="6 5"
+                          strokeWidth={1.5}
+                          strokeOpacity={0.7}
+                          label={{
+                            value: `norma ${cfg.nominal}${cfg.unit}`,
+                            position: 'insideTopRight',
+                            fill: cfg.color,
+                            fontSize: 11,
+                            fontWeight: 700,
+                            opacity: 0.85,
+                          }}
                         />
                       )}
                       <Bar dataKey="value" fill={`url(#kiosk_${cfg.key})`} radius={[6, 6, 0, 0]} maxBarSize={28} />
