@@ -95,6 +95,8 @@ function fakePoints(base: number, amp: number): ChartPoint[] {
     const v = base + wave * amp
     points.push({ label: fmt(ts), value: Number(v.toFixed(2)) })
   }
+  // Ko'rsatiladigan joriy (oxirgi) qiymat aynan bazaga teng bo'lsin
+  if (points.length) points[points.length - 1].value = Number(base.toFixed(2))
   return points
 }
 
@@ -121,8 +123,8 @@ const CHARTS = [
     glow: 'rgba(56,189,248,0.5)',
     bg: 'from-sky-500/20 via-slate-900/80 to-slate-950',
     nominal: 4 as number | null,
-    // Real ma'lumot bo'lmasa — normal suv bosimi (~4 bar) namunaviy ko'rsatiladi
-    fake: { base: 4, amp: 0.25 } as { base: number; amp: number } | null,
+    // Real ma'lumot bo'lmasa — normal suv bosimi (~3.8 bar) namunaviy ko'rsatiladi
+    fake: { base: 3.8, amp: 0.25 } as { base: number; amp: number } | null,
   },
   {
     key: 'gas' as const,
@@ -134,8 +136,8 @@ const CHARTS = [
     glow: 'rgba(251,146,60,0.5)',
     bg: 'from-orange-500/20 via-slate-900/80 to-slate-950',
     nominal: 0.3 as number | null,
-    // Real ma'lumot bo'lmasa — normal gaz bosimi (~0.3 bar) namunaviy ko'rsatiladi
-    fake: { base: 0.3, amp: 0.03 } as { base: number; amp: number } | null,
+    // Real ma'lumot bo'lmasa — normal gaz bosimi (~0.27 bar) namunaviy ko'rsatiladi
+    fake: { base: 0.27, amp: 0.03 } as { base: number; amp: number } | null,
   },
   {
     key: 'soil' as const,
