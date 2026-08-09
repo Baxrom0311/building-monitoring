@@ -100,6 +100,10 @@ function fakePoints(base: number, amp: number): ChartPoint[] {
   return points
 }
 
+// Qozonxona normal ΔT (kirish-chiqish farqi) va ruxsat etilgan chetlanish
+const HEATING_DELTA_NORMA = 20
+const HEATING_DELTA_MARGIN = 10 // norma ±10°C ichida — sog'lom
+
 const CHARTS = [
   {
     key: 'electricity' as const,
@@ -172,7 +176,8 @@ const CHARTS = [
     color: '#FB7185',
     glow: 'rgba(251,113,133,0.5)',
     bg: 'from-rose-500/20 via-slate-900/80 to-slate-950',
-    nominal: 60 as number | null,
+    // Qozonxona normasi ΔT (kirish-chiqish farqi) orqali baholanadi — HEATING_DELTA_NORMA
+    nominal: null as number | null,
     fake: null as { base: number; amp: number } | null,
   },
 ]
@@ -262,7 +267,12 @@ export default function DisplayPage() {
       const prev = vals.length > 1 ? vals[vals.length - 2] : null
       return { ...sd, index: i, latest, trend: latest != null && prev != null ? latest - prev : null }
     })
-    return { ...cfg, points, series, isFake }
+    // Qozonxona uchun ΔT = |kirish - chiqish|
+    const deltaT =
+      cfg.key === 'heating' && series[0].latest != null && series[1].latest != null
+        ? Math.abs(series[0].latest - series[1].latest)
+        : null
+    return { ...cfg, points, series, isFake, deltaT }
   })
 
   return (
@@ -410,7 +420,7 @@ export default function DisplayPage() {
                   )}
                 </>
               ) : (
-                <div className="relative z-10 flex shrink-0 flex-wrap items-end gap-x-8 gap-y-1 px-6 pt-1">
+                <div className="relative z-10 flex shrink-0 flex-wrap items-end gap-x-7 gap-y-1 px-6 pt-1">
                   {cfg.series.map((s) => (
                     <div key={s.index}>
                       <div className="flex items-center gap-1.5 text-xs font-bold" style={{ color: s.color }}>
@@ -423,6 +433,20 @@ export default function DisplayPage() {
                       </div>
                     </div>
                   ))}
+                  {cfg.key === 'heating' &&
+                    (() => {
+                      const ok = cfg.deltaT != null && Math.abs(cfg.deltaT - HEATING_DELTA_NORMA) <= HEATING_DELTA_MARGIN
+                      const dColor = cfg.deltaT == null ? '#94a3b8' : ok ? '#34D399' : '#FBBF24'
+                      return (
+                        <div className="border-l border-white/10 pl-6">
+                          <div className="text-xs font-bold text-slate-300">ΔT · norma {HEATING_DELTA_NORMA}°C</div>
+                          <div className="font-mono text-4xl font-black tabular-nums leading-none" style={{ color: dColor }}>
+                            {cfg.deltaT != null ? <AnimatedNumber value={cfg.deltaT} decimals={1} /> : '—'}
+                            <span className="ml-1 text-lg font-bold text-slate-400">{cfg.unit}</span>
+                          </div>
+                        </div>
+                      )
+                    })()}
                 </div>
               )}
 
