@@ -381,13 +381,21 @@ export default function DisplayPage() {
           const TrendIcon =
             single && s0.trend != null && s0.trend !== 0 ? (s0.trend > 0 ? TrendingUp : TrendingDown) : null
 
-          // Elektr: 220V normadan chetlanish bo'yicha ranglash; Y o'qi 220 atrofida markazlashadi
+          // Elektr: 220V o'rtada nol chizig'i — past qiymat pastga, yuqori qiymat tepaga o'sadi (divergent).
+          // Ustun qiymati sifatida (voltaj − 220) chiziladi, Y o'qi 0 atrofida simmetrik.
           const isElec = cfg.key === 'electricity'
           const elecVals = isElec
             ? cfg.points.map((p) => p.v0).filter((n): n is number => typeof n === 'number')
             : []
           const elecSpan = elecVals.length ? Math.max(15, ...elecVals.map((v) => Math.abs(v - ELEC_NOMINAL))) : 20
-          const elecDomain: [number, number] = [ELEC_NOMINAL - (elecSpan + 5), ELEC_NOMINAL + (elecSpan + 5)]
+          // Simmetrik domen — 0 (=220V) aynan o'rtada
+          const elecDomain: [number, number] = [-(elecSpan + 5), elecSpan + 5]
+          const elecData = isElec
+            ? cfg.points.map((p) => ({
+                ...p,
+                dev: p.v0 != null ? Number((p.v0 - ELEC_NOMINAL).toFixed(2)) : null,
+              }))
+            : cfg.points
           const valueColor = isElec && s0.latest != null ? voltageColor(s0.latest) : cfg.color
 
           return (
@@ -489,7 +497,7 @@ export default function DisplayPage() {
                   </div>
                 ) : (
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={cfg.points} margin={{ top: 6, right: 16, left: 0, bottom: 0 }} barCategoryGap="20%">
+                    <BarChart data={elecData} margin={{ top: 6, right: 16, left: 0, bottom: 0 }} barCategoryGap="20%">
                       <defs>
                         {cfg.series.map((s) => (
                           <linearGradient key={s.index} id={`kiosk_${cfg.key}_${s.index}`} x1="0" y1="0" x2="0" y2="1">
@@ -514,7 +522,7 @@ export default function DisplayPage() {
                         width={44}
                         domain={isElec ? elecDomain : ['auto', 'auto']}
                         allowDecimals={!isElec}
-                        tickFormatter={(v) => `${v}`}
+                        tickFormatter={(v) => `${isElec ? Math.round(Number(v) + ELEC_NOMINAL) : v}`}
                       />
                       <Tooltip
                         contentStyle={{
@@ -526,18 +534,22 @@ export default function DisplayPage() {
                           backdropFilter: 'blur(8px)',
                         }}
                         labelStyle={{ color: '#94a3b8', fontWeight: 700, marginBottom: 4 }}
-                        formatter={(v, name) => [`${Number(v ?? 0)} ${cfg.unit}`, name]}
+                        formatter={(v, name) =>
+                          isElec
+                            ? [`${(Number(v ?? 0) + ELEC_NOMINAL).toFixed(1)} ${cfg.unit}`, cfg.label]
+                            : [`${Number(v ?? 0)} ${cfg.unit}`, name]
+                        }
                         cursor={{ fill: 'rgba(148,163,184,0.08)' }}
                       />
-                      {cfg.nominal != null && (
+                      {(isElec || cfg.nominal != null) && (
                         <ReferenceLine
-                          y={cfg.nominal}
+                          y={isElec ? 0 : cfg.nominal!}
                           stroke={isElec ? '#22C55E' : cfg.color}
                           strokeDasharray="6 5"
                           strokeWidth={isElec ? 2 : 1.5}
                           strokeOpacity={isElec ? 0.9 : 0.7}
                           label={{
-                            value: `norma ${cfg.nominal}${cfg.unit}`,
+                            value: isElec ? `norma ${ELEC_NOMINAL}${cfg.unit}` : `norma ${cfg.nominal}${cfg.unit}`,
                             position: 'insideTopRight',
                             fill: isElec ? '#22C55E' : cfg.color,
                             fontSize: 11,
@@ -547,8 +559,8 @@ export default function DisplayPage() {
                         />
                       )}
                       {isElec ? (
-                        <Bar dataKey="v0" name={cfg.label} radius={[6, 6, 0, 0]} maxBarSize={28}>
-                          {cfg.points.map((p, idx) => (
+                        <Bar dataKey="dev" name={cfg.label} radius={[4, 4, 4, 4]} maxBarSize={28}>
+                          {elecData.map((p, idx) => (
                             <Cell key={idx} fill={p.v0 != null ? voltageColor(p.v0) : '#334155'} />
                           ))}
                         </Bar>
