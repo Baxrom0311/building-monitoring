@@ -14,7 +14,10 @@ import {
   Building2,
   Droplets,
   Flame,
+  Maximize2,
+  Minimize2,
   RefreshCw,
+  RotateCw,
   Sprout,
   Thermometer,
   TrendingDown,
@@ -25,6 +28,7 @@ import {
 import { API_BASE_URL } from '@/lib/env'
 import { AnimatedNumber } from '@/components/ui/AnimatedNumber'
 import { StatusPulse } from '@/components/ui/StatusPulse'
+import { SoilStatusBadge, getSoilHumidityStatus } from '@/components/ui/SoilStatusBadge'
 import type { HourlyUtilityStat } from '@/types/api'
 
 // PUBLIC kiosk sahifa — AppLayout tashqarisida, autentifikatsiyasiz.
@@ -236,6 +240,22 @@ export default function DisplayPage() {
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
   const [online, setOnline] = useState(true)
   const [spinning, setSpinning] = useState(false)
+  const [isFullscreen, setIsFullscreen] = useState(false)
+  const [autoRotate, setAutoRotate] = useState(false)
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {})
+    } else {
+      document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {})
+    }
+  }
+
+  useEffect(() => {
+    const handleFsChange = () => setIsFullscreen(Boolean(document.fullscreenElement))
+    document.addEventListener('fullscreenchange', handleFsChange)
+    return () => document.removeEventListener('fullscreenchange', handleFsChange)
+  }, [])
 
   const fetchData = useCallback(async () => {
     setSpinning(true)
@@ -261,6 +281,20 @@ export default function DisplayPage() {
     const id = setInterval(fetchData, 30_000)
     return () => clearInterval(id)
   }, [fetchData])
+
+  // Binolarni har 15 soniyada avtomatik almashtirib turish (Auto-rotate mode)
+  useEffect(() => {
+    if (!autoRotate || !data?.buildings || data.buildings.length < 2) return
+    const interval = setInterval(() => {
+      const buildings = data.buildings ?? []
+      const currentId = BUILDING_ID ? Number(BUILDING_ID) : null
+      const currentIndex = buildings.findIndex((b) => b.id === currentId)
+      const nextIndex = (currentIndex + 1) % buildings.length
+      const nextId = buildings[nextIndex].id
+      window.location.search = `?building_id=${nextId}`
+    }, 15_000)
+    return () => clearInterval(interval)
+  }, [autoRotate, data])
 
   const charts = CHARTS.map((cfg) => {
     // Qozonxona uchun ikki seriya (kirish yashil, chiqish qizil), qolganlar bitta seriya
@@ -360,11 +394,33 @@ export default function DisplayPage() {
                 {lastUpdate.toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
               </span>
             )}
+            {data?.buildings && data.buildings.length > 1 && (
+              <button
+                onClick={() => setAutoRotate(!autoRotate)}
+                title={autoRotate ? "Avto-almashinuvni to'xtatish" : "Binolarni avto-almashtirish (15s)"}
+                className={`flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold transition-colors ${
+                  autoRotate
+                    ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40'
+                    : 'text-slate-300 hover:bg-white/10 hover:text-white'
+                }`}
+              >
+                <RotateCw className={`h-3.5 w-3.5 ${autoRotate ? 'animate-spin' : ''}`} />
+                <span className="hidden md:inline">{autoRotate ? 'Auto: ON' : 'Auto: OFF'}</span>
+              </button>
+            )}
             <button
               onClick={fetchData}
+              title="Ma'lumotlarni yangilash"
               className="rounded-lg p-1 text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
             >
               <RefreshCw className={`h-4 w-4 ${spinning ? 'animate-spin' : ''}`} />
+            </button>
+            <button
+              onClick={toggleFullscreen}
+              title={isFullscreen ? "To'liq ekrandan chiqish" : "To'liq ekran rejimiga o'tish (Kiosk)"}
+              className="rounded-lg p-1 text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
+            >
+              {isFullscreen ? <Minimize2 className="h-4 w-4 text-amber-400" /> : <Maximize2 className="h-4 w-4 text-blue-400" />}
             </button>
           </div>
           <LiveClock />
@@ -393,10 +449,17 @@ export default function DisplayPage() {
           const elecData = isElec
             ? cfg.points.map((p) => ({
                 ...p,
+                v0: p.v0,
                 dev: p.v0 != null ? Number((p.v0 - ELEC_NOMINAL).toFixed(2)) : null,
               }))
-            : cfg.points
-          const valueColor = isElec && s0.latest != null ? voltageColor(s0.latest) : cfg.color
+            : []
+          const soilStatus = cfg.key === 'soil' ? getSoilHumidityStatus(s0.latest) : null
+          const valueColor =
+            isElec && s0.latest != null
+              ? voltageColor(s0.latest)
+              : cfg.key === 'soil' && soilStatus
+              ? soilStatus.color
+              : cfg.color
 
           return (
             <div
@@ -406,7 +469,9 @@ export default function DisplayPage() {
               {/* Tepa aksent chizig'i */}
               <div
                 className="absolute inset-x-0 top-0 h-1"
-                style={{ background: `linear-gradient(90deg, transparent, ${cfg.color}, transparent)` }}
+                style={{
+                  background: `linear-gradient(90deg, transparent, ${cfg.key === 'soil' && soilStatus ? soilStatus.color : cfg.color}, transparent)`,
+                }}
               />
               {/* Glow */}
               <div
@@ -418,10 +483,14 @@ export default function DisplayPage() {
               <div className="relative z-10 flex shrink-0 items-center justify-between gap-3 px-6 pb-1 pt-5">
                 <div className="flex items-center gap-3">
                   <div
-                    className="flex h-14 w-14 items-center justify-center rounded-2xl border"
-                    style={{ background: cfg.glow, borderColor: `${cfg.color}55`, boxShadow: `0 8px 24px -8px ${cfg.color}` }}
+                    className="flex h-14 w-14 items-center justify-center rounded-2xl border transition-all"
+                    style={{
+                      background: cfg.key === 'soil' && soilStatus ? soilStatus.bgColor : cfg.glow,
+                      borderColor: cfg.key === 'soil' && soilStatus ? soilStatus.borderColor : `${cfg.color}55`,
+                      boxShadow: `0 8px 24px -8px ${cfg.key === 'soil' && soilStatus ? soilStatus.color : cfg.color}`,
+                    }}
                   >
-                    <Icon className="h-7 w-7" style={{ color: cfg.color }} />
+                    <Icon className="h-7 w-7" style={{ color: cfg.key === 'soil' && soilStatus ? soilStatus.color : cfg.color }} />
                   </div>
                   <div>
                     <div className="text-lg font-bold text-white">{cfg.label}</div>
@@ -430,7 +499,10 @@ export default function DisplayPage() {
                 </div>
                 <span
                   className={`h-3 w-3 rounded-full ${hasData ? 'animate-pulse' : ''}`}
-                  style={{ background: hasData ? cfg.color : '#475569', boxShadow: hasData ? `0 0 14px ${cfg.color}` : 'none' }}
+                  style={{
+                    background: hasData ? (cfg.key === 'soil' && soilStatus ? soilStatus.color : cfg.color) : '#475569',
+                    boxShadow: hasData ? `0 0 14px ${cfg.key === 'soil' && soilStatus ? soilStatus.color : cfg.color}` : 'none',
+                  }}
                 />
               </div>
 
@@ -439,7 +511,7 @@ export default function DisplayPage() {
                 <>
                   <div className="relative z-10 flex shrink-0 items-end justify-between gap-3 px-6 pt-1">
                     <div className="font-mono text-6xl font-black tabular-nums leading-none" style={{ color: valueColor }}>
-                      {s0.latest != null ? <AnimatedNumber value={s0.latest} decimals={2} /> : '—'}
+                      {s0.latest != null ? <AnimatedNumber value={s0.latest} decimals={1} /> : '—'}
                       <span className="ml-2 text-2xl font-bold text-slate-400">{cfg.unit}</span>
                     </div>
                     {TrendIcon && s0.trend != null && (
@@ -452,11 +524,16 @@ export default function DisplayPage() {
                       </div>
                     )}
                   </div>
-                  {cfg.nominal != null && (
+
+                  {cfg.key === 'soil' ? (
+                    <div className="relative z-10 px-6 pt-2">
+                      <SoilStatusBadge value={s0.latest} showScale={true} />
+                    </div>
+                  ) : cfg.nominal != null ? (
                     <div className="relative z-10 px-6 pt-1 text-xs text-slate-500">
                       nominal: {cfg.nominal} {cfg.unit}
                     </div>
-                  )}
+                  ) : null}
                 </>
               ) : (
                 <div className="relative z-10 flex shrink-0 flex-wrap items-end gap-x-7 gap-y-1 px-6 pt-1">
@@ -541,7 +618,27 @@ export default function DisplayPage() {
                         }
                         cursor={{ fill: 'rgba(148,163,184,0.08)' }}
                       />
-                      {(isElec || cfg.nominal != null) && (
+                      {cfg.key === 'soil' && (
+                        <>
+                          <ReferenceLine
+                            y={65}
+                            stroke="#FBBF24"
+                            strokeDasharray="4 4"
+                            strokeWidth={1.5}
+                            strokeOpacity={0.8}
+                            label={{ value: "O'rta 65%", position: 'insideTopRight', fill: '#FBBF24', fontSize: 10, fontWeight: 700 }}
+                          />
+                          <ReferenceLine
+                            y={80}
+                            stroke="#FB7185"
+                            strokeDasharray="4 4"
+                            strokeWidth={1.5}
+                            strokeOpacity={0.8}
+                            label={{ value: 'Yomon 80%', position: 'insideTopRight', fill: '#FB7185', fontSize: 10, fontWeight: 700 }}
+                          />
+                        </>
+                      )}
+                      {(isElec || (cfg.nominal != null && cfg.key !== 'soil')) && (
                         <ReferenceLine
                           y={isElec ? 0 : cfg.nominal!}
                           stroke={isElec ? '#22C55E' : cfg.color}
@@ -562,6 +659,12 @@ export default function DisplayPage() {
                         <Bar dataKey="dev" name={cfg.label} radius={[4, 4, 4, 4]} maxBarSize={28}>
                           {elecData.map((p, idx) => (
                             <Cell key={idx} fill={p.v0 != null ? voltageColor(p.v0) : '#334155'} />
+                          ))}
+                        </Bar>
+                      ) : cfg.key === 'soil' ? (
+                        <Bar dataKey="v0" name={cfg.label} radius={[6, 6, 0, 0]} maxBarSize={28}>
+                          {cfg.points.map((p, idx) => (
+                            <Cell key={idx} fill={p.v0 != null ? getSoilHumidityStatus(p.v0).color : cfg.color} />
                           ))}
                         </Bar>
                       ) : (

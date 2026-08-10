@@ -14,6 +14,7 @@ import {
 } from 'recharts'
 import { Droplets, Sprout, TrendingDown, TrendingUp, Volume2, Zap } from 'lucide-react'
 import { AnimatedNumber } from '@/components/ui/AnimatedNumber'
+import { SoilStatusBadge } from '@/components/ui/SoilStatusBadge'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -139,11 +140,9 @@ const CHARTS = [
     liveAmp: 2.0,
     getPoints: generateSoil,
     legendRanges: [
-      { label: '< 15 %', color: '#ef4444' },
-      { label: '15 – 25 %', color: '#eab308' },
-      { label: '25 – 75 %', color: '#22c55e' },
-      { label: '75 – 85 %', color: '#eab308' },
-      { label: '> 85 %', color: '#ef4444' },
+      { label: 'Norma (< 65%)', color: '#34D399' },
+      { label: "O'rta (65 – 80%)", color: '#FBBF24' },
+      { label: 'Yomon (> 80%)', color: '#FB7185' },
     ],
   },
   {
@@ -680,6 +679,12 @@ export default function DemoPage() {
                     </span>
                     <span className="text-xs font-semibold text-slate-400">{cfg.unit}</span>
                   </div>
+
+                  {cfg.key === 'soil' && (
+                    <div className="mt-1">
+                      <SoilStatusBadge value={liveVal} showScale={false} />
+                    </div>
+                  )}
                 </div>
 
                 {/* Legend / Range bar */}
