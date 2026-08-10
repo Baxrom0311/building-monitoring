@@ -453,7 +453,7 @@ export default function DisplayPage() {
                 v0: p.v0,
                 dev: p.v0 != null ? Number((p.v0 - ELEC_NOMINAL).toFixed(2)) : null,
               }))
-            : []
+            : cfg.points
           const soilStatus = cfg.key === 'soil' ? getSoilHumidityStatus(s0.latest) : null
           const valueColor =
             isElec && s0.latest != null
