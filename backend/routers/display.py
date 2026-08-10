@@ -4,6 +4,7 @@ from fastapi import APIRouter
 
 from core.database import SessionLocal
 from repositories.buildings import BuildingRepository
+from repositories.readings import ReadingRepository
 from services import analytics as analytics_service
 
 router = APIRouter(prefix="/api/public")
@@ -23,6 +24,7 @@ async def public_display(building_id: Optional[int] = None):
         return result["stats"]
 
     building_info = None
+    latest: dict = {}
     async with SessionLocal() as session:
         repo = BuildingRepository(session)
         if building_id is not None:
@@ -31,11 +33,32 @@ async def public_display(building_id: Optional[int] = None):
                 building_info = {"id": building.id, "name": building.name, "address": building.address}
         # Displey ekranida bino tanlash uchun aktiv binolar ro'yxati (id + nom)
         all_buildings = await repo.list_active()
+
+        # Real-vaqt qiymati — har utility uchun eng oxirgi xom o'qish (soatlik o'rtacha emas)
+        reading_repo = ReadingRepository(session)
+        for r in await reading_repo.latest_per_utility(building_id=building_id):
+            if r.utility_type == "electricity":
+                latest["electricity"] = {"value": r.voltage_l1, "ts": r.ts}
+            elif r.utility_type == "water":
+                latest["water"] = {"value": r.pressure_bottom_bar, "ts": r.ts}
+            elif r.utility_type == "gas":
+                latest["gas"] = {"value": r.pressure_bar, "ts": r.ts}
+            elif r.utility_type == "soil":
+                latest["soil"] = {"value": r.humidity, "ts": r.ts}
+            elif r.utility_type == "sound":
+                latest["sound"] = {"value": r.level, "ts": r.ts}
+            elif r.utility_type == "heating":
+                latest["heating"] = {
+                    "value": r.temperature_in_c,
+                    "value_out": r.temperature_out_c,
+                    "ts": r.ts,
+                }
     buildings = [{"id": b.id, "name": b.name} for b in all_buildings]
 
     return {
         "building": building_info,
         "buildings": buildings,
+        "latest": latest,
         "electricity": await stats("electricity"),
         "water": await stats("water"),
         "gas": await stats("gas"),

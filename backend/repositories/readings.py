@@ -24,6 +24,17 @@ class ReadingRepository(BaseRepository[Reading]):
         )
         return list((await self.session.scalars(stmt)).all())
 
+    async def latest_per_utility(self, building_id: int | None = None) -> list[Reading]:
+        """Har bir utility_type uchun eng oxirgi xom o'qish (real-vaqt qiymati).
+
+        building_id berilsa faqat shu bino; aks holda butun tizim bo'yicha.
+        Displey ekranida joriy qiymatni (soatlik o'rtacha emas) ko'rsatish uchun."""
+        stmt = select(Reading)
+        if building_id is not None:
+            stmt = stmt.where(Reading.building_id == building_id)
+        stmt = stmt.distinct(Reading.utility_type).order_by(Reading.utility_type, desc(Reading.ts))
+        return list((await self.session.scalars(stmt)).all())
+
     async def exists_external_id(self, device_id: str, reading_id: str) -> bool:
         existing = await self.session.scalar(
             select(Reading.id).where(and_(Reading.device_id == device_id, Reading.reading_id == reading_id))

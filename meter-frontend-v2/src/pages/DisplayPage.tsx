@@ -16,9 +16,9 @@ import {
   Flame,
   Maximize2,
   Minimize2,
+  Droplet,
   RefreshCw,
   RotateCw,
-  Sprout,
   Thermometer,
   TrendingDown,
   TrendingUp,
@@ -37,9 +37,17 @@ import type { HourlyUtilityStat } from '@/types/api'
 
 const BASE = API_BASE_URL || window.location.origin
 
+interface LatestValue {
+  value: number | null
+  value_out?: number | null
+  ts?: number
+}
+
 interface DisplayData {
   building?: { id: number; name: string; address?: string | null } | null
   buildings?: { id: number; name: string }[]
+  // Real-vaqt qiymatlari (soatlik o'rtacha emas) — har utility uchun eng oxirgi xom o'qish
+  latest?: Partial<Record<'electricity' | 'water' | 'gas' | 'soil' | 'sound' | 'heating', LatestValue>>
   electricity: HourlyUtilityStat[]
   water: HourlyUtilityStat[]
   gas: HourlyUtilityStat[]
@@ -175,7 +183,7 @@ const CHARTS = [
     dataKey: 'avg_humidity' as keyof HourlyUtilityStat,
     label: "Yerto'la namligi",
     unit: '%',
-    icon: Sprout,
+    icon: Droplet,
     color: '#34D399',
     glow: 'rgba(52,211,153,0.5)',
     bg: 'from-emerald-500/20 via-slate-900/80 to-slate-950',
@@ -317,13 +325,33 @@ export default function DisplayPage() {
       isFake = true
     }
 
-    // Har bir seriya uchun joriy qiymat + trend
+    // Har bir seriya uchun joriy qiymat + trend (soatlik nuqtalardan)
     const series = seriesDefs.map((sd, i) => {
       const vals = points.map((p) => p[`v${i}`]).filter((v): v is number => v != null)
-      const latest = vals.length ? vals[vals.length - 1] : null
+      const hourlyLatest = vals.length ? vals[vals.length - 1] : null
       const prev = vals.length > 1 ? vals[vals.length - 2] : null
-      return { ...sd, index: i, latest, trend: latest != null && prev != null ? latest - prev : null }
+      return {
+        ...sd,
+        index: i,
+        latest: hourlyLatest,
+        trend: hourlyLatest != null && prev != null ? hourlyLatest - prev : null,
+        hourlyLatest,
+      }
     })
+
+    // Real-vaqt qiymati bilan almashtirish — katta raqam soatlik o'rtacha emas, joriy o'qishni ko'rsatadi
+    const rt = data?.latest?.[cfg.key]
+    if (rt) {
+      if (cfg.key === 'heating') {
+        if (rt.value != null) series[0].latest = rt.value
+        if (rt.value_out != null) series[1].latest = rt.value_out
+      } else if (rt.value != null) {
+        // trend = joriy qiymat vs bir soat oldingi
+        series[0].trend = series[0].hourlyLatest != null ? rt.value - series[0].hourlyLatest : null
+        series[0].latest = rt.value
+      }
+    }
+
     // Qozonxona uchun ΔT = |kirish - chiqish|
     const deltaT =
       cfg.key === 'heating' && series[0].latest != null && series[1].latest != null
@@ -495,7 +523,7 @@ export default function DisplayPage() {
                   </div>
                   <div>
                     <div className="text-lg font-bold text-white">{cfg.label}</div>
-                    <div className="text-xs text-slate-400">{cfg.isFake ? 'Namunaviy · normal bosim' : 'Oxirgi 24 soat'}</div>
+                    {cfg.isFake && <div className="text-xs text-slate-400">Namunaviy · normal bosim</div>}
                   </div>
                 </div>
                 {/* O'ng tepadagi holat yozuvi (nuqta o'rnida) */}
