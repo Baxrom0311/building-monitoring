@@ -94,27 +94,34 @@ function unknownStatus(): SensorStatusInfo {
 interface SensorStatusBadgeProps {
   sensorKey: string
   value: number | null
-  size?: 'sm' | 'md'
+  size?: 'sm' | 'md' | 'lg'
 }
 
 export function SensorStatusBadge({ sensorKey, value, size = 'md' }: SensorStatusBadgeProps) {
   const status = getSensorStatus(sensorKey, value)
 
-  const sizeClasses = size === 'sm'
-    ? 'px-2 py-0.5 text-[10px] gap-1'
-    : 'px-2.5 py-0.5 text-xs gap-1.5'
+  const sizeClasses =
+    size === 'lg'
+      ? 'px-4 py-1.5 text-base gap-2'
+      : size === 'sm'
+      ? 'px-2 py-0.5 text-[10px] gap-1'
+      : 'px-2.5 py-0.5 text-xs gap-1.5'
+
+  const dotSize =
+    size === 'lg' ? 'h-3 w-3' : size === 'sm' ? 'h-1.5 w-1.5' : 'h-2 w-2'
 
   return (
     <span
-      className={`inline-flex items-center rounded-full border font-bold transition-all shadow-xs ${sizeClasses}`}
+      className={`inline-flex items-center rounded-full border font-bold transition-all ${sizeClasses}`}
       style={{
         color: status.color,
         backgroundColor: status.bgColor,
         borderColor: status.borderColor,
+        boxShadow: size === 'lg' ? `0 0 20px ${status.bgColor}` : 'none',
       }}
     >
       <span
-        className={`rounded-full ${status.level === 'yomon' ? 'animate-pulse' : ''} ${size === 'sm' ? 'h-1.5 w-1.5' : 'h-2 w-2'}`}
+        className={`rounded-full ${status.level === 'yomon' ? 'animate-pulse' : ''} ${dotSize}`}
         style={{ backgroundColor: status.color }}
       />
       {status.label}
