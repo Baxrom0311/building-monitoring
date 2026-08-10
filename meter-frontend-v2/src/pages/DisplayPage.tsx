@@ -494,22 +494,18 @@ export default function DisplayPage() {
                     <Icon className="h-7 w-7" style={{ color: cfg.key === 'soil' && soilStatus ? soilStatus.color : cfg.color }} />
                   </div>
                   <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg font-bold text-white">{cfg.label}</span>
-                      {hasData && cfg.key !== 'heating' && (
-                        <SensorStatusBadge sensorKey={cfg.key} value={s0.latest} size="lg" />
-                      )}
-                    </div>
+                    <div className="text-lg font-bold text-white">{cfg.label}</div>
                     <div className="text-xs text-slate-400">{cfg.isFake ? 'Namunaviy · normal bosim' : 'Oxirgi 24 soat'}</div>
                   </div>
                 </div>
-                <span
-                  className={`h-3 w-3 rounded-full ${hasData ? 'animate-pulse' : ''}`}
-                  style={{
-                    background: hasData ? (cfg.key === 'soil' && soilStatus ? soilStatus.color : cfg.color) : '#475569',
-                    boxShadow: hasData ? `0 0 14px ${cfg.key === 'soil' && soilStatus ? soilStatus.color : cfg.color}` : 'none',
-                  }}
-                />
+                {/* O'ng tepadagi holat yozuvi (nuqta o'rnida) */}
+                {hasData && (
+                  <SensorStatusBadge
+                    sensorKey={cfg.key}
+                    value={cfg.key === 'heating' ? cfg.deltaT : s0.latest}
+                    size="lg"
+                  />
+                )}
               </div>
 
               {/* Joriy qiymat(lar) + trend */}
@@ -561,10 +557,7 @@ export default function DisplayPage() {
                       const dColor = cfg.deltaT == null ? '#94a3b8' : ok ? '#34D399' : '#FBBF24'
                       return (
                         <div className="border-l border-white/10 pl-6">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold text-slate-300">ΔT · norma {HEATING_DELTA_NORMA}°C</span>
-                            <SensorStatusBadge sensorKey="heating" value={cfg.deltaT} size="lg" />
-                          </div>
+                          <div className="text-xs font-bold text-slate-300">ΔT · norma {HEATING_DELTA_NORMA}°C</div>
                           <div className="font-mono text-4xl font-black tabular-nums leading-none" style={{ color: dColor }}>
                             {cfg.deltaT != null ? <AnimatedNumber value={cfg.deltaT} decimals={1} /> : '—'}
                             <span className="ml-1 text-lg font-bold text-slate-400">{cfg.unit}</span>
