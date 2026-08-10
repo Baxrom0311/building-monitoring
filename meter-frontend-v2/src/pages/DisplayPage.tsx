@@ -3,6 +3,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -81,6 +82,27 @@ function buildMultiPoints(stats: HourlyUtilityStat[], keys: (keyof HourlyUtility
     points.push(p)
   }
   return points
+}
+
+// Elektr uchun: 220V normadan chetlanishga qarab rang (yashil→sariq→qizil).
+// dev=0 (aynan 220V) yashil, dev=1 (±25V va undan uzoq) qizil, o'rtada sariq.
+const ELEC_NOMINAL = 220
+const ELEC_MAX_DEV = 25
+const _lerp = (a: number, b: number, t: number) => Math.round(a + (b - a) * t)
+function voltageColor(v: number): string {
+  const dev = Math.min(Math.abs(v - ELEC_NOMINAL) / ELEC_MAX_DEV, 1)
+  const green = [34, 197, 94]
+  const yellow = [250, 204, 21]
+  const red = [239, 68, 68]
+  let c: number[]
+  if (dev < 0.5) {
+    const t = dev / 0.5
+    c = [_lerp(green[0], yellow[0], t), _lerp(green[1], yellow[1], t), _lerp(green[2], yellow[2], t)]
+  } else {
+    const t = (dev - 0.5) / 0.5
+    c = [_lerp(yellow[0], red[0], t), _lerp(yellow[1], red[1], t), _lerp(yellow[2], red[2], t)]
+  }
+  return `rgb(${c[0]},${c[1]},${c[2]})`
 }
 
 // Real ma'lumot bo'lmaganda namunaviy (fake) qatorlar yaratadi.
@@ -359,6 +381,15 @@ export default function DisplayPage() {
           const TrendIcon =
             single && s0.trend != null && s0.trend !== 0 ? (s0.trend > 0 ? TrendingUp : TrendingDown) : null
 
+          // Elektr: 220V normadan chetlanish bo'yicha ranglash; Y o'qi 220 atrofida markazlashadi
+          const isElec = cfg.key === 'electricity'
+          const elecVals = isElec
+            ? cfg.points.map((p) => p.v0).filter((n): n is number => typeof n === 'number')
+            : []
+          const elecSpan = elecVals.length ? Math.max(15, ...elecVals.map((v) => Math.abs(v - ELEC_NOMINAL))) : 20
+          const elecDomain: [number, number] = [ELEC_NOMINAL - (elecSpan + 5), ELEC_NOMINAL + (elecSpan + 5)]
+          const valueColor = isElec && s0.latest != null ? voltageColor(s0.latest) : cfg.color
+
           return (
             <div
               key={cfg.key}
@@ -399,7 +430,7 @@ export default function DisplayPage() {
               {single ? (
                 <>
                   <div className="relative z-10 flex shrink-0 items-end justify-between gap-3 px-6 pt-1">
-                    <div className="font-mono text-6xl font-black tabular-nums leading-none" style={{ color: cfg.color }}>
+                    <div className="font-mono text-6xl font-black tabular-nums leading-none" style={{ color: valueColor }}>
                       {s0.latest != null ? <AnimatedNumber value={s0.latest} decimals={2} /> : '—'}
                       <span className="ml-2 text-2xl font-bold text-slate-400">{cfg.unit}</span>
                     </div>
@@ -481,7 +512,8 @@ export default function DisplayPage() {
                         tickLine={false}
                         axisLine={false}
                         width={44}
-                        domain={['auto', 'auto']}
+                        domain={isElec ? elecDomain : ['auto', 'auto']}
+                        allowDecimals={!isElec}
                         tickFormatter={(v) => `${v}`}
                       />
                       <Tooltip
@@ -500,30 +532,38 @@ export default function DisplayPage() {
                       {cfg.nominal != null && (
                         <ReferenceLine
                           y={cfg.nominal}
-                          stroke={cfg.color}
+                          stroke={isElec ? '#22C55E' : cfg.color}
                           strokeDasharray="6 5"
-                          strokeWidth={1.5}
-                          strokeOpacity={0.7}
+                          strokeWidth={isElec ? 2 : 1.5}
+                          strokeOpacity={isElec ? 0.9 : 0.7}
                           label={{
                             value: `norma ${cfg.nominal}${cfg.unit}`,
                             position: 'insideTopRight',
-                            fill: cfg.color,
+                            fill: isElec ? '#22C55E' : cfg.color,
                             fontSize: 11,
                             fontWeight: 700,
-                            opacity: 0.85,
+                            opacity: 0.9,
                           }}
                         />
                       )}
-                      {cfg.series.map((s) => (
-                        <Bar
-                          key={s.index}
-                          dataKey={`v${s.index}`}
-                          name={s.label}
-                          fill={`url(#kiosk_${cfg.key}_${s.index})`}
-                          radius={[6, 6, 0, 0]}
-                          maxBarSize={single ? 28 : 16}
-                        />
-                      ))}
+                      {isElec ? (
+                        <Bar dataKey="v0" name={cfg.label} radius={[6, 6, 0, 0]} maxBarSize={28}>
+                          {cfg.points.map((p, idx) => (
+                            <Cell key={idx} fill={p.v0 != null ? voltageColor(p.v0) : '#334155'} />
+                          ))}
+                        </Bar>
+                      ) : (
+                        cfg.series.map((s) => (
+                          <Bar
+                            key={s.index}
+                            dataKey={`v${s.index}`}
+                            name={s.label}
+                            fill={`url(#kiosk_${cfg.key}_${s.index})`}
+                            radius={[6, 6, 0, 0]}
+                            maxBarSize={single ? 28 : 16}
+                          />
+                        ))
+                      )}
                     </BarChart>
                   </ResponsiveContainer>
                 )}
