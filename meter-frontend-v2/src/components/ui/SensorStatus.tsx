@@ -61,9 +61,10 @@ export function getSoundStatus(level: number | null): SensorStatusInfo {
 // ── Qozonxona ΔT harorat farqi (°C) ────────────────────────────────────────
 export function getHeatingStatus(deltaT: number | null): SensorStatusInfo {
   if (deltaT == null) return unknownStatus()
-  if (deltaT >= 15 && deltaT <= 25) return { level: 'alo', label: "A'lo", color: '#34D399', bgColor: 'rgba(52,211,153,0.15)', borderColor: 'rgba(52,211,153,0.4)' }
-  if ((deltaT >= 10 && deltaT < 15) || (deltaT > 25 && deltaT <= 35)) return { level: 'norma', label: 'Norma', color: '#22D3EE', bgColor: 'rgba(34,211,238,0.15)', borderColor: 'rgba(34,211,238,0.4)' }
-  if ((deltaT >= 5 && deltaT < 10) || (deltaT > 35 && deltaT <= 45)) return { level: 'orta', label: 'Ehtiyot', color: '#FBBF24', bgColor: 'rgba(251,191,36,0.15)', borderColor: 'rgba(251,191,36,0.4)' }
+  if (deltaT <= 2) return { level: 'norma', label: 'Norma', color: '#22D3EE', bgColor: 'rgba(34,211,238,0.15)', borderColor: 'rgba(34,211,238,0.4)' }
+  if (deltaT <= 25) return { level: 'alo', label: "A'lo", color: '#34D399', bgColor: 'rgba(52,211,153,0.15)', borderColor: 'rgba(52,211,153,0.4)' }
+  if (deltaT <= 35) return { level: 'norma', label: 'Norma', color: '#22D3EE', bgColor: 'rgba(34,211,238,0.15)', borderColor: 'rgba(34,211,238,0.4)' }
+  if (deltaT <= 45) return { level: 'orta', label: 'Ehtiyot', color: '#FBBF24', bgColor: 'rgba(251,191,36,0.15)', borderColor: 'rgba(251,191,36,0.4)' }
   return { level: 'yomon', label: 'Xavfli!', color: '#FB7185', bgColor: 'rgba(251,113,133,0.2)', borderColor: 'rgba(251,113,133,0.5)' }
 }
 
