@@ -324,6 +324,55 @@ void loop() {
     processChannel(ch_water);
 }
 
+#elif defined(SOIL_MQ135_TEST)
+// SOIL + MQ135 SENSOR TEST — WiFi/RS-485 YO'Q. GPIO34 (namlik) va GPIO35 (MQ135
+// havo sifati) ni har 2s da o'qib Serial'ga chiqaradi. Stol ustida sinash uchun.
+#include <Arduino.h>
+#include "core/log.h"
+
+#ifndef PIN_SOIL_ADC
+  #define PIN_SOIL_ADC 34
+#endif
+#ifndef SOIL_ADC_DRY
+  #define SOIL_ADC_DRY 3300
+#endif
+#ifndef SOIL_ADC_WET
+  #define SOIL_ADC_WET 1400
+#endif
+#ifndef PIN_MQ135
+  #define PIN_MQ135 35
+#endif
+
+void setup() {
+    Serial.begin(115200);
+    unsigned long _t = millis(); while (millis() - _t < 300) yield();
+    analogReadResolution(12);
+    analogSetAttenuation(ADC_11db);
+    pinMode(PIN_SOIL_ADC, INPUT);
+    pinMode(PIN_MQ135, INPUT);
+    LOG_PRINTLN();
+    LOG_PRINTLN("=== SOIL + MQ135 SENSOR TEST (WiFi YO'Q) ===");
+    LOG_PRINTF("Namlik: GPIO%d (quruq=%d nam=%d)  |  MQ135: GPIO%d\n",
+               PIN_SOIL_ADC, SOIL_ADC_DRY, SOIL_ADC_WET, PIN_MQ135);
+    LOG_PRINTLN();
+}
+
+void loop() {
+    long ssum = 0, asum = 0;
+    for (int i = 0; i < 16; i++) {
+        ssum += analogRead(PIN_SOIL_ADC);
+        asum += analogRead(PIN_MQ135);
+        delayMicroseconds(500);
+    }
+    int sraw = (int)(ssum / 16), araw = (int)(asum / 16);
+    float pct  = constrain((float)(SOIL_ADC_DRY - sraw) / (SOIL_ADC_DRY - SOIL_ADC_WET) * 100.0f, 0.0f, 100.0f);
+    float av   = araw * 3.3f / 4095.0f;
+    float apct = constrain(araw / 4095.0f * 100.0f, 0.0f, 100.0f);
+    LOG_PRINTF("Namlik: raw=%4d -> %5.1f%%   |   MQ135: raw=%4d  %.2fV  havo=%3.0f%% (yuqori=yomonroq)\n",
+               sraw, pct, araw, av, apct);
+    unsigned long t = millis(); while (millis() - t < 2000) yield();
+}
+
 #elif defined(RS485_SELFTEST)
 // RS-485 SELF-TEST — bitta ESP32 bilan rs485_bus.h freym protokolini sinash.
 // Har 1.5s da raqamli test freymi yuboradi, keyin o'sha freymni qabul
