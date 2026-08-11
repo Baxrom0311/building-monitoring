@@ -224,12 +224,12 @@ function LiveClock() {
     return () => clearInterval(id)
   }, [])
   return (
-    <div className="text-right">
-      <div className="font-mono text-3xl font-bold tabular-nums text-white">
+    <div className="flex flex-col items-end rounded-xl border border-white/10 bg-white/5 px-2.5 py-1 backdrop-blur-md sm:rounded-2xl sm:px-3.5 sm:py-1.5">
+      <div className="font-mono text-base font-black tabular-nums tracking-wider text-blue-40 sm:text-xl md:text-2xl lg:text-3xl text-white">
         {time.toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
       </div>
-      <div className="mt-0.5 text-xs text-slate-400">
-        {time.toLocaleDateString('uz-UZ', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })}
+      <div className="text-[10px] font-medium text-slate-400 sm:text-xs">
+        {time.toLocaleDateString('uz-UZ', { year: 'numeric', month: 'short', day: 'numeric', weekday: 'short' })}
       </div>
     </div>
   )
@@ -377,14 +377,14 @@ export default function DisplayPage() {
         />
       </div>
 
-      {/* Sarlavha */}
-      <header className="relative z-20 flex shrink-0 items-center justify-between gap-4 border-b border-white/5 bg-slate-950/60 px-4 py-3 backdrop-blur-xl sm:px-8 sm:py-4">
-        <div className="flex items-center gap-3 sm:gap-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg shadow-blue-500/40 ring-1 ring-white/10 sm:h-12 sm:w-12 sm:rounded-2xl">
+      {/* Sarlavha — Mobile/Tablet va Desktop uchun moslashuvchan header */}
+      <header className="relative z-20 flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-white/5 bg-slate-950/70 px-4 py-3 backdrop-blur-xl sm:px-6 sm:py-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg shadow-blue-500/40 ring-1 ring-white/10 sm:h-12 sm:w-12 sm:rounded-2xl">
             <Building2 className="h-5 w-5 text-white sm:h-6 sm:w-6" />
           </div>
           <div>
-            <div className="text-lg font-extrabold tracking-tight text-white sm:text-2xl">
+            <div className="text-base font-extrabold tracking-tight text-white sm:text-xl lg:text-2xl">
               {data?.building?.name ?? 'SmartBino'}
             </div>
             <div className="text-[11px] text-slate-400 sm:text-xs">
@@ -395,16 +395,16 @@ export default function DisplayPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3 sm:gap-5">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 lg:gap-4">
           {/* Bino tanlagich — displey bino kesimida ko'rsatiladi */}
           {data?.buildings && data.buildings.length > 0 && (
             <select
               value={BUILDING_ID ?? ''}
               onChange={(e) => {
                 const v = e.target.value
-                window.location.search = v ? `?building_id=${v}` : ''
+                window.location.search = v ? `?building_id=${encodeURIComponent(v)}` : ''
               }}
-              className="max-w-[140px] rounded-xl border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-slate-200 outline-none backdrop-blur transition-colors hover:border-white/20 focus:border-blue-500 sm:max-w-[220px] sm:px-3 sm:py-2 sm:text-sm"
+              className="max-w-[130px] rounded-xl border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-slate-200 outline-none backdrop-blur transition-colors hover:border-white/20 focus:border-blue-500 sm:max-w-[200px] sm:px-3 sm:py-2 sm:text-sm"
             >
               <option value="" className="bg-slate-900">
                 Barcha binolar
@@ -416,10 +416,12 @@ export default function DisplayPage() {
               ))}
             </select>
           )}
+
+          {/* Status badge + harakat tugmalari */}
           <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-2.5 py-1.5 text-slate-400 backdrop-blur sm:gap-3 sm:px-3 sm:py-2">
             <LiveDot ok={online} />
             {lastUpdate && (
-              <span className="hidden text-xs sm:block">
+              <span className="hidden text-xs md:inline-block">
                 {lastUpdate.toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
               </span>
             )}
@@ -434,7 +436,7 @@ export default function DisplayPage() {
                 }`}
               >
                 <RotateCw className={`h-3.5 w-3.5 ${autoRotate ? 'animate-spin' : ''}`} />
-                <span className="hidden md:inline">{autoRotate ? 'Auto: ON' : 'Auto: OFF'}</span>
+                <span className="hidden sm:inline">{autoRotate ? 'Auto' : 'Auto'}</span>
               </button>
             )}
             <button
@@ -452,6 +454,8 @@ export default function DisplayPage() {
               {isFullscreen ? <Minimize2 className="h-4 w-4 text-amber-400" /> : <Maximize2 className="h-4 w-4 text-blue-400" />}
             </button>
           </div>
+
+          {/* Jonli Soat & Sana — doimo va har qanday ekranda ko'rinib turadigan chiroyli vidjet */}
           <LiveClock />
         </div>
       </header>
