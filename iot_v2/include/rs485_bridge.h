@@ -25,7 +25,9 @@
 #ifndef RS485_BRIDGE_POLL_MS
   #define RS485_BRIDGE_POLL_MS     20000UL  // Bino ichini har necha ms da so'raydi
 #endif
-#define RS485_BRIDGE_DISCOVER_MS   1200UL   // DISCOVER'dan keyin javoblarni yig'ish oynasi
+#define RS485_BRIDGE_DISCOVER_MS    600UL   // DISCOVER'dan keyin javoblarni yig'ish oynasi (raund)
+#define RS485_BRIDGE_DISCOVER_ROUNDS  4     // DISCOVER'ni necha marta takrorlash — ikki leaf jitter bilan
+                                            // to'qnashsa, boshqa raundda to'qnashmay ro'yxatga tushadi
 #define RS485_BRIDGE_REPLY_MS       350UL   // Adresli POLL'dan keyin bitta leaf javobini kutish
 #define RS485_BRIDGE_RETRY          1       // Adresli POLL javob kelmasa qayta so'rash soni
 #define RS485_BRIDGE_MAX_LEAVES     16      // Ro'yxatdagi maksimal leaf soni
@@ -177,18 +179,23 @@ static bool rs485_bridge_consume(const uint8_t* buf, uint16_t n, char* id_out, s
 
 // DISCOVER broadcast — yangi leaf'larni topadi (va javoblarini forward qiladi).
 static void rs485_bridge_discover() {
-    uint8_t cmd = RS485_CMD_DISCOVER;
-    rs485_send_frame(&cmd, 1);
-    LOG_PRINTLN("RS485 bridge: DISCOVER yuborildi...");
+    // DISCOVER'ni bir necha marta takrorlaymiz. Bir raundда ikki leaf javobi
+    // to'qnashsa (jitter ustma-ust), keyingi raundда tasodifiy jitter ularni
+    // ajratadi va ikkalasi ham ro'yxatga tushadi. roster_add idempotent.
+    for (int round = 0; round < RS485_BRIDGE_DISCOVER_ROUNDS; round++) {
+        uint8_t cmd = RS485_CMD_DISCOVER;
+        rs485_send_frame(&cmd, 1);
+        LOG_PRINTF("RS485 bridge: DISCOVER #%d yuborildi...\n", round + 1);
 
-    unsigned long win = millis();
-    while (millis() - win < RS485_BRIDGE_DISCOVER_MS) {
-        wdt_feed();
-        uint8_t buf[RS485_MAX_FRAME + 1];
-        uint16_t n = rs485_recv_frame(buf, RS485_MAX_FRAME, 300);
-        if (n == 0) continue;
-        char id[RS485_LEAF_ID_LEN + 1];
-        if (rs485_bridge_consume(buf, n, id, sizeof(id))) rs485_roster_add(id);
+        unsigned long win = millis();
+        while (millis() - win < RS485_BRIDGE_DISCOVER_MS) {
+            wdt_feed();
+            uint8_t buf[RS485_MAX_FRAME + 1];
+            uint16_t n = rs485_recv_frame(buf, RS485_MAX_FRAME, 300);
+            if (n == 0) continue;
+            char id[RS485_LEAF_ID_LEN + 1];
+            if (rs485_bridge_consume(buf, n, id, sizeof(id))) rs485_roster_add(id);
+        }
     }
 }
 
