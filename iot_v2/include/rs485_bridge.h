@@ -27,7 +27,9 @@
 #endif
 #define RS485_BRIDGE_DISCOVER_MS    350UL   // DISCOVER'dan keyin javoblarni yig'ish oynasi (raund)
 #define RS485_BRIDGE_DISCOVER_ROUNDS  2     // DISCOVER takrorlash soni (tezkor kashfiyot)
-#define RS485_BRIDGE_REPLY_MS       250UL   // Adresli POLL'dan keyin bitta leaf javobini kutish
+#ifndef RS485_BRIDGE_INTER_LEAF_GAP_MS
+  #define RS485_BRIDGE_INTER_LEAF_GAP_MS  50UL    // Shina tanaffusi (MAX485 DE uzilishi va kabel sig'imi uchun 100% xavfsiz 50ms)
+#endif
 #define RS485_BRIDGE_RETRY          1       // Adresli POLL javob kelmasa qayta so'rash soni
 #define RS485_BRIDGE_MAX_LEAVES     16      // Ro'yxatdagi maksimal leaf soni
 #define RS485_BRIDGE_MISS_WARN      30      // Shuncha ketma-ket miss'dan keyin "javob bermayapti" deb log qilinadi
@@ -255,8 +257,8 @@ static void rs485_bridge_poll_cycle() {
                 i++;
             }
         }
-        // Server'ni bir zumda portlatmaslik uchun leaf'lar orasida kichik tanaffus (20ms)
-        unsigned long t = millis(); while (millis() - t < 20) { wdt_feed(); yield(); }
+        // Shina va MAX485 drayver yo'nalish uzgichi (DE/RE) tinchlanishi uchun 50ms tanaffus
+        unsigned long t = millis(); while (millis() - t < RS485_BRIDGE_INTER_LEAF_GAP_MS) { wdt_feed(); yield(); }
     }
     LOG_PRINTF("RS485 bridge: sikl #%lu tugadi — %d/%d leaf javob berdi\n",
                (unsigned long)rs485_cycle_no, ok, rs485_roster_n);
