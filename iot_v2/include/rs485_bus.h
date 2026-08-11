@@ -75,7 +75,21 @@ static uint16_t rs485_recv_frame(uint8_t* buf, uint16_t maxLen, uint32_t timeout
     }
     uint16_t len = (uint16_t)Serial1.read();
     len |= ((uint16_t)Serial1.read()) << 8;
-    if (len == 0 || len > maxLen) return 0;
+    if (len == 0 || len > maxLen) {
+        // Freym bu qurilma buferidan KATTA (masalan boshqa leaf'ning uzun JSON
+        // javobi — leaf faqat qisqa komandalarni kutadi, buf[24]). Payload'ni
+        // SHINADAN O'QIB TASHLAYMIZ (skip). Aks holda u baytlar buferda qolib,
+        // keyingi freymlar hizalanmay ketadi va DISCOVER/POLL o'tkazib yuboriladi
+        // (aynan shu sabab suv leaf ro'yxatga tusholmasdi).
+        uint16_t skip = 0;
+        uint32_t ts = millis();
+        while (skip < len) {
+            if (Serial1.available()) { Serial1.read(); skip++; ts = millis(); }
+            else if (millis() - ts >= timeout_ms) break;   // to'liq kelmadi — to'xtaymiz
+            else yield();
+        }
+        return 0;
+    }
 
     uint16_t got = 0;
     uint32_t t1 = millis();

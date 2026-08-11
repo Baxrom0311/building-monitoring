@@ -425,6 +425,43 @@ void loop() {
     unsigned long t = millis(); while (millis() - t < 1500) yield();
 }
 
+#elif defined(RS485_RXMON)
+// RS-485 XOM RX MONITOR — shinadan (GPIO32) kelgan XOM baytlarni ko'rsatadi.
+// Framing/protokolni chetlab, "signal umuman kelayaptimi" ni tekshiradi.
+// Bridge poll qilib turganda, shu leaf'da bridge poll baytlari ko'rinishi kerak.
+#include <Arduino.h>
+#include "core/log.h"
+#include "rs485_bus.h"
+
+void setup() {
+    Serial.begin(115200);
+    unsigned long _t = millis(); while (millis() - _t < 300) yield();
+    rs485_init();   // Serial1 @19200 on RX=32/TX=33, DE(GPIO25)=LOW → qabul
+    LOG_PRINTLN();
+    LOG_PRINTLN("=== RS-485 XOM RX MONITOR (GPIO32) ===");
+    LOG_PRINTF("RX=%d TX=%d DE=%d @%lu baud. Shinadan xom baytlar:\n",
+               RS485_BUS_RX, RS485_BUS_TX, RS485_BUS_DE, (unsigned long)RS485_BAUD);
+    LOG_PRINTLN("(bridge poll qilsa — bayt oqimi ko'rinishi SHART)\n");
+}
+
+void loop() {
+    static uint32_t total = 0, pkt = 0, last_rx = 0, last_hb = 0;
+    while (Serial1.available()) {
+        uint8_t b = Serial1.read();
+        Serial.printf("%02X ", b);
+        total++; pkt++; last_rx = millis();
+    }
+    if (pkt > 0 && millis() - last_rx > 400) {
+        Serial.printf("  <- %lu bayt (jami %lu)\n", (unsigned long)pkt, (unsigned long)total);
+        pkt = 0;
+    }
+    if (millis() - last_hb > 4000) {
+        last_hb = millis();
+        if (total == 0) Serial.println("[...shinadan HECH NARSA kelmadi (A/B yoki qabul yo'q)...]");
+    }
+    yield();
+}
+
 #elif defined(RS485_MASTER_TEST)
 // RS-485 MASTER TEST — bridge o'rnida, LEKIN meter/WiFi/server YO'Q. Faqat
 // shinaga DISCOVER + adresli POLL yuborib, leaf javoblarini Serial'ga chiqaradi.
