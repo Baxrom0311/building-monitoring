@@ -511,6 +511,65 @@ void loop() {
     unsigned long t = millis(); while (millis() - t < 3000) yield();
 }
 
+#elif defined(RS485_DISPLAY)
+// RS-485 SUV DISPLEY — shinani PASSIV tinglaydi (poll qilmaydi, UZATMAYDI),
+// suv leaf javoblaridan bosimni olib LCD'ga chiqaradi. WiFi/sensor YO'Q.
+// Ulanish: RO->32, DI->33, DE(+RE)->25 (DE doim LOW = qabul), LCD I2C SDA=21 SCL=22.
+#include <Arduino.h>
+#include <ArduinoJson.h>
+#include "core/log.h"
+#include "rs485_bus.h"
+#include "display/lcd.h"
+
+static unsigned long g_last_water_ms = 0;
+
+void setup() {
+    Serial.begin(115200);
+    unsigned long _t = millis(); while (millis() - _t < 300) yield();
+    rs485_init();                 // DE LOW = doim qabul (passiv tinglash, hech qачон uzatmaydi)
+    lcd_init();
+    lcd_row(0, "Suv displey");
+    lcd_row(1, "Kutilmoqda...");
+    LOG_PRINTLN();
+    LOG_PRINTLN("=== RS-485 SUV DISPLEY ===");
+    LOG_PRINTF("Bus: RX=%d TX=%d DE=%d @%lu | LCD SDA=%d SCL=%d\n",
+               RS485_BUS_RX, RS485_BUS_TX, RS485_BUS_DE, (unsigned long)RS485_BAUD,
+               (int)LCD_SDA, (int)LCD_SCL);
+    LOG_PRINTLN("Shina tinglanmoqda — suv leaf javobini kutamiz...\n");
+}
+
+void loop() {
+    uint8_t buf[RS485_MAX_FRAME + 1];
+    uint16_t n = rs485_recv_frame(buf, RS485_MAX_FRAME, 500);
+    if (n > 0) {
+        buf[n] = '\0';
+        // Faqat JSON (leaf javobi) — komanda baytlarini (F1/F2) e'tiborsiz qoldiramiz
+        StaticJsonDocument<512> doc;
+        if (deserializeJson(doc, (const char*)buf) == DeserializationError::Ok) {
+            const char* ut = doc["utility_type"] | "";
+            if (!strcmp(ut, "water")) {
+                float p   = doc["pressure_bottom_bar"] | 0.0f;
+                float fl  = doc["flow_rate"] | 0.0f;
+                float vol = doc["volume_m3"] | 0.0f;
+                char r0[LCD_COLS + 1];
+                snprintf(r0, sizeof(r0), "Suv: %.2f bar", p);
+                lcd_row(0, r0);
+                char r1[LCD_COLS + 1];
+                if (fl > 0.05f) snprintf(r1, sizeof(r1), "Oqim: %.1f L/m", fl);
+                else            snprintf(r1, sizeof(r1), "Hajm: %.2f m3", vol);
+                lcd_row(1, r1);
+                g_last_water_ms = millis();
+                LOG_PRINTF("SUV: %.2f bar  oqim=%.1f  hajm=%.2f\n", p, fl, vol);
+            }
+        }
+    }
+    // Uzoq vaqt (60s) suv kelmasa — ogohlantirish
+    if (g_last_water_ms != 0 && millis() - g_last_water_ms > 60000UL) {
+        lcd_row(1, "Malumot yo'q...");
+    }
+    lcd_refresh_if_needed();
+}
+
 #elif defined(RS485_LEAF)
 // RS-485 LEAF MODE — bino ichidagi "ahmoq" sensor kontrolleri, WiFi yo'q.
 // Ma'lumotni RS-485 shinasiga JSON sifatida chiqaradi, bridge (RS485_BRIDGE,
