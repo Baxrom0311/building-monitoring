@@ -214,20 +214,16 @@ static bool sensor_read(SensorData& d) {
     bool ok3 = dlms_get_scaled(OBIS_POWER,  &d.power_w);
     wdt_feed();
 
-    // Agar dastlabki asosiy ko'rsatkichlar o'qilmagan bo'lsa (hissoblagich javob bermasa),
-    // qolgan so'rovlarni o'tkazib yuborib tezda qaytamiz — watchdog reset va 36s qotish oldi olinadi.
+    // Agar dastlabki asosiy ko'rsatkichlar o'qilmagan bo'lsa (hisoblagich javob bermasa),
+    // qolgan so'rovlarni o'tkazib yuborib tezda qaytamiz — watchdog reset va qotish oldi olinadi.
     if (!ok1 && !ok2 && !ok3) {
         dlms_connected = false;
         return false;
     }
 
-    dlms_get_scaled(OBIS_FREQ,   &d.frequency);
-    wdt_feed();
     dlms_get_scaled(OBIS_ENERGY, &d.energy_kwh);
     wdt_feed();
     if (!isnan(d.energy_kwh)) d.energy_kwh /= 1000.0f;  // hisoblagich Wh qaytaradi (DLMS unit=30)
-    dlms_get_scaled(OBIS_PF,     &d.pf);
-    wdt_feed();
 
     if (strcmp(d.sensor_type, "te73") == 0) {
         dlms_get_scaled(OBIS_VL2, &d.voltage_l2);
@@ -247,8 +243,6 @@ static bool sensor_read(SensorData& d) {
     if (!isnan(d.current_l1) && (d.current_l1 < 0.0f || d.current_l1 > 200.0f))  d.current_l1 = NAN;
     if (!isnan(d.current_l2) && (d.current_l2 < 0.0f || d.current_l2 > 200.0f))  d.current_l2 = NAN;
     if (!isnan(d.current_l3) && (d.current_l3 < 0.0f || d.current_l3 > 200.0f))  d.current_l3 = NAN;
-    if (!isnan(d.frequency)  && (d.frequency < 40.0f || d.frequency > 65.0f))     d.frequency = NAN;
-    if (!isnan(d.pf)         && (d.pf < -1.0f || d.pf > 1.0f))                   d.pf = NAN;
 
     d.valid = (!isnan(d.voltage_l1) || !isnan(d.power_w));
     if (d.valid) lcd_show_electricity(d);
@@ -273,9 +267,7 @@ static String sensor_build_json(const char* device_id,
     if (!isnan(d.current_l2)) doc["current_l2"] = serialized(String(d.current_l2, 3));
     if (!isnan(d.current_l3)) doc["current_l3"] = serialized(String(d.current_l3, 3));
     if (!isnan(d.power_w))    doc["power_w"]    = (int)d.power_w;
-    if (!isnan(d.frequency) && d.frequency > 0) doc["frequency"] = serialized(String(d.frequency, 2));
     if (!isnan(d.energy_kwh)) doc["energy_kwh"] = serialized(String(d.energy_kwh, 3));
-    if (!isnan(d.pf) && d.pf > 0) doc["pf"]    = serialized(String(d.pf, 3));
 
     String out;
     serializeJson(doc, out);
