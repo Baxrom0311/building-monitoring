@@ -181,8 +181,13 @@ static void rs485_bridge_discover() {
             uint8_t buf[RS485_MAX_FRAME + 1];
             uint16_t n = rs485_recv_frame(buf, RS485_MAX_FRAME, 300);
             if (n == 0) continue;
+            // DISCOVER'da FAQAT ro'yxatga qo'shamiz — forward QILMAYMIZ.
+            // (Ilgari har raund forward qilardi: 4 raund × HTTPS POST ~5s = 20s+
+            //  → 30s task-watchdog ishga tushib bridge reboot bo'lardi.)
+            // Ma'lumot baribir adresli poll siklида forward qilinadi.
+            buf[n] = '\0';
             char id[RS485_LEAF_ID_LEN + 1];
-            if (rs485_bridge_consume(buf, n, id, sizeof(id))) rs485_roster_add(id);
+            if (rs485_extract_id((const char*)buf, id, sizeof(id))) rs485_roster_add(id);
         }
     }
 }
