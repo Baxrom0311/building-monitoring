@@ -361,7 +361,7 @@ export default function DisplayPage() {
   })
 
   return (
-    <div className="relative flex h-screen w-screen select-none flex-col overflow-hidden bg-slate-950 text-white">
+    <div className="relative flex min-h-screen w-screen select-none flex-col overflow-y-auto bg-slate-950 text-white lg:h-screen lg:overflow-hidden">
       {/* Ambient fon — yumshoq rangli nurlar */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute -left-40 -top-40 h-96 w-96 rounded-full bg-blue-600/10 blur-3xl" />
@@ -378,16 +378,16 @@ export default function DisplayPage() {
       </div>
 
       {/* Sarlavha */}
-      <header className="relative z-20 flex shrink-0 items-center justify-between gap-4 border-b border-white/5 bg-slate-950/60 px-8 py-4 backdrop-blur-xl">
-        <div className="flex items-center gap-4">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg shadow-blue-500/40 ring-1 ring-white/10">
-            <Building2 className="h-6 w-6 text-white" />
+      <header className="relative z-20 flex shrink-0 items-center justify-between gap-4 border-b border-white/5 bg-slate-950/60 px-4 py-3 backdrop-blur-xl sm:px-8 sm:py-4">
+        <div className="flex items-center gap-3 sm:gap-4">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg shadow-blue-500/40 ring-1 ring-white/10 sm:h-12 sm:w-12 sm:rounded-2xl">
+            <Building2 className="h-5 w-5 text-white sm:h-6 sm:w-6" />
           </div>
           <div>
-            <div className="text-2xl font-extrabold tracking-tight text-white">
+            <div className="text-lg font-extrabold tracking-tight text-white sm:text-2xl">
               {data?.building?.name ?? 'SmartBino'}
             </div>
-            <div className="text-xs text-slate-400">
+            <div className="text-[11px] text-slate-400 sm:text-xs">
               {data?.building
                 ? (data.building.address ?? 'Bino monitoringi')
                 : 'Kommunal monitoring tizimi — barcha binolar'}
@@ -395,7 +395,7 @@ export default function DisplayPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-5">
+        <div className="flex items-center gap-3 sm:gap-5">
           {/* Bino tanlagich — displey bino kesimida ko'rsatiladi */}
           {data?.buildings && data.buildings.length > 0 && (
             <select
@@ -404,7 +404,7 @@ export default function DisplayPage() {
                 const v = e.target.value
                 window.location.search = v ? `?building_id=${v}` : ''
               }}
-              className="max-w-[220px] rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-200 outline-none backdrop-blur transition-colors hover:border-white/20 focus:border-blue-500"
+              className="max-w-[140px] rounded-xl border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-slate-200 outline-none backdrop-blur transition-colors hover:border-white/20 focus:border-blue-500 sm:max-w-[220px] sm:px-3 sm:py-2 sm:text-sm"
             >
               <option value="" className="bg-slate-900">
                 Barcha binolar
@@ -416,7 +416,7 @@ export default function DisplayPage() {
               ))}
             </select>
           )}
-          <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-slate-400 backdrop-blur">
+          <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-2.5 py-1.5 text-slate-400 backdrop-blur sm:gap-3 sm:px-3 sm:py-2">
             <LiveDot ok={online} />
             {lastUpdate && (
               <span className="hidden text-xs sm:block">
@@ -456,8 +456,8 @@ export default function DisplayPage() {
         </div>
       </header>
 
-      {/* Grafiklar — to'liq ekranni to'ldiradigan 3×2 grid (bo'sh joy qolmaydi) */}
-      <div className="relative z-10 grid min-h-0 flex-1 grid-cols-1 gap-4 p-4 sm:grid-cols-2 xl:grid-cols-3">
+      {/* Grafiklar — Desktopda 3×2 grid, planshetda 2-kolonka scroll bilan, mobilda 1-kolonka */}
+      <div className="relative z-10 grid min-h-0 flex-1 grid-cols-1 gap-3 p-3 sm:grid-cols-2 sm:gap-4 sm:p-4 lg:grid-cols-3">
         {charts.map((cfg) => {
           const Icon = cfg.icon
           const hasData = cfg.series.some((s) => s.latest != null)
@@ -493,7 +493,7 @@ export default function DisplayPage() {
           return (
             <div
               key={cfg.key}
-              className="group relative flex min-h-0 flex-col overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03] shadow-2xl shadow-black/40 backdrop-blur-xl transition-all duration-300 hover:border-white/20 hover:bg-white/[0.05]"
+              className="group relative flex min-h-[340px] flex-col overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03] shadow-2xl shadow-black/40 backdrop-blur-xl transition-all duration-300 hover:border-white/20 hover:bg-white/[0.05] lg:min-h-0"
             >
               {/* Tepa aksent chizig'i */}
               <div
@@ -509,21 +509,21 @@ export default function DisplayPage() {
               />
 
               {/* Sarlavha */}
-              <div className="relative z-10 flex shrink-0 items-center justify-between gap-3 px-6 pb-1 pt-5">
+              <div className="relative z-10 flex shrink-0 items-center justify-between gap-3 px-4 pb-1 pt-4 sm:px-6 sm:pt-5">
                 <div className="flex items-center gap-3">
                   <div
-                    className="flex h-14 w-14 items-center justify-center rounded-2xl border transition-all"
+                    className="flex h-11 w-11 items-center justify-center rounded-2xl border transition-all sm:h-14 sm:w-14"
                     style={{
                       background: cfg.key === 'soil' && soilStatus ? soilStatus.bgColor : cfg.glow,
                       borderColor: cfg.key === 'soil' && soilStatus ? soilStatus.borderColor : `${cfg.color}55`,
                       boxShadow: `0 8px 24px -8px ${cfg.key === 'soil' && soilStatus ? soilStatus.color : cfg.color}`,
                     }}
                   >
-                    <Icon className="h-7 w-7" style={{ color: cfg.key === 'soil' && soilStatus ? soilStatus.color : cfg.color }} />
+                    <Icon className="h-6 w-6 sm:h-7 sm:w-7" style={{ color: cfg.key === 'soil' && soilStatus ? soilStatus.color : cfg.color }} />
                   </div>
                   <div>
-                    <div className="text-lg font-bold text-white">{cfg.label}</div>
-                    {cfg.isFake && <div className="text-xs text-slate-400">Namunaviy · normal bosim</div>}
+                    <div className="text-base font-bold text-white sm:text-lg">{cfg.label}</div>
+                    {cfg.isFake && <div className="text-[11px] text-slate-400 sm:text-xs">Namunaviy · normal bosim</div>}
                   </div>
                 </div>
                 {/* O'ng tepadagi holat yozuvi (nuqta o'rnida) */}
@@ -539,43 +539,43 @@ export default function DisplayPage() {
               {/* Joriy qiymat(lar) + trend */}
               {single ? (
                 <>
-                  <div className="relative z-10 flex shrink-0 items-end justify-between gap-3 px-6 pt-1">
-                    <div className="font-mono text-6xl font-black tabular-nums leading-none" style={{ color: valueColor }}>
+                  <div className="relative z-10 flex shrink-0 items-end justify-between gap-3 px-4 pt-1 sm:px-6">
+                    <div className="font-mono text-4xl font-black tabular-nums leading-none sm:text-5xl lg:text-6xl" style={{ color: valueColor }}>
                       {s0.latest != null ? <AnimatedNumber value={s0.latest} decimals={1} /> : '—'}
-                      <span className="ml-2 text-2xl font-bold text-slate-400">{cfg.unit}</span>
+                      <span className="ml-1.5 text-xl font-bold text-slate-400 sm:ml-2 sm:text-2xl">{cfg.unit}</span>
                     </div>
                     {TrendIcon && s0.trend != null && (
                       <div
-                        className="mb-1 flex items-center gap-1 rounded-full px-2.5 py-1 text-sm font-bold"
+                        className="mb-1 flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold sm:px-2.5 sm:py-1 sm:text-sm"
                         style={{ background: `${cfg.color}1a`, color: cfg.color }}
                       >
-                        <TrendIcon className="h-4 w-4" />
+                        <TrendIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                         {Math.abs(s0.trend).toFixed(1)}
                       </div>
                     )}
                   </div>
 
                   {cfg.key === 'soil' ? (
-                    <div className="relative z-10 px-6 pt-2">
+                    <div className="relative z-10 px-4 pt-2 sm:px-6">
                       <SoilStatusBadge value={s0.latest} showScale={true} />
                     </div>
                   ) : cfg.nominal != null ? (
-                    <div className="relative z-10 px-6 pt-1 text-xs text-slate-500">
+                    <div className="relative z-10 px-4 pt-1 text-[11px] text-slate-500 sm:px-6 sm:text-xs">
                       nominal: {cfg.nominal} {cfg.unit}
                     </div>
                   ) : null}
                 </>
               ) : (
-                <div className="relative z-10 flex shrink-0 flex-wrap items-end gap-x-7 gap-y-1 px-6 pt-1">
+                <div className="relative z-10 flex shrink-0 flex-wrap items-end gap-x-5 gap-y-1 px-4 pt-1 sm:gap-x-7 sm:px-6">
                   {cfg.series.map((s) => (
                     <div key={s.index}>
                       <div className="flex items-center gap-1.5 text-xs font-bold" style={{ color: s.color }}>
                         <span className="h-2 w-2 rounded-full" style={{ background: s.color }} />
                         {s.label}
                       </div>
-                      <div className="font-mono text-4xl font-black tabular-nums leading-none" style={{ color: s.color }}>
+                      <div className="font-mono text-3xl font-black tabular-nums leading-none sm:text-4xl" style={{ color: s.color }}>
                         {s.latest != null ? <AnimatedNumber value={s.latest} decimals={1} /> : '—'}
-                        <span className="ml-1 text-lg font-bold text-slate-400">{cfg.unit}</span>
+                        <span className="ml-1 text-base font-bold text-slate-400 sm:text-lg">{cfg.unit}</span>
                       </div>
                     </div>
                   ))}
@@ -584,11 +584,11 @@ export default function DisplayPage() {
                       const ok = cfg.deltaT != null && Math.abs(cfg.deltaT - HEATING_DELTA_NORMA) <= HEATING_DELTA_MARGIN
                       const dColor = cfg.deltaT == null ? '#94a3b8' : ok ? '#34D399' : '#FBBF24'
                       return (
-                        <div className="border-l border-white/10 pl-6">
-                          <div className="text-xs font-bold text-slate-300">ΔT · norma {HEATING_DELTA_NORMA}°C</div>
-                          <div className="font-mono text-4xl font-black tabular-nums leading-none" style={{ color: dColor }}>
+                        <div className="border-l border-white/10 pl-4 sm:pl-6">
+                          <div className="text-[11px] font-bold text-slate-300 sm:text-xs">ΔT · norma {HEATING_DELTA_NORMA}°C</div>
+                          <div className="font-mono text-3xl font-black tabular-nums leading-none sm:text-4xl" style={{ color: dColor }}>
                             {cfg.deltaT != null ? <AnimatedNumber value={cfg.deltaT} decimals={1} /> : '—'}
-                            <span className="ml-1 text-lg font-bold text-slate-400">{cfg.unit}</span>
+                            <span className="ml-1 text-base font-bold text-slate-400 sm:text-lg">{cfg.unit}</span>
                           </div>
                         </div>
                       )
@@ -596,8 +596,8 @@ export default function DisplayPage() {
                 </div>
               )}
 
-              {/* Grafik — qolgan bo'sh joyni to'liq to'ldiradi */}
-              <div className="relative z-10 mt-2 min-h-0 flex-1 px-1 pb-1">
+              {/* Grafik — planshet/mobilda min 180px balandlik, desktopda to'liq flex-1 */}
+              <div className="relative z-10 mt-2 min-h-[170px] flex-1 px-1 pb-1 sm:min-h-[190px] lg:min-h-0">
                 {!hasData ? (
                   <div className="flex h-full items-center justify-center">
                     <span className="text-sm text-slate-500">O'lchov ma'lumoti kutilmoqda...</span>
