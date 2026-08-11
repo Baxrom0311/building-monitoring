@@ -157,6 +157,30 @@ export default function DeviceDetailPage() {
 
   const [loadingAction, setLoadingAction] = useState<string | null>(null)
   const [pendingCommand, setPendingCommand] = useState<PendingCommand | null>(null)
+  const [journalTab, setJournalTab] = useState<string>('all')
+
+  // O'lchovlar jurnalida mavjud bo'lgan barcha utility_type larni aniqlash
+  const availableUtilities = useMemo(() => {
+    if (!historyData?.readings) return []
+    const set = new Set<string>()
+    historyData.readings.forEach((r) => {
+      if (r.utility_type) set.add(r.utility_type)
+    })
+    return Array.from(set)
+  }, [historyData?.readings])
+
+  const filteredReadings = useMemo(() => {
+    if (!historyData?.readings) return []
+    if (journalTab === 'all') return historyData.readings
+    return historyData.readings.filter((r) => r.utility_type === journalTab)
+  }, [historyData?.readings, journalTab])
+
+  const activeJournalUtility =
+    journalTab !== 'all'
+      ? journalTab
+      : availableUtilities.length === 1
+        ? availableUtilities[0]
+        : device?.utility_type ?? 'all'
 
   // ── Tahrirlash formasi ────────────────────────────────────────────────────
   const [isEditOpen, setIsEditOpen] = useState(false)
@@ -702,91 +726,171 @@ export default function DeviceDetailPage() {
           {/* ── O'lchovlar jurnali ── */}
           {historyData?.readings && historyData.readings.length > 0 && (
             <Card className="overflow-hidden py-0">
-              <div className="flex items-center justify-between gap-4 border-b border-border p-4">
-                <h3 className="font-semibold">O'lchovlar jurnali</h3>
-                <span className="text-xs text-muted-foreground">Oxirgi 24 soat</span>
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border p-4">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-semibold">O'lchovlar jurnali</h3>
+                  <span className="text-xs text-muted-foreground">Oxirgi 24 soat</span>
+                </div>
+                {/* Agar 2 yoki undan ortiq datchik turidan ma'lumot kelgan bo'lsa — Tab filtrlari */}
+                {availableUtilities.length > 1 && (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <Button
+                      variant={journalTab === 'all' ? 'default' : 'outline'}
+                      size="sm"
+                      className="h-7 px-2.5 text-xs"
+                      onClick={() => setJournalTab('all')}
+                    >
+                      Barchasi ({historyData.readings.length})
+                    </Button>
+                    {availableUtilities.map((ut) => {
+                      const count = historyData.readings.filter((r) => r.utility_type === ut).length
+                      return (
+                        <Button
+                          key={ut}
+                          variant={journalTab === ut ? 'default' : 'outline'}
+                          size="sm"
+                          className="h-7 px-2.5 text-xs"
+                          onClick={() => setJournalTab(ut)}
+                        >
+                          {UTILITY_LABELS[ut] ?? ut} ({count})
+                        </Button>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
+
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Vaqt</TableHead>
-                      {device.utility_type === 'electricity' ? (
+                      {journalTab === 'all' && availableUtilities.length > 1 ? (
+                        <>
+                          <TableHead>Datchik turi</TableHead>
+                          <TableHead>Ko'rsatkichlar</TableHead>
+                        </>
+                      ) : activeJournalUtility === 'electricity' ? (
                         <>
                           <TableHead>Kuchlanish (V)</TableHead>
                           <TableHead>Tok kuchi (A)</TableHead>
                           <TableHead>Quvvat (W)</TableHead>
                           <TableHead>Energiya (kWh)</TableHead>
                         </>
-                      ) : device.utility_type === 'water' ? (
+                      ) : activeJournalUtility === 'water' ? (
                         <>
                           <TableHead>Pastki bosim (bar)</TableHead>
                           <TableHead>Yuqori bosim (bar)</TableHead>
                           <TableHead>Oqim (L/min)</TableHead>
                           <TableHead>Jami hajm (m³)</TableHead>
                         </>
-                      ) : device.utility_type === 'soil' ? (
+                      ) : activeJournalUtility === 'soil' ? (
                         <TableHead>Namlik (%)</TableHead>
-                      ) : device.utility_type === 'sound' ? (
+                      ) : activeJournalUtility === 'sound' ? (
                         <TableHead>Ovoz darajasi (%)</TableHead>
-                      ) : device.utility_type === 'heating' ? (
+                      ) : activeJournalUtility === 'heating' ? (
                         <>
                           <TableHead>Kirish (°C)</TableHead>
                           <TableHead>Chiqish (°C)</TableHead>
+                          <TableHead>Farq ΔT (°C)</TableHead>
                         </>
                       ) : (
                         <>
                           <TableHead>Bosim (bar)</TableHead>
                           <TableHead>Oqim (m³/h)</TableHead>
                           <TableHead>Jami hajm (m³)</TableHead>
-                          <TableHead>Harorat (°C)</TableHead>
                         </>
                       )}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {historyData.readings.map((r) => (
-                      <TableRow key={r.id}>
-                        <TableCell className="font-medium">
-                          {new Date(r.ts * 1000).toLocaleString('uz-UZ')}
-                        </TableCell>
-                        {device.utility_type === 'electricity' ? (
-                          <>
-                            <TableCell className="font-mono">{r.voltage_l1 ?? '—'}</TableCell>
-                            <TableCell className="font-mono">{r.current_l1 ?? '—'}</TableCell>
-                            <TableCell className="font-mono">{r.power_w ?? '—'}</TableCell>
-                            <TableCell className="font-mono">{r.energy_kwh ?? '—'}</TableCell>
-                          </>
-                        ) : device.utility_type === 'water' ? (
-                          <>
-                            <TableCell className="font-mono">{r.pressure_bottom_bar ?? '—'}</TableCell>
-                            <TableCell className="font-mono">{r.pressure_top_bar ?? '—'}</TableCell>
-                            <TableCell className="font-mono">{r.flow_rate ?? '—'}</TableCell>
-                            <TableCell className="font-mono">{r.volume_m3 ?? '—'}</TableCell>
-                          </>
-                        ) : device.utility_type === 'soil' ? (
-                          <TableCell className="font-mono">
-                            {r.humidity !== null && r.humidity !== undefined ? `${r.humidity.toFixed(1)}%` : '—'}
+                    {filteredReadings.map((r) => {
+                      const ut = r.utility_type || device.utility_type
+                      return (
+                        <TableRow key={r.id}>
+                          <TableCell className="font-medium whitespace-nowrap">
+                            {new Date(r.ts * 1000).toLocaleString('uz-UZ')}
                           </TableCell>
-                        ) : device.utility_type === 'sound' ? (
-                          <TableCell className="font-mono">
-                            {r.level !== null && r.level !== undefined ? `${r.level.toFixed(1)}%` : '—'}
-                          </TableCell>
-                        ) : device.utility_type === 'heating' ? (
-                          <>
-                            <TableCell className="font-mono">{r.temperature_in_c ?? '—'}</TableCell>
-                            <TableCell className="font-mono">{r.temperature_out_c ?? '—'}</TableCell>
-                          </>
-                        ) : (
-                          <>
-                            <TableCell className="font-mono">{r.pressure_bar ?? '—'}</TableCell>
-                            <TableCell className="font-mono">{r.flow_rate ?? '—'}</TableCell>
-                            <TableCell className="font-mono">{r.volume_m3 ?? '—'}</TableCell>
-                            <TableCell className="font-mono">{r.temperature_c ?? '—'}</TableCell>
-                          </>
-                        )}
-                      </TableRow>
-                    ))}
+                          {journalTab === 'all' && availableUtilities.length > 1 ? (
+                            <>
+                              <TableCell>
+                                <Badge variant="secondary" className="text-xs">
+                                  {UTILITY_LABELS[ut] ?? ut}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="font-mono text-xs">
+                                {ut === 'water' && (
+                                  <span>
+                                    Pastki: {r.pressure_bottom_bar ?? 0} bar
+                                    {r.volume_m3 != null ? ` · Hajm: ${r.volume_m3} m³` : ''}
+                                  </span>
+                                )}
+                                {ut === 'soil' && (
+                                  <span>Namlik: {r.humidity !== null && r.humidity !== undefined ? `${r.humidity.toFixed(1)}%` : '—'}</span>
+                                )}
+                                {ut === 'electricity' && (
+                                  <span>
+                                    {r.voltage_l1 ?? 0} V · {r.current_l1 ?? 0} A · {r.power_w ?? 0} W
+                                  </span>
+                                )}
+                                {ut === 'heating' && (
+                                  <span>
+                                    Kirish: {r.temperature_in_c ?? '—'}°C · Chiqish: {r.temperature_out_c ?? '—'}°C
+                                  </span>
+                                )}
+                                {ut === 'sound' && (
+                                  <span>Ovoz: {r.level !== null && r.level !== undefined ? `${r.level.toFixed(1)}%` : '—'}</span>
+                                )}
+                                {ut === 'gas' && (
+                                  <span>
+                                    Bosim: {r.pressure_bar ?? 0} bar
+                                    {r.volume_m3 != null ? ` · Hajm: ${r.volume_m3} m³` : ''}
+                                  </span>
+                                )}
+                              </TableCell>
+                            </>
+                          ) : activeJournalUtility === 'electricity' ? (
+                            <>
+                              <TableCell className="font-mono">{r.voltage_l1 ?? '—'}</TableCell>
+                              <TableCell className="font-mono">{r.current_l1 ?? '—'}</TableCell>
+                              <TableCell className="font-mono">{r.power_w ?? '—'}</TableCell>
+                              <TableCell className="font-mono">{r.energy_kwh ?? '—'}</TableCell>
+                            </>
+                          ) : activeJournalUtility === 'water' ? (
+                            <>
+                              <TableCell className="font-mono">{r.pressure_bottom_bar ?? '—'}</TableCell>
+                              <TableCell className="font-mono">{r.pressure_top_bar ?? '—'}</TableCell>
+                              <TableCell className="font-mono">{r.flow_rate ?? '—'}</TableCell>
+                              <TableCell className="font-mono">{r.volume_m3 ?? '—'}</TableCell>
+                            </>
+                          ) : activeJournalUtility === 'soil' ? (
+                            <TableCell className="font-mono">
+                              {r.humidity !== null && r.humidity !== undefined ? `${r.humidity.toFixed(1)}%` : '—'}
+                            </TableCell>
+                          ) : activeJournalUtility === 'sound' ? (
+                            <TableCell className="font-mono">
+                              {r.level !== null && r.level !== undefined ? `${r.level.toFixed(1)}%` : '—'}
+                            </TableCell>
+                          ) : activeJournalUtility === 'heating' ? (
+                            <>
+                              <TableCell className="font-mono">{r.temperature_in_c ?? '—'}</TableCell>
+                              <TableCell className="font-mono">{r.temperature_out_c ?? '—'}</TableCell>
+                              <TableCell className="font-mono">
+                                {r.temperature_in_c != null && r.temperature_out_c != null
+                                  ? `${Math.abs(r.temperature_in_c - r.temperature_out_c).toFixed(1)}`
+                                  : '—'}
+                              </TableCell>
+                            </>
+                          ) : (
+                            <>
+                              <TableCell className="font-mono">{r.pressure_bar ?? '—'}</TableCell>
+                              <TableCell className="font-mono">{r.flow_rate ?? '—'}</TableCell>
+                              <TableCell className="font-mono">{r.volume_m3 ?? '—'}</TableCell>
+                            </>
+                          )}
+                        </TableRow>
+                      )
+                    })}
                   </TableBody>
                 </Table>
               </div>
@@ -797,7 +901,7 @@ export default function DeviceDetailPage() {
                     historyData.pages ??
                     Math.max(1, Math.ceil((historyData.total ?? historyData.readings.length) / historyPageSize))
                   }
-                  total={historyData.total ?? historyData.readings.length}
+                  total={filteredReadings.length}
                   pageSize={historyPageSize}
                   onPageChange={setHistoryPage}
                   onPageSizeChange={setHistoryPageSize}
