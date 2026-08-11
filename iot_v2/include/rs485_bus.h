@@ -70,6 +70,7 @@ static void rs485_send_frame(const uint8_t* buf, uint16_t len) {
 static uint16_t rs485_recv_frame(uint8_t* buf, uint16_t maxLen, uint32_t timeout_ms) {
     uint32_t t0 = millis();
     while (Serial1.available() < 2) {
+        wdt_feed();
         if (millis() - t0 >= timeout_ms) return 0;
         yield();
     }
@@ -77,15 +78,15 @@ static uint16_t rs485_recv_frame(uint8_t* buf, uint16_t maxLen, uint32_t timeout
     len |= ((uint16_t)Serial1.read()) << 8;
     if (len == 0 || len > maxLen) {
         // Freym bu qurilma buferidan KATTA (masalan boshqa leaf'ning uzun JSON
-        // javobi — leaf faqat qisqa komandalarni kutadi, buf[24]). Payload'ni
-        // SHINADAN O'QIB TASHLAYMIZ (skip). Aks holda u baytlar buferda qolib,
-        // keyingi freymlar hizalanmay ketadi va DISCOVER/POLL o'tkazib yuboriladi
-        // (aynan shu sabab suv leaf ro'yxatga tusholmasdi).
+        // javobi). Payload'ni SHINADAN O'QIB TASHLAYMIZ (skip).
+        // Shovqin bo'lsa wdt_feed() va max_skip bilan cheklanadi — qotish/reboot xavfi yo'q.
         uint16_t skip = 0;
+        uint16_t max_skip = maxLen > 512 ? maxLen : 512;
         uint32_t ts = millis();
-        while (skip < len) {
+        while (skip < len && skip < max_skip) {
+            wdt_feed();
             if (Serial1.available()) { Serial1.read(); skip++; ts = millis(); }
-            else if (millis() - ts >= timeout_ms) break;   // to'liq kelmadi — to'xtaymiz
+            else if (millis() - ts >= 100) break;   // 100ms sukut bo'lsa darhol to'xtaymiz
             else yield();
         }
         return 0;
@@ -94,6 +95,7 @@ static uint16_t rs485_recv_frame(uint8_t* buf, uint16_t maxLen, uint32_t timeout
     uint16_t got = 0;
     uint32_t t1 = millis();
     while (got < len) {
+        wdt_feed();
         if (Serial1.available()) {
             buf[got++] = Serial1.read();
         } else if (millis() - t1 >= timeout_ms) {
