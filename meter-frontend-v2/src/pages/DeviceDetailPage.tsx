@@ -151,13 +151,20 @@ export default function DeviceDetailPage() {
   } = useDeviceById(id || '')
   const { data: latestReading } = useDeviceLatest(id || '')
   const { data: deviceSensors } = useDeviceSensors(id || '')
+  const [journalTab, setJournalTab] = useState<string>('all')
+
   const { data: chartHistoryData } = useDeviceHistory(id || '', 24, 1, 100)
-  const { data: historyData } = useDeviceHistory(id || '', 24, historyPage, historyPageSize)
+  const { data: historyData } = useDeviceHistory(
+    id || '',
+    24,
+    historyPage,
+    historyPageSize,
+    journalTab !== 'all' ? journalTab : undefined,
+  )
   const { data: buildings } = useBuildings()
 
   const [loadingAction, setLoadingAction] = useState<string | null>(null)
   const [pendingCommand, setPendingCommand] = useState<PendingCommand | null>(null)
-  const [journalTab, setJournalTab] = useState<string>('all')
 
   // O'lchovlar jurnalida mavjud bo'lgan barcha utility_type larni aniqlash
   const availableUtilities = useMemo(() => {

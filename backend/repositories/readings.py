@@ -41,15 +41,21 @@ class ReadingRepository(BaseRepository[Reading]):
         )
         return existing is not None
 
-    async def history(self, device_id: str, offset: int, limit: int, cutoff: int | None = None) -> list[Reading]:
+    async def history(
+        self, device_id: str, offset: int, limit: int, cutoff: int | None = None, utility_type: str | None = None
+    ) -> list[Reading]:
         stmt = select(Reading).where(Reading.device_id == device_id)
+        if utility_type:
+            stmt = stmt.where(Reading.utility_type == utility_type)
         if cutoff:
             stmt = stmt.where(Reading.ts > cutoff)
         stmt = stmt.order_by(desc(Reading.ts)).limit(limit).offset(offset)
         return list((await self.session.scalars(stmt)).all())
 
-    async def count_history(self, device_id: str, cutoff: int | None = None) -> int:
+    async def count_history(self, device_id: str, cutoff: int | None = None, utility_type: str | None = None) -> int:
         stmt = select(func.count()).select_from(Reading).where(Reading.device_id == device_id)
+        if utility_type:
+            stmt = stmt.where(Reading.utility_type == utility_type)
         if cutoff:
             stmt = stmt.where(Reading.ts > cutoff)
         return await self.session.scalar(stmt) or 0

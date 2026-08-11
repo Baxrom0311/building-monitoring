@@ -30,10 +30,8 @@ export const qk = {
   devicesList:  (p: DevicesListParams) => ['devices', 'list', p.page, p.pageSize, p.q, p.deviceId, p.utilityType, p.online, p.isTestDevice, p.sortBy, p.sortOrder] as const,
   deviceDetail: (id: string) => ['devices', 'detail', id] as const,
   deviceLatest: (id: string) => ['devices', 'latest', id] as const,
-  deviceHistory:(id: string, hours: number, page?: number, limit?: number) =>
-    page === undefined || limit === undefined
-      ? ['devices', 'history', id, hours] as const
-      : ['devices', 'history', id, hours, page, limit] as const,
+  deviceHistory:(id: string, hours: number, page?: number, limit?: number, utilityType?: string) =>
+    ['devices', 'history', id, hours, page, limit, utilityType] as const,
 
   alerts:       () => ['alerts'] as const,
   alertsAll:    (cleared?: boolean, limit?: number) => ['alerts', 'all', cleared, limit] as const,
@@ -204,14 +202,21 @@ export function useDeviceSensors(id: string): UseQueryResult<DeviceSensor[]> {
   })
 }
 
-export function useDeviceHistory(id: string, hours = 24, page = 1, limit = 100): UseQueryResult<DeviceHistoryResponse> {
+export function useDeviceHistory(
+  id: string,
+  hours = 24,
+  page = 1,
+  limit = 100,
+  utilityType?: string,
+): UseQueryResult<DeviceHistoryResponse> {
   return useQuery({
-    queryKey: qk.deviceHistory(id, hours, page, limit),
+    queryKey: qk.deviceHistory(id, hours, page, limit, utilityType),
     queryFn: async () => {
       const params = new URLSearchParams({
         hours: hours.toString(),
         page: page.toString(),
         limit: limit.toString(),
+        ...(utilityType && { utility_type: utilityType }),
       })
       const { data } = await apiClient.get(`/api/devices/${id}/history?${params}`)
       return data

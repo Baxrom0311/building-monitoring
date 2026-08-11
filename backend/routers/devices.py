@@ -168,9 +168,10 @@ async def device_history(
     page: int = Query(1, ge=1),
     limit: int = Query(100, ge=1, le=1000),
     hours: Optional[int] = None,
+    utility_type: Optional[str] = Query(None),
     _: dict = Depends(current_token_payload),
 ):
-    return await reading_service.reading_history(device_id, page, limit, hours)
+    return await reading_service.reading_history(device_id, page, limit, hours, utility_type)
 
 
 @router.get("/devices/{device_id}/stats", response_model=DeviceReadingStatsResponse)

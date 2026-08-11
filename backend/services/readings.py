@@ -277,13 +277,15 @@ async def device_sensors(device_id: str) -> dict:
     return {"device_id": device_id, "sensors": sensors}
 
 
-async def reading_history(device_id: str, page: int, limit: int, hours: int | None) -> dict:
+async def reading_history(
+    device_id: str, page: int, limit: int, hours: int | None, utility_type: str | None = None
+) -> dict:
     offset = (page - 1) * limit
     cutoff = now_ts() - hours * 3600 if hours else None
     async with SessionLocal() as session:
         repo = ReadingRepository(session)
-        total = await repo.count_history(device_id, cutoff)
-        rows = await repo.history(device_id, offset, limit, cutoff)
+        total = await repo.count_history(device_id, cutoff, utility_type=utility_type)
+        rows = await repo.history(device_id, offset, limit, cutoff, utility_type=utility_type)
     return {"readings": [model_to_dict(row) for row in rows], "total": total, "page": page, "pages": (total + limit - 1) // limit}
 
 
