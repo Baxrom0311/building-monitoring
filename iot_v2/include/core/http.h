@@ -1,18 +1,15 @@
 #pragma once
 /**
- * core/http.h — HTTP yordamchi + server check + OTA
+ * core/http.h — HTTP yordamchi + server check
  *
  * TLS: ISRG Root X1 (Let's Encrypt) sertifikati orqali tekshiriladi.
  *       -DTLS_INSECURE → sertifikat tekshirilmaydi (faqat debug)
- *
- * OTA: Watchdog to'xtatiladi, yuklanadi, firmware tasdiqlanadi.
  */
 
 #include <Arduino.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
-#include <HTTPUpdate.h>
 #include <ArduinoJson.h>
 #include "core/log.h"
 #include "core/config.h"
@@ -145,86 +142,4 @@ static bool server_check() {
     int code = http.GET();
     http.end();
     return code >= 200 && code < 300;
-}
-
-// OTA natijasini backendga xabar qilish (/api/ota/report) — batch monitoring uchun
-static void ota_send_report(const char* device_id, const char* status,
-                            const char* target_version, const char* from_version) {
-    StaticJsonDocument<256> doc;
-    doc["device_id"] = device_id;
-    doc["status"]    = status;
-    if (target_version && target_version[0]) doc["target_version"] = target_version;
-    if (from_version && from_version[0])     doc["from_version"]   = from_version;
-    String body; serializeJson(doc, body);
-    http_post("/api/ota/report", body);
-}
-
-static void ota_check(const char* device_id, const char* fw_version) {
-    // Oldingi OTA natijasi (reboot dan keyin): NVS da saqlangan target versiya
-    // hozirgi FW_VERSION bilan mos bo'lsa — success, aks holda failed
-    {
-        g_prefs.begin("app", false);
-        String tgt = g_prefs.getString("ota_tgt", "");
-        if (tgt.length()) {
-            g_prefs.remove("ota_tgt");
-            g_prefs.end();
-            bool ok = (tgt == fw_version);
-            ota_send_report(device_id, ok ? "success" : "failed", tgt.c_str(), nullptr);
-            LOG_PRINTF("OTA natija: %s (target=%s, joriy=%s)\n",
-                       ok ? "success" : "failed", tgt.c_str(), fw_version);
-        } else {
-            g_prefs.end();
-        }
-    }
-
-    HTTPClient http;
-    char url[220];
-    snprintf(url, sizeof(url), "%s/api/ota/check/%s?current_version=%s",
-             g_cfg.server_url, device_id, fw_version);
-    if (!http_begin_url(http, url)) return;
-    if (g_cfg.device_token[0])
-        http.addHeader("X-Device-Token", g_cfg.device_token);
-    http.setTimeout(5000);
-    http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-    int code = http.GET();
-    if (code != 200) { http.end(); return; }
-    StaticJsonDocument<256> doc;
-    String ota_resp = http_safe_body(http);
-    if (ota_resp.isEmpty() || deserializeJson(doc, ota_resp)) { http.end(); return; }
-    http.end();
-    if (!doc["update"].as<bool>()) return;
-    String fw_url  = String(g_cfg.server_url) + doc["url"].as<String>();
-    String new_ver = doc["version"].as<String>();
-    LOG_PRINTF("OTA: v%s yuklanmoqda...\n", new_ver.c_str());
-
-    // Target versiyani NVS ga yozamiz — reboot dan keyin success/failed xabari uchun
-    g_prefs.begin("app", false);
-    g_prefs.putString("ota_tgt", new_ver);
-    g_prefs.end();
-    ota_send_report(device_id, "started", new_ver.c_str(), fw_version);
-
-    // Watchdog to'xtatish (OTA uzoq davom etishi mumkin)
-    wdt_pause();
-
-    if (fw_url.startsWith("https://")) {
-        WiFiClientSecure fw_client;
-#ifdef TLS_INSECURE
-        fw_client.setInsecure();
-#else
-        fw_client.setCACert(TLS_ROOT_CA);
-#endif
-        if (httpUpdate.update(fw_client, fw_url) == HTTP_UPDATE_OK) ESP.restart();
-    } else {
-        HTTPClient fw_http;
-        fw_http.begin(fw_url);
-        if (httpUpdate.update(fw_http) == HTTP_UPDATE_OK) ESP.restart();
-    }
-
-    // OTA muvaffaqiyatsiz bo'ldi — watchdog qaytarish
-    LOG_PRINTLN("OTA: yuklash xato!");
-    ota_send_report(device_id, "failed", new_ver.c_str(), fw_version);
-    g_prefs.begin("app", false);
-    g_prefs.remove("ota_tgt");
-    g_prefs.end();
-    wdt_resume();
 }

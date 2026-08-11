@@ -11,7 +11,6 @@
  */
 
 #include <esp_task_wdt.h>
-#include <esp_ota_ops.h>
 #include "core/log.h"
 
 #ifndef WDT_TIMEOUT_S
@@ -34,12 +33,4 @@ static void wdt_pause() {
 
 static void wdt_resume() {
     esp_task_wdt_add(NULL);
-}
-
-// OTA yangilashdan keyin — firmwareni "tasdiqlangan" deb belgilash
-// Agar yangi firmware setup() da crash qilsa, bootloader eskisiga qaytadi
-// (CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y kerak)
-static void ota_mark_valid() {
-    esp_ota_mark_app_valid_cancel_rollback();
-    LOG_PRINTLN("OTA: firmware tasdiqlandi");
 }

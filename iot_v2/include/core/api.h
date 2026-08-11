@@ -122,7 +122,6 @@ static void app_poll_commands(const char* device_id, const char* fw_version = nu
 
         if (strcmp(action, "reboot") == 0) {
             http_post(ack, "{}");
-            ESP.restart();
         } else if (strcmp(action, "set_volume") == 0) {
             // params kelmasa 0.0 bilan hisoblagichni nolga tushirib yubormaslik
             if (cmd["params"]["volume"].is<float>() || cmd["params"]["volume"].is<int>()) {
@@ -131,10 +130,6 @@ static void app_poll_commands(const char* device_id, const char* fw_version = nu
             } else {
                 http_post(ack, "{\"error\":\"volume param yo'q\"}");
             }
-        } else if (strcmp(action, "ota_check") == 0) {
-            // Backend OTA push/batch shu action ni yuboradi — darhol tekshiramiz
-            http_post(ack, "{\"ok\":true}");
-            if (fw_version) ota_check(device_id, fw_version);
         } else if (strcmp(action, "set_interval") == 0) {
             uint32_t val = cmd["params"]["interval_ms"] | (uint32_t)0;
             if (val >= 5000 && val <= 3600000) {

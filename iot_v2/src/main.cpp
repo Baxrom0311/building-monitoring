@@ -445,19 +445,23 @@ void setup() {
 }
 
 void loop() {
-    static uint32_t total = 0, pkt = 0, last_rx = 0, last_hb = 0;
+    static uint32_t total = 0, pkt = 0, last_rx = 0, last_disc = 0;
+    // Har 2.5s da DISCOVER yuboramiz — leaf'lar javob bersin (ular so'ralganда gapiradi).
+    // So'ng KELGAN XOM baytlarni ko'rsatamiz (parse yo'q — signal bormi tekshiramiz).
+    if (millis() - last_disc > 2500) {
+        last_disc = millis();
+        uint8_t cmd = RS485_CMD_DISCOVER;    // 0xF1 broadcast
+        rs485_send_frame(&cmd, 1);
+        Serial.println("\n--- DISCOVER yuborildi, javob (xom bayt) kutamiz ---");
+    }
     while (Serial1.available()) {
         uint8_t b = Serial1.read();
         Serial.printf("%02X ", b);
         total++; pkt++; last_rx = millis();
     }
-    if (pkt > 0 && millis() - last_rx > 400) {
+    if (pkt > 0 && millis() - last_rx > 300) {
         Serial.printf("  <- %lu bayt (jami %lu)\n", (unsigned long)pkt, (unsigned long)total);
         pkt = 0;
-    }
-    if (millis() - last_hb > 4000) {
-        last_hb = millis();
-        if (total == 0) Serial.println("[...shinadan HECH NARSA kelmadi (A/B yoki qabul yo'q)...]");
     }
     yield();
 }
@@ -1096,10 +1100,6 @@ void loop() {
 #ifdef SENSOR_ELECTRICITY
             lora_check();
 #endif
-        }
-
-        if (server_ok && !prev) {
-            ota_check(device_id, FW_VERSION);
         }
     }
 
