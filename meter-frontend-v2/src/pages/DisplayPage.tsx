@@ -135,6 +135,15 @@ function fakePoints(base: number, amp: number): ChartPoint[] {
   return points
 }
 
+// Suv bosimi normasi va rang darajalari
+const WATER_NOMINAL = 2.7
+function getWaterColor(val: number | null): { color: string; status: string } {
+  if (val == null) return { color: '#94a3b8', status: 'Nomalum' }
+  if (val >= 2.5) return { color: '#22C55E', status: 'Normal' }
+  if (val >= 2.0) return { color: '#FBBF24', status: 'Past' }
+  return { color: '#FB7185', status: 'Xavfli past' }
+}
+
 // Qozonxona normal ΔT (kirish-chiqish farqi) va ruxsat etilgan chetlanish
 const HEATING_DELTA_NORMA = 20
 const HEATING_DELTA_MARGIN = 10 // norma ±10°C ichida — sog'lom
@@ -158,12 +167,12 @@ const CHARTS = [
     label: 'Suv bosimi',
     unit: 'bar',
     icon: Droplets,
-    color: '#38BDF8',
-    glow: 'rgba(56,189,248,0.5)',
-    bg: 'from-sky-500/20 via-slate-900/80 to-slate-950',
-    nominal: 4 as number | null,
-    // Real ma'lumot bo'lmasa — normal suv bosimi (~3.8 bar) namunaviy ko'rsatiladi
-    fake: { base: 3.8, amp: 0.25 } as { base: number; amp: number } | null,
+    color: '#22C55E',
+    glow: 'rgba(34,197,94,0.5)',
+    bg: 'from-emerald-500/20 via-slate-900/80 to-slate-950',
+    nominal: WATER_NOMINAL as number | null,
+    // Real ma'lumot bo'lmasa — normal suv bosimi (2.7 bar) namunaviy ko'rsatiladi
+    fake: { base: WATER_NOMINAL, amp: 0.25 } as { base: number; amp: number } | null,
   },
   {
     key: 'gas' as const,
@@ -471,7 +480,6 @@ export default function DisplayPage() {
             single && s0.trend != null && s0.trend !== 0 ? (s0.trend > 0 ? TrendingUp : TrendingDown) : null
 
           // Elektr: 220V o'rtada nol chizig'i — past qiymat pastga, yuqori qiymat tepaga o'sadi (divergent).
-          // Ustun qiymati sifatida (voltaj − 220) chiziladi, Y o'qi 0 atrofida simmetrik.
           const isElec = cfg.key === 'electricity'
           const elecVals = isElec
             ? cfg.points.map((p) => p.v0).filter((n): n is number => typeof n === 'number')
@@ -486,10 +494,26 @@ export default function DisplayPage() {
                 dev: p.v0 != null ? Number((p.v0 - ELEC_NOMINAL).toFixed(2)) : null,
               }))
             : cfg.points
+
+          // Suv: 2.7 bar aynan grafik o'rtasida bo'lishi uchun simmetrik Y-domen
+          const isWater = cfg.key === 'water'
+          const waterVals = isWater
+            ? cfg.points.map((p) => p.v0).filter((n): n is number => typeof n === 'number')
+            : []
+          const waterMaxDiff = waterVals.length
+            ? Math.max(0.6, ...waterVals.map((v) => Math.abs(v - WATER_NOMINAL)))
+            : 0.8
+          const waterDomain: [number, number] = [
+            Math.max(0, Number((WATER_NOMINAL - waterMaxDiff - 0.3).toFixed(1))),
+            Number((WATER_NOMINAL + waterMaxDiff + 0.3).toFixed(1)),
+          ]
+
           const soilStatus = cfg.key === 'soil' ? getSoilHumidityStatus(s0.latest) : null
           const valueColor =
             isElec && s0.latest != null
               ? voltageColor(s0.latest)
+              : isWater && s0.latest != null
+              ? getWaterColor(s0.latest).color
               : cfg.key === 'soil' && soilStatus
               ? soilStatus.color
               : cfg.color
@@ -631,7 +655,7 @@ export default function DisplayPage() {
                         tickLine={false}
                         axisLine={false}
                         width={44}
-                        domain={isElec ? elecDomain : ['auto', 'auto']}
+                        domain={isElec ? elecDomain : isWater ? waterDomain : ['auto', 'auto']}
                         allowDecimals={!isElec}
                         tickFormatter={(v) => `${isElec ? Math.round(Number(v) + ELEC_NOMINAL) : v}`}
                       />
@@ -675,17 +699,17 @@ export default function DisplayPage() {
                       {(isElec || (cfg.nominal != null && cfg.key !== 'soil')) && (
                         <ReferenceLine
                           y={isElec ? 0 : cfg.nominal!}
-                          stroke={isElec ? '#22C55E' : cfg.color}
+                          stroke={isElec || isWater ? '#22C55E' : cfg.color}
                           strokeDasharray="6 5"
-                          strokeWidth={isElec ? 2 : 1.5}
-                          strokeOpacity={isElec ? 0.9 : 0.7}
+                          strokeWidth={2}
+                          strokeOpacity={0.9}
                           label={{
-                            value: isElec ? `norma ${ELEC_NOMINAL}${cfg.unit}` : `norma ${cfg.nominal}${cfg.unit}`,
+                            value: isElec ? `norma ${ELEC_NOMINAL}${cfg.unit}` : `norma ${cfg.nominal} ${cfg.unit}`,
                             position: 'insideTopRight',
-                            fill: isElec ? '#22C55E' : cfg.color,
+                            fill: '#22C55E',
                             fontSize: 11,
                             fontWeight: 700,
-                            opacity: 0.9,
+                            opacity: 0.95,
                           }}
                         />
                       )}
@@ -693,6 +717,12 @@ export default function DisplayPage() {
                         <Bar dataKey="dev" name={cfg.label} radius={[4, 4, 4, 4]} maxBarSize={28}>
                           {elecData.map((p, idx) => (
                             <Cell key={idx} fill={p.v0 != null ? voltageColor(p.v0) : '#334155'} />
+                          ))}
+                        </Bar>
+                      ) : isWater ? (
+                        <Bar dataKey="v0" name={cfg.label} radius={[6, 6, 0, 0]} maxBarSize={28}>
+                          {cfg.points.map((p, idx) => (
+                            <Cell key={idx} fill={p.v0 != null ? getWaterColor(p.v0).color : cfg.color} />
                           ))}
                         </Bar>
                       ) : cfg.key === 'soil' ? (
