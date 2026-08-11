@@ -30,6 +30,11 @@ fi
 rm -rf ../backend/frontend/*
 cp -r dist/* ../backend/frontend/
 
+if [ -d "/var/www/sss.boos.uz" ]; then
+    rm -rf /var/www/sss.boos.uz/*
+    cp -r dist/* /var/www/sss.boos.uz/
+    chown -R www-data:www-data /var/www/sss.boos.uz
+fi
 if [ -d "/var/www/meter-frontend" ]; then
     rm -rf /var/www/meter-frontend/*
     cp -r dist/* /var/www/meter-frontend/
