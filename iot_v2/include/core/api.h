@@ -29,7 +29,6 @@ static bool app_register(const char* device_id,
     doc["software_version"] = fw_version;
     doc["baud_rate"]        = baud_rate;
     doc["rssi"]             = WiFi.RSSI();
-    doc["chip_model"]       = "ESP32";
     if (device_role) doc["device_role"] = device_role;
     if (g_cfg.test_mode) doc["is_test_device"] = true;
     if (g_cfg.provisioning_token[0])
