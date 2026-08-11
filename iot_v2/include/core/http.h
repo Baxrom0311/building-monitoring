@@ -104,7 +104,7 @@ static bool http_post(const char* path, const String& body) {
     http.addHeader("Content-Type", "application/json");
     if (g_cfg.device_token[0])
         http.addHeader("X-Device-Token", g_cfg.device_token);
-    http.setTimeout(5000);
+    http.setTimeout(3000);
     http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
     int code = http.POST(body);
     if (code < 200 || code >= 300)
@@ -121,7 +121,7 @@ static String http_get(const char* path) {
     if (!http_begin_url(http, url)) return "";
     if (g_cfg.device_token[0])
         http.addHeader("X-Device-Token", g_cfg.device_token);
-    http.setTimeout(5000);
+    http.setTimeout(3000);
     http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
     int code = http.GET();
     String resp = (code == 200) ? http_safe_body(http) : "";
@@ -137,7 +137,7 @@ static bool server_check() {
     char url[120];
     snprintf(url, sizeof(url), "%s/health", g_cfg.server_url);
     if (!http_begin_url(http, url)) return false;
-    http.setTimeout(5000);
+    http.setTimeout(2500);
     http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
     int code = http.GET();
     http.end();
