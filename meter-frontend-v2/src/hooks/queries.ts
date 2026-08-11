@@ -222,6 +222,7 @@ export function useDeviceHistory(
       return data
     },
     enabled: !!id,
+    refetchInterval: REALTIME_FALLBACK_INTERVAL_MS,
     placeholderData: keepPreviousData,
   })
 }

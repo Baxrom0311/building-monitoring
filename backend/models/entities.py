@@ -314,6 +314,7 @@ class Reading(Base):
     __tablename__ = "readings"
     __table_args__ = (
         Index("idx_readings_device_ts", "device_id", "ts"),
+        Index("idx_readings_device_utility_ts", "device_id", "utility_type", "ts"),
         Index("idx_readings_point_ts", "point_id", "ts"),
         Index("idx_readings_building_ts", "building_id", "ts"),
         Index("idx_readings_ts", "ts"),
