@@ -25,11 +25,10 @@ static inline void disp_show_reading(const SensorData& /*d*/) {
     // Nothing to do here.
 }
 
-static void disp_show_status(bool wifi_ok, bool srv_ok, bool lora_ok) {
+static void disp_show_status(bool wifi_ok, bool srv_ok) {
     char s[ELEC_LCD_COLS + 1];
-    snprintf(s, sizeof(s), "W:%-2s S:%-2s L:%-2s",
+    snprintf(s, sizeof(s), "W:%-2s S:%-2s",
              wifi_ok ? "OK" : "--",
-             srv_ok  ? "OK" : "--",
-             lora_ok ? "OK" : "--");
+             srv_ok  ? "OK" : "--");
     lcd_show_status(s);
 }

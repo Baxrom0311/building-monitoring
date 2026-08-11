@@ -759,16 +759,6 @@ static unsigned long last_sound_lcd_ms = 0;
 static int           meter_fail_count = 0;
 static unsigned long meter_retry_ms   = 30000UL;
 #define METER_RETRY_MAX_MS  300000UL
-static bool g_lora_ok = false;
-
-static void lora_check() {
-    if (WiFi.status() != WL_CONNECTED) return;
-    String resp = http_get("/api/public/lora-status");
-    if (resp.isEmpty()) { g_lora_ok = false; return; }
-    StaticJsonDocument<64> doc;
-    if (deserializeJson(doc, resp)) { g_lora_ok = false; return; }
-    g_lora_ok = doc["online"] | false;
-}
 #endif
 
 // ─── Offline buffer ──────────────────────────────────────────────────────────
@@ -932,8 +922,7 @@ void setup() {
     }
 #endif
 #if defined(SENSOR_ELECTRICITY) && !defined(RS485_BRIDGE)
-    if (server_ok) lora_check();
-    disp_show_status(WiFi.status() == WL_CONNECTED, server_ok, g_lora_ok);
+    disp_show_status(WiFi.status() == WL_CONNECTED, server_ok);
 #endif
 
 #ifdef RS485_BRIDGE
@@ -1079,14 +1068,10 @@ void loop() {
             buf_push(json);
         }
 
-#ifdef SENSOR_ELECTRICITY
-        disp_show_status(wifi_ok, server_ok, g_lora_ok);
-#else
-        disp_show_status(wifi_ok, server_ok, false);
-#endif
+        disp_show_status(wifi_ok, server_ok);
     }
 
-    // ── Periodic: health + flush + commands + OTA (har 60s) ──────────────
+    // ── Periodic: health + flush + commands (har 60s) ──────────────
     if (WiFi.status() == WL_CONNECTED &&
         now - last_health_ms >= HEALTH_CHECK_MS) {
         last_health_ms = now;
@@ -1097,9 +1082,6 @@ void loop() {
         if (server_ok) {
             if (!registered) registered = do_register();
             buf_flush();
-#ifdef SENSOR_ELECTRICITY
-            lora_check();
-#endif
         }
     }
 

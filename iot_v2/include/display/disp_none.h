@@ -8,4 +8,4 @@
 
 #define disp_init()                  do {} while(0)
 #define disp_show_reading(d)         do {} while(0)
-#define disp_show_status(w, s, l)    do {} while(0)
+#define disp_show_status(w, s)       do {} while(0)

@@ -23,7 +23,7 @@
 #define ELEC_LCD_SCL   22
 
 // ─── LCD drayver (WiFi firmware — o'zi boshqaradi, LoRa node — display modul) ──
-#if (!defined(LORA_NODE) && !defined(RS485_LEAF)) || defined(HAVE_LCD)
+#if !defined(RS485_LEAF) || defined(HAVE_LCD)
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 
@@ -76,7 +76,7 @@ struct SensorData {
 static SensorData g_sensor_meta;
 
 // ─── LCD: elektr ko'rsatkichlari ──────────────────────────────────────────────
-#if (!defined(LORA_NODE) && !defined(RS485_LEAF)) || defined(HAVE_LCD)
+#if !defined(RS485_LEAF) || defined(HAVE_LCD)
 static void lcd_show_electricity(const SensorData& d) {
     if (!g_elec_lcd_ok || !d.valid) return;
     char row0[ELEC_LCD_COLS + 1];
@@ -96,7 +96,7 @@ static void lcd_show_electricity(const SensorData&) {}
 
 // LCD ni mustaqil ishga tushirish — WiFi/portal'dan OLDIN chaqirilishi mumkin
 // (bridge/elektr: WiFi sozlash oynasi ekranда ko'rinsin uchun). Idempotent.
-#if (!defined(LORA_NODE) && !defined(RS485_LEAF)) || defined(HAVE_LCD)
+#if !defined(RS485_LEAF) || defined(HAVE_LCD)
 static void elec_lcd_init() {
     if (g_elec_lcd_ok) return;   // allaqachon init qilingan
     Wire.begin(ELEC_LCD_SDA, ELEC_LCD_SCL);

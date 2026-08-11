@@ -33,7 +33,7 @@ static void disp_show_reading(const SensorData& d) {
     lcd_row(0, row0);
 }
 
-static void disp_show_status(bool wifi_ok, bool srv_ok, bool /*lora_ok — bu qurilmada yo'q*/) {
+static void disp_show_status(bool wifi_ok, bool srv_ok) {
     if (wifi_ok && srv_ok) {
         lcd_row(1, "A1TECH  BRR");
         return;

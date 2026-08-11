@@ -121,7 +121,7 @@ static bool sensor_read(SensorData& d) {
 
 void sensor_set_volume(float) {}  // stub (common.h extern talab qiladi)
 
-// WiFi rejimida ishlatiladi (lora_node da bu funksiyalar kerak emas)
+// WiFi rejimida ishlatiladi
 #ifndef SOIL_DEVICE_ROLE
   #define SOIL_DEVICE_ROLE "soil_outdoor"
 #endif
