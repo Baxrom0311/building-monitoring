@@ -135,25 +135,13 @@ static void rs485_bridge_lcd_show(const char* json) {
     StaticJsonDocument<512> doc;
     if (deserializeJson(doc, json)) return;
     const char* ut = doc["utility_type"] | "";
+    // LCD'da FAQAT elektr ko'rsatiladi — suv/gaz/tuproq/ovoz/issiqlik va keyingi
+    // sensorlar ekranni o'zgartirmaydi (server'ga baribir forward qilinadi).
+    if (strcmp(ut, "electricity") != 0) return;
     char r0[17];
-    if (!strcmp(ut, "electricity")) {
-        snprintf(r0, sizeof(r0), "%.0fV %.2fA %dW",
-                 (float)(doc["voltage_l1"] | 0.0f), (float)(doc["current_l1"] | 0.0f),
-                 (int)(doc["power_w"] | 0));
-    } else if (!strcmp(ut, "soil")) {
-        snprintf(r0, sizeof(r0), "Namlik: %.0f %%", (float)(doc["humidity"] | 0.0f));
-    } else if (!strcmp(ut, "water")) {
-        snprintf(r0, sizeof(r0), "Suv: %.2f bar", (float)(doc["pressure_bottom_bar"] | 0.0f));
-    } else if (!strcmp(ut, "gas")) {
-        snprintf(r0, sizeof(r0), "Gaz: %.2f bar", (float)(doc["pressure_bar"] | 0.0f));
-    } else if (!strcmp(ut, "sound")) {
-        snprintf(r0, sizeof(r0), "Ovoz: %.0f %%", (float)(doc["level"] | 0.0f));
-    } else if (!strcmp(ut, "heating")) {
-        snprintf(r0, sizeof(r0), "K:%.0f Ch:%.0f",
-                 (float)(doc["temperature_in_c"] | 0.0f), (float)(doc["temperature_out_c"] | 0.0f));
-    } else {
-        snprintf(r0, sizeof(r0), "%-16s", ut);
-    }
+    snprintf(r0, sizeof(r0), "%.0fV %.2fA %dW",
+             (float)(doc["voltage_l1"] | 0.0f), (float)(doc["current_l1"] | 0.0f),
+             (int)(doc["power_w"] | 0));
     elec_lcd_row(0, r0);
     elec_lcd_row(1, "A1TECH  BRR");
 }
