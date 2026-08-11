@@ -37,7 +37,9 @@
                                             // Odatda leaf ro'yxatda QOLADI — javob bermasa backend uni
                                             // (last_seen orqali) "offline/ishlamayapti" deb ko'rsatadi va
                                             // qurilma qaytsa avtomatik tiklanadi.
-#define RS485_BRIDGE_DISCOVER_EVERY 5       // Har necha siklda bir marta yangi leaf qidiriladi
+#define RS485_BRIDGE_DISCOVER_EVERY 1       // HAR siklda yangi leaf qidiriladi — ro'yxatdagi
+                                            // leaf DISCOVER'da jim turadi (skip), shuning uchun
+                                            // yangi leaf tez (1-2 sikl) va to'qnashuvsiz tushadi
 #define RS485_LEAF_ID_LEN           12      // ASCII MAC uzunligi
 
 static unsigned long rs485_bridge_last_ms = 0;
