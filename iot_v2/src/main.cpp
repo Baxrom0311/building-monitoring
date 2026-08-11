@@ -528,8 +528,8 @@ void setup() {
     unsigned long _t = millis(); while (millis() - _t < 300) yield();
     rs485_init();                 // DE LOW = doim qabul (passiv tinglash, hech qачон uzatmaydi)
     lcd_init();
-    lcd_row(0, "Suv displey");
-    lcd_row(1, "Kutilmoqda...");
+    lcd_row(0, "Suv kutilmoqda");
+    lcd_row(1, "A1TECH  BRR");
     LOG_PRINTLN();
     LOG_PRINTLN("=== RS-485 SUV DISPLEY ===");
     LOG_PRINTF("Bus: RX=%d TX=%d DE=%d @%lu | LCD SDA=%d SCL=%d\n",
@@ -548,24 +548,19 @@ void loop() {
         if (deserializeJson(doc, (const char*)buf) == DeserializationError::Ok) {
             const char* ut = doc["utility_type"] | "";
             if (!strcmp(ut, "water")) {
-                float p   = doc["pressure_bottom_bar"] | 0.0f;
-                float fl  = doc["flow_rate"] | 0.0f;
-                float vol = doc["volume_m3"] | 0.0f;
+                float p = doc["pressure_bottom_bar"] | 0.0f;
                 char r0[LCD_COLS + 1];
                 snprintf(r0, sizeof(r0), "Suv: %.2f bar", p);
                 lcd_row(0, r0);
-                char r1[LCD_COLS + 1];
-                if (fl > 0.05f) snprintf(r1, sizeof(r1), "Oqim: %.1f L/m", fl);
-                else            snprintf(r1, sizeof(r1), "Hajm: %.2f m3", vol);
-                lcd_row(1, r1);
+                lcd_row(1, "A1TECH  BRR");   // 2-qator — boshqa qurilmalar kabi
                 g_last_water_ms = millis();
-                LOG_PRINTF("SUV: %.2f bar  oqim=%.1f  hajm=%.2f\n", p, fl, vol);
+                LOG_PRINTF("SUV: %.2f bar\n", p);
             }
         }
     }
-    // Uzoq vaqt (60s) suv kelmasa — ogohlantirish
+    // Uzoq vaqt (60s) suv kelmasa — 0-qatorda ogohlantirish (2-qator A1TECH BRR qoladi)
     if (g_last_water_ms != 0 && millis() - g_last_water_ms > 60000UL) {
-        lcd_row(1, "Malumot yo'q...");
+        lcd_row(0, "Suv: malumot yo'q");
     }
     lcd_refresh_if_needed();
 }
