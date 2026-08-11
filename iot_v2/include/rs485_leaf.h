@@ -56,6 +56,12 @@ static AppConfig g_cfg = { false };
 // ─── Leaf holati ──────────────────────────────────────────────────────────────
 static char leaf_id[20];
 
+// Oxirgi ADRESLI poll vaqti (ro'yxatga tushganini bildiradi). Yaqinda pollangan
+// leaf DISCOVER'ga javob BERMAYDI — shunda bir nechta leaf DISCOVER'da
+// to'qnashmaydi (faqat yangi/uzilgan leaf javob beradi va toza ro'yxatga tushadi).
+static unsigned long g_last_addressed_ms = 0;
+#define DISCOVER_SKIP_MS 30000UL   // poll oralig'i (20s) dan katta
+
 #ifdef LEAF_NEEDS_CONNECT
 // Elektr metrni DLMS bilan o'qish SEKIN (bir necha OBIS, ~1-2s). Poll kelganda
 // shu qadar kutib bo'lmaydi — master oynasi yopiladi. Shuning uchun metrni
@@ -138,6 +144,18 @@ void loop() {
     bool is_for_me   = (buf[0] == RS485_CMD_POLL && n == 1 + id_len &&
                         memcmp(buf + 1, leaf_id, id_len) == 0);
     if (!is_discover && !is_for_me) return;   // menga tegishli emas — jim
+
+    // Adresli poll oldim → ro'yxatdaman
+    if (is_for_me) g_last_addressed_ms = millis();
+
+    // Ro'yxatga tushgan (yaqinda pollangan) leaf DISCOVER'ga JAVOB BERMAYDI —
+    // shunda yangi leaf DISCOVER'da yolg'iz javob berib to'qnashmaydi.
+    // Bridge poll'ni to'xtatsa (uzildi/reboot), DISCOVER_SKIP_MS o'tgach yana
+    // DISCOVER'ga javob berib qayta ro'yxatga tushadi.
+    if (is_discover && g_last_addressed_ms != 0 &&
+        (millis() - g_last_addressed_ms) < DISCOVER_SKIP_MS) {
+        return;
+    }
 
     // DISCOVER — bir necha leaf birdan javob berishi mumkin, to'qnashmaslik
     // uchun katta jitter. Adresli POLL'da faqat bitta leaf javob beradi, lekin
