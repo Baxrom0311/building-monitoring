@@ -93,18 +93,12 @@ static void lcd_show_electricity(const SensorData&) {}
 // ═══════════════════════════════════════════════════════════════════════════════
 // Sensor API
 // ═══════════════════════════════════════════════════════════════════════════════
-static void sensor_init() {
-    fcs_init_table();
-    pinMode(PIN_DE, OUTPUT);
-    digitalWrite(PIN_DE, LOW);
-    Serial2.begin(9600, SERIAL_8N1, PIN_RX, PIN_TX);
-    g_sensor_meta.meter_baud       = 9600;
-    g_sensor_meta.meter_serial[0]  = '\0';
-    g_sensor_meta.sensor_type[0]   = '\0';
 
-// LCD: WiFi rejimda doim, LoRa node da faqat HAVE_LCD bilan
-// (ilgari electricity_lora_lcd env da ekran hech qachon init bo'lmasdi)
+// LCD ni mustaqil ishga tushirish — WiFi/portal'dan OLDIN chaqirilishi mumkin
+// (bridge/elektr: WiFi sozlash oynasi ekranда ko'rinsin uchun). Idempotent.
 #if (!defined(LORA_NODE) && !defined(RS485_LEAF)) || defined(HAVE_LCD)
+static void elec_lcd_init() {
+    if (g_elec_lcd_ok) return;   // allaqachon init qilingan
     Wire.begin(ELEC_LCD_SDA, ELEC_LCD_SCL);
     unsigned long t = millis(); while (millis() - t < 50) yield();
     uint8_t lcd_addr = 0;
@@ -121,7 +115,22 @@ static void sensor_init() {
         elec_lcd_row(0, "Meter Monitor");
         elec_lcd_row(1, "Yuklanmoqda...");
     }
+}
+#else
+static void elec_lcd_init() {}
 #endif
+
+static void sensor_init() {
+    fcs_init_table();
+    pinMode(PIN_DE, OUTPUT);
+    digitalWrite(PIN_DE, LOW);
+    Serial2.begin(9600, SERIAL_8N1, PIN_RX, PIN_TX);
+    g_sensor_meta.meter_baud       = 9600;
+    g_sensor_meta.meter_serial[0]  = '\0';
+    g_sensor_meta.sensor_type[0]   = '\0';
+
+    // LCD (idempotent — WiFi'dan oldin chaqirilgan bo'lsa qayta init qilinmaydi)
+    elec_lcd_init();
 }
 
 static bool sensor_try_baud(uint32_t baud) {

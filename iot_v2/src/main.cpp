@@ -677,8 +677,10 @@ void setup() {
         }
     }
 
-    // LCD: WiFi dan OLDIN
-#ifndef SENSOR_ELECTRICITY
+    // LCD: WiFi dan OLDIN — WiFi sozlash portali ekranda ko'rinsin uchun
+#ifdef SENSOR_ELECTRICITY
+    elec_lcd_init();   // elektr/bridge LCD (idempotent) — portal xabari uchun
+#else
     disp_init();
 #endif
 
