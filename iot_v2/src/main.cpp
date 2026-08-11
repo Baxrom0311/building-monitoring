@@ -570,12 +570,35 @@ void loop() {
 #include "rs485_bus.h"
 #include "display/lcd.h"
 
-static unsigned long g_last_water_ms = 0;
+static unsigned long g_last_water_ms = 0;   // oxirgi suv ko'rsatilgan vaqt
+static unsigned long g_last_bus_ms   = 0;   // shinada oxirgi SO'ROVSIZ faollik (bridge bormi?)
+
+// Shina jim (bridge yo'q) deb hisoblash chegarasi. Leaf DISCOVER_SKIP_MS=30s
+// bo'lgani uchun undan katta — bridge yo'qolsa leaf yana javob bera boshlaydi.
+#define DISPLAY_TAKEOVER_MS 34000UL   // shu vaqt jim bo'lsa displey o'zi so'raydi
+#define DISPLAY_BOOT_MS      6000UL   // boshidan bridge eshitilmasa shu vaqtdan keyin
+#define DISPLAY_POLL_EVERY   4000UL   // jim rejimда har shuncha DISCOVER yuboradi
+
+// Freymni tekshirib, suv bo'lsa LCD'ga chiqaradi. true = suv ko'rsatildi.
+static bool display_show_water(const uint8_t* buf) {
+    StaticJsonDocument<512> doc;
+    if (deserializeJson(doc, (const char*)buf) != DeserializationError::Ok) return false;
+    const char* ut = doc["utility_type"] | "";
+    if (strcmp(ut, "water") != 0) return false;
+    float p = doc["pressure_bottom_bar"] | 0.0f;
+    char r0[LCD_COLS + 1];
+    snprintf(r0, sizeof(r0), "Suv: %.2f bar", p);
+    lcd_row(0, r0);
+    lcd_row(1, "A1TECH  BRR");
+    g_last_water_ms = millis();
+    LOG_PRINTF("SUV: %.2f bar\n", p);
+    return true;
+}
 
 void setup() {
     Serial.begin(115200);
     unsigned long _t = millis(); while (millis() - _t < 300) yield();
-    rs485_init();                 // DE LOW = doim qabul (passiv tinglash, hech qачон uzatmaydi)
+    rs485_init();                 // DE LOW = qabul; kerak bo'lganда o'zi ham so'raydi
     lcd_init();
     lcd_row(0, "Suv kutilmoqda");
     lcd_row(1, "A1TECH  BRR");
@@ -584,30 +607,37 @@ void setup() {
     LOG_PRINTF("Bus: RX=%d TX=%d DE=%d @%lu | LCD SDA=%d SCL=%d\n",
                RS485_BUS_RX, RS485_BUS_TX, RS485_BUS_DE, (unsigned long)RS485_BAUD,
                (int)LCD_SDA, (int)LCD_SCL);
-    LOG_PRINTLN("Shina tinglanmoqda — suv leaf javobini kutamiz...\n");
+    LOG_PRINTLN("Tinglaymiz; bridge jim bo'lsa o'zimiz so'raymiz.\n");
 }
 
 void loop() {
     uint8_t buf[RS485_MAX_FRAME + 1];
+
+    // 1) Passiv tinglash — bridge poll qilsa, leaf javobini shinadan ilib olamiz
     uint16_t n = rs485_recv_frame(buf, RS485_MAX_FRAME, 500);
     if (n > 0) {
+        g_last_bus_ms = millis();   // shinada faollik bor (bridge ishlayapti)
         buf[n] = '\0';
-        // Faqat JSON (leaf javobi) — komanda baytlarini (F1/F2) e'tiborsiz qoldiramiz
-        StaticJsonDocument<512> doc;
-        if (deserializeJson(doc, (const char*)buf) == DeserializationError::Ok) {
-            const char* ut = doc["utility_type"] | "";
-            if (!strcmp(ut, "water")) {
-                float p = doc["pressure_bottom_bar"] | 0.0f;
-                char r0[LCD_COLS + 1];
-                snprintf(r0, sizeof(r0), "Suv: %.2f bar", p);
-                lcd_row(0, r0);
-                lcd_row(1, "A1TECH  BRR");   // 2-qator — boshqa qurilmalar kabi
-                g_last_water_ms = millis();
-                LOG_PRINTF("SUV: %.2f bar\n", p);
-            }
+        display_show_water(buf);
+    }
+
+    // 2) Shina jim (bridge yo'q) bo'lsa — displey O'ZI DISCOVER yuborib suv so'raydi
+    unsigned long since_bus  = millis() - g_last_bus_ms;   // g_last_bus_ms=0 bo'lsa uptime
+    unsigned long takeover   = (g_last_bus_ms == 0) ? DISPLAY_BOOT_MS : DISPLAY_TAKEOVER_MS;
+    static unsigned long last_poll = 0;
+    if (since_bus > takeover && millis() - last_poll > DISPLAY_POLL_EVERY) {
+        last_poll = millis();
+        uint8_t cmd = RS485_CMD_DISCOVER;
+        rs485_send_frame(&cmd, 1);   // o'zi so'raydi (bridge yo'q, to'qnashuv yo'q)
+        unsigned long win = millis();
+        while (millis() - win < 700) {
+            uint16_t m = rs485_recv_frame(buf, RS485_MAX_FRAME, 250);
+            if (m > 0) { buf[m] = '\0'; display_show_water(buf); }
+            // g_last_bus_ms YANGILANMAYDI — bu bizning so'rovimizga javob, bridge emas
         }
     }
-    // Uzoq vaqt (60s) suv kelmasa — 0-qatorda ogohlantirish (2-qator A1TECH BRR qoladi)
+
+    // Uzoq vaqt (60s) suv umuman kelmasa — 0-qatorda ogohlantirish
     if (g_last_water_ms != 0 && millis() - g_last_water_ms > 60000UL) {
         lcd_row(0, "Suv: malumot yo'q");
     }
