@@ -565,7 +565,41 @@ export default function DisplayPage() {
               </div>
 
               {/* Joriy qiymat(lar) + trend */}
-              {single ? (
+              {cfg.key === 'heating' ? (
+                <div className="relative z-10 flex shrink-0 items-center justify-between gap-3 px-4 pt-1 sm:px-6">
+                  {/* Kirish harorati (Katta 5xl/6xl) */}
+                  <div>
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-400">
+                      <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                      Kirish harorati
+                    </div>
+                    <div className="font-mono text-4xl font-black tabular-nums leading-none text-emerald-400 sm:text-5xl lg:text-6xl">
+                      {s0.latest != null ? <AnimatedNumber value={s0.latest} decimals={1} /> : '—'}
+                      <span className="ml-1.5 text-xl font-bold text-slate-400 sm:ml-2 sm:text-2xl">{cfg.unit}</span>
+                    </div>
+                  </div>
+
+                  {/* ΔT Badji (Glassmorphic chiroyli karta) */}
+                  {(() => {
+                    const ok = cfg.deltaT != null && Math.abs(cfg.deltaT - HEATING_DELTA_NORMA) <= HEATING_DELTA_MARGIN
+                    const dColor = cfg.deltaT == null ? '#94a3b8' : ok ? '#34D399' : '#FBBF24'
+                    return (
+                      <div className="flex flex-col items-end rounded-2xl border border-white/10 bg-white/5 px-3 py-1.5 backdrop-blur-md sm:px-4 sm:py-2">
+                        <div className="text-[11px] font-bold text-slate-300 sm:text-xs">
+                          ΔT (Farq)
+                        </div>
+                        <div className="font-mono text-2xl font-black tabular-nums leading-none sm:text-3xl lg:text-4xl" style={{ color: dColor }}>
+                          {cfg.deltaT != null ? <AnimatedNumber value={cfg.deltaT} decimals={1} /> : '—'}
+                          <span className="ml-1 text-sm font-bold text-slate-400 sm:text-base">{cfg.unit}</span>
+                        </div>
+                        <div className="mt-0.5 text-[10px] font-semibold text-slate-400">
+                          norma {HEATING_DELTA_NORMA}°C
+                        </div>
+                      </div>
+                    )
+                  })()}
+                </div>
+              ) : single ? (
                 <>
                   <div className="relative z-10 flex shrink-0 items-end justify-between gap-3 px-4 pt-1 sm:px-6">
                     <div className="font-mono text-4xl font-black tabular-nums leading-none sm:text-5xl lg:text-6xl" style={{ color: valueColor }}>
@@ -607,20 +641,6 @@ export default function DisplayPage() {
                       </div>
                     </div>
                   ))}
-                  {cfg.key === 'heating' &&
-                    (() => {
-                      const ok = cfg.deltaT != null && Math.abs(cfg.deltaT - HEATING_DELTA_NORMA) <= HEATING_DELTA_MARGIN
-                      const dColor = cfg.deltaT == null ? '#94a3b8' : ok ? '#34D399' : '#FBBF24'
-                      return (
-                        <div className="border-l border-white/10 pl-4 sm:pl-6">
-                          <div className="text-[11px] font-bold text-slate-300 sm:text-xs">ΔT · norma {HEATING_DELTA_NORMA}°C</div>
-                          <div className="font-mono text-3xl font-black tabular-nums leading-none sm:text-4xl" style={{ color: dColor }}>
-                            {cfg.deltaT != null ? <AnimatedNumber value={cfg.deltaT} decimals={1} /> : '—'}
-                            <span className="ml-1 text-base font-bold text-slate-400 sm:text-lg">{cfg.unit}</span>
-                          </div>
-                        </div>
-                      )
-                    })()}
                 </div>
               )}
 
