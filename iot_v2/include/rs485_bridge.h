@@ -138,10 +138,10 @@ static void rs485_bridge_lcd_show(const char* json) {
     // LCD'da FAQAT elektr ko'rsatiladi — suv/gaz/tuproq/ovoz/issiqlik va keyingi
     // sensorlar ekranni o'zgartirmaydi (server'ga baribir forward qilinadi).
     if (strcmp(ut, "electricity") != 0) return;
+    // Faqat kuchlanish + quvvat (tok ko'rsatilmaydi — quvvat muhimroq)
     char r0[17];
-    snprintf(r0, sizeof(r0), "%.0fV %.2fA %dW",
-             (float)(doc["voltage_l1"] | 0.0f), (float)(doc["current_l1"] | 0.0f),
-             (int)(doc["power_w"] | 0));
+    snprintf(r0, sizeof(r0), "%.0fV   %dW",
+             (float)(doc["voltage_l1"] | 0.0f), (int)(doc["power_w"] | 0));
     elec_lcd_row(0, r0);
     elec_lcd_row(1, "A1TECH  BRR");
 }
