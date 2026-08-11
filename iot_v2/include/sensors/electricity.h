@@ -207,19 +207,37 @@ static bool sensor_read(SensorData& d) {
         return true;
     }
 
-    dlms_get_scaled(OBIS_VL1,    &d.voltage_l1);
-    dlms_get_scaled(OBIS_IL1,    &d.current_l1);
-    dlms_get_scaled(OBIS_POWER,  &d.power_w);
+    bool ok1 = dlms_get_scaled(OBIS_VL1,    &d.voltage_l1);
+    wdt_feed();
+    bool ok2 = dlms_get_scaled(OBIS_IL1,    &d.current_l1);
+    wdt_feed();
+    bool ok3 = dlms_get_scaled(OBIS_POWER,  &d.power_w);
+    wdt_feed();
+
+    // Agar dastlabki asosiy ko'rsatkichlar o'qilmagan bo'lsa (hissoblagich javob bermasa),
+    // qolgan so'rovlarni o'tkazib yuborib tezda qaytamiz — watchdog reset va 36s qotish oldi olinadi.
+    if (!ok1 && !ok2 && !ok3) {
+        dlms_connected = false;
+        return false;
+    }
+
     dlms_get_scaled(OBIS_FREQ,   &d.frequency);
+    wdt_feed();
     dlms_get_scaled(OBIS_ENERGY, &d.energy_kwh);
+    wdt_feed();
     if (!isnan(d.energy_kwh)) d.energy_kwh /= 1000.0f;  // hisoblagich Wh qaytaradi (DLMS unit=30)
     dlms_get_scaled(OBIS_PF,     &d.pf);
+    wdt_feed();
 
     if (strcmp(d.sensor_type, "te73") == 0) {
         dlms_get_scaled(OBIS_VL2, &d.voltage_l2);
+        wdt_feed();
         dlms_get_scaled(OBIS_VL3, &d.voltage_l3);
+        wdt_feed();
         dlms_get_scaled(OBIS_IL2, &d.current_l2);
+        wdt_feed();
         dlms_get_scaled(OBIS_IL3, &d.current_l3);
+        wdt_feed();
     }
 
     // Fizik oraliq validatsiyasi

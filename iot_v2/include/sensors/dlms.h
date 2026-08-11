@@ -96,7 +96,7 @@ static void dlms_hexdump(const char* label, const uint8_t* d, size_t n) {
     LOG_PRINTLN(n ? "" : "(bo'sh — javob yo'q)");
 }
 
-static bool dlms_txrx(uint32_t timeout_ms = 3000) {
+static bool dlms_txrx(uint32_t timeout_ms = 800) {
     while (Serial2.available()) Serial2.read();
     dlms_rx_len = 0;
 
@@ -111,6 +111,7 @@ static bool dlms_txrx(uint32_t timeout_ms = 3000) {
 
     uint32_t t = millis();
     while (millis() - t < timeout_ms) {
+        wdt_feed();
         while (Serial2.available() && dlms_rx_len < sizeof(dlms_rx))
             dlms_rx[dlms_rx_len++] = Serial2.read();
         if (dlms_rx_len > 4 && dlms_rx[dlms_rx_len-1] == 0x7E) break;
