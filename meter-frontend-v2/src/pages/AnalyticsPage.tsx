@@ -329,7 +329,11 @@ export default function AnalyticsPage() {
         "O'lchovlar soni",
       ]
       rows = hourlyChartData.map((row) => {
-        const energyRow = formattedData.find((e) => Math.abs(e.timestamp - row.bucket_ts) < 1800)
+        // Har soatlik qatorni O'Z ICHIGA olgan energiya bucket'iga moslaymiz
+        // (formattedData vaqt bo'yicha o'sib borgani uchun — <= dan oxirgisi).
+        // Avvalgi qat'iy 30-daqiqa oynasi day/month granularity'да hech qачон
+        // mos kelmay energiya ustunini 0.00 qilib chiqarardi (audit).
+        const energyRow = formattedData.filter((e) => e.timestamp <= row.bucket_ts).at(-1)
         return [
           row.bucket_ts,
           `"${row.label}"`,
