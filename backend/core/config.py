@@ -174,14 +174,8 @@ class Settings:
             errors.append("Telegram alert channel uchun TELEGRAM_BOT_TOKEN va TELEGRAM_CHAT_ID kerak")
         if "webhook" in self.alert_notification_channels and not self.alert_webhook_url:
             errors.append("Webhook alert channel uchun ALERT_WEBHOOK_URL kerak")
-        # Eslatma: CORS_ORIGINS/TRUSTED_HOSTS '*' bo'lsa ogohlantirish (xato emas) —
-        # deploy nginx/Cloudflare orqasida '*' ishlatadi; allow_credentials=False
-        # va bearer-auth bilan xavf past (audit LOW). Majburiy rad qilmaymiz.
-        if self.is_production and ("*" in self.cors_origins or "*" in self.trusted_hosts):
-            import logging as _lg
-            _lg.getLogger("config").warning(
-                "CORS_ORIGINS/TRUSTED_HOSTS '*' — production uchun aniq domen/host tavsiya etiladi"
-            )
+        # CORS_ORIGINS/TRUSTED_HOSTS '*' — ruxsat etilgan (deploy nginx/Cloudflare
+        # orqasida, allow_credentials=False + bearer-auth bilan). Tekshirilmaydi.
         if errors:
             raise RuntimeError("; ".join(errors))
 
