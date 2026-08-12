@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
+  Area,
+  AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
@@ -131,7 +133,7 @@ const HEATING_DELTA_NORMA = 20
 // DIZAYN VERSIYALARI TIZIMI (V1, V2, V3 THEME SYSTEM)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-export type DisplayThemeVersion = 'v1' | 'v2' | 'v3'
+export type DisplayThemeVersion = 'v1' | 'v2' | 'v3' | 'v4' | 'v5'
 
 interface DisplayThemeConfig {
   id: DisplayThemeVersion
@@ -252,6 +254,76 @@ const DISPLAY_THEMES: Record<DisplayThemeVersion, DisplayThemeConfig> = {
       heating: 'rgba(34,211,238,0.35)',
     },
     clockBg: 'border-cyan-500/40 bg-cyan-950/40 backdrop-blur-md shadow-[0_0_15px_rgba(6,182,212,0.3)]',
+    clockText: 'text-cyan-300',
+  },
+  v4: {
+    id: 'v4',
+    name: 'Split Horizon Flip (V4 Top-Chart Area)',
+    shortLabel: 'V4 Inverted',
+    description: "Grafik yuqori qismida gradient sohada, real-vaqt ko'rsatkichi esa pastki qismda teskari joylashuvda",
+    pageBg: 'from-slate-950 via-purple-950/40 to-slate-900',
+    headerBg: 'bg-slate-900/80 backdrop-blur-2xl',
+    headerBorder: 'border-purple-500/30 shadow-[0_0_30px_rgba(168,85,247,0.15)]',
+    cardBg: {
+      electricity: 'from-purple-900/20 via-slate-900/90 to-slate-950',
+      water: 'from-blue-900/20 via-slate-900/90 to-slate-950',
+      gas: 'from-purple-900/20 via-slate-900/90 to-slate-950',
+      soil: 'from-emerald-900/20 via-slate-900/90 to-slate-950',
+      sound: 'from-fuchsia-900/20 via-slate-900/90 to-slate-950',
+      heating: 'from-cyan-900/20 via-slate-900/90 to-slate-950',
+    },
+    cardBorder: {
+      electricity: 'border-purple-500/40 shadow-[0_0_25px_rgba(168,85,247,0.15)] hover:border-purple-300',
+      water: 'border-blue-500/40 shadow-[0_0_25px_rgba(59,130,246,0.15)] hover:border-blue-300',
+      gas: 'border-purple-400/40 shadow-[0_0_25px_rgba(192,132,252,0.15)] hover:border-purple-300',
+      soil: 'border-emerald-500/40 shadow-[0_0_25px_rgba(16,185,129,0.15)] hover:border-emerald-300',
+      sound: 'border-fuchsia-500/40 shadow-[0_0_25px_rgba(217,70,239,0.15)] hover:border-fuchsia-300',
+      heating: 'border-cyan-500/40 shadow-[0_0_25px_rgba(6,182,212,0.15)] hover:border-cyan-300',
+    },
+    cardGlow: {
+      electricity: 'rgba(168,85,247,0.3)',
+      water: 'rgba(59,130,246,0.3)',
+      gas: 'rgba(192,132,252,0.3)',
+      soil: 'rgba(16,185,129,0.3)',
+      sound: 'rgba(217,70,239,0.3)',
+      heating: 'rgba(6,182,212,0.3)',
+    },
+    clockBg: 'border-purple-500/30 bg-purple-950/40 backdrop-blur-md shadow-[0_0_15px_rgba(168,85,247,0.25)]',
+    clockText: 'text-purple-300',
+  },
+  v5: {
+    id: 'v5',
+    name: 'Dual Column Side-by-Side (V5 Split Dual)',
+    shortLabel: 'V5 Split',
+    description: "Yonma-yon 2 ustunli joylashuv: Chap tarafda katta raqam va indikatorlar, o'ng tarafda esa vertikal 24-soatlik grafik",
+    pageBg: 'from-slate-950 via-cyan-950/40 to-slate-900',
+    headerBg: 'bg-slate-900/85 backdrop-blur-2xl',
+    headerBorder: 'border-cyan-500/40 shadow-[0_0_30px_rgba(6,182,212,0.2)]',
+    cardBg: {
+      electricity: 'from-cyan-950/30 via-slate-900/90 to-slate-950',
+      water: 'from-teal-950/30 via-slate-900/90 to-slate-950',
+      gas: 'from-cyan-950/30 via-slate-900/90 to-slate-950',
+      soil: 'from-emerald-950/30 via-slate-900/90 to-slate-950',
+      sound: 'from-indigo-950/30 via-slate-900/90 to-slate-950',
+      heating: 'from-sky-950/30 via-slate-900/90 to-slate-950',
+    },
+    cardBorder: {
+      electricity: 'border-cyan-400/40 shadow-[0_0_20px_rgba(34,211,238,0.15)] hover:border-cyan-300',
+      water: 'border-teal-400/40 shadow-[0_0_20px_rgba(45,212,191,0.15)] hover:border-teal-300',
+      gas: 'border-cyan-400/40 shadow-[0_0_20px_rgba(34,211,238,0.15)] hover:border-cyan-300',
+      soil: 'border-emerald-400/40 shadow-[0_0_20px_rgba(52,211,153,0.15)] hover:border-emerald-300',
+      sound: 'border-indigo-400/40 shadow-[0_0_20px_rgba(129,140,248,0.15)] hover:border-indigo-300',
+      heating: 'border-sky-400/40 shadow-[0_0_20px_rgba(56,189,248,0.15)] hover:border-sky-300',
+    },
+    cardGlow: {
+      electricity: 'rgba(34,211,238,0.3)',
+      water: 'rgba(45,212,191,0.3)',
+      gas: 'rgba(34,211,238,0.3)',
+      soil: 'rgba(52,211,153,0.3)',
+      sound: 'rgba(129,140,248,0.3)',
+      heating: 'rgba(56,189,248,0.3)',
+    },
+    clockBg: 'border-cyan-500/30 bg-cyan-950/40 backdrop-blur-md shadow-[0_0_15px_rgba(34,211,238,0.25)]',
     clockText: 'text-cyan-300',
   },
 }
@@ -547,9 +619,9 @@ export default function DisplayPage() {
             </select>
           )}
 
-          {/* Dizayn Versiyalari (Theme Switcher V1, V2, V3) */}
+          {/* Dizayn Versiyalari (Theme Switcher V1, V2, V3, V4, V5) */}
           <div className="flex items-center rounded-xl border border-white/10 bg-white/5 p-1 backdrop-blur-md">
-            {(['v1', 'v2', 'v3'] as DisplayThemeVersion[]).map((v) => {
+            {(['v1', 'v2', 'v3', 'v4', 'v5'] as DisplayThemeVersion[]).map((v) => {
               const t = DISPLAY_THEMES[v]
               const isActive = themeVersion === v
               return (
@@ -701,7 +773,7 @@ export default function DisplayPage() {
                 style={{ background: `radial-gradient(circle 280px at 50% 10%, ${cardGlowStyle}, transparent 80%)` }}
               />
 
-              {/* Sarlavha */}
+              {/* Card sarlavhasi (Barcha versiyalarda yuqorida) */}
               <div className="relative z-10 flex shrink-0 items-center justify-between gap-3 px-4 pb-1 pt-4 sm:px-6 sm:pt-5">
                 <div className="flex items-center gap-3">
                   <div
@@ -744,197 +816,304 @@ export default function DisplayPage() {
                 )}
               </div>
 
-              {/* Real-Vaqt Ko'rsatkichi (Katta Neon 3D Raqam) */}
-              <div className="relative z-10 flex shrink-0 items-baseline justify-between px-4 py-2 sm:px-6 sm:py-3">
-                {single ? (
-                  <div className="flex items-baseline gap-2">
-                    <div className="flex items-baseline gap-2">
-                      <div
-                        className="font-mono text-4xl font-black tracking-tight sm:text-5xl lg:text-6xl"
-                        style={{
-                          color: valueColor,
-                          textShadow: `0 0 35px ${valueColor}60, 0 4px 12px rgba(0,0,0,0.9)`,
-                        }}
-                      >
-                        {s0.latest != null ? (
-                          <AnimatedNumber value={s0.latest} decimals={isElec || cfg.key === 'soil' || cfg.key === 'sound' ? 1 : 2} />
-                        ) : (
-                          '—'
-                        )}
-                      </div>
-                      <span className="text-lg font-bold text-slate-300 sm:text-2xl">{cfg.unit}</span>
+              {/* KPI Render Komponenti */}
+              {(() => {
+                const renderKPI = () => (
+                  <div className="relative z-10 flex shrink-0 items-baseline justify-between px-4 py-2 sm:px-6 sm:py-3">
+                    {single ? (
+                      <div className="flex items-baseline gap-2">
+                        <div className="flex items-baseline gap-2">
+                          <div
+                            className="font-mono text-4xl font-black tracking-tight sm:text-5xl lg:text-6xl"
+                            style={{
+                              color: valueColor,
+                              textShadow: `0 0 35px ${valueColor}60, 0 4px 12px rgba(0,0,0,0.9)`,
+                            }}
+                          >
+                            {s0.latest != null ? (
+                              <AnimatedNumber value={s0.latest} decimals={isElec || cfg.key === 'soil' || cfg.key === 'sound' ? 1 : 2} />
+                            ) : (
+                              '—'
+                            )}
+                          </div>
+                          <span className="text-lg font-bold text-slate-300 sm:text-2xl">{cfg.unit}</span>
 
-                      {cfg.key === 'soil' && (
-                        <div className="ml-auto flex items-center gap-1.5 rounded-xl border border-emerald-500/40 bg-emerald-500/15 px-2.5 py-1 backdrop-blur shadow-[0_0_15px_rgba(16,185,129,0.2)]">
-                          <Wind className="h-4 w-4 text-emerald-400 animate-pulse" />
-                          <div className="flex flex-col">
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-300/80">Havo sifati</span>
-                            <span className="text-xs font-black text-emerald-200">
-                              {data?.latest?.soil?.air_quality != null
-                                ? `${Math.max(0, 100 - data.latest.soil.air_quality).toFixed(0)}% (${data.latest.soil.air_quality <= 30 ? "A'lo" : data.latest.soil.air_quality <= 60 ? "Me'yorda" : "Ifloslangan"})`
-                                : "Toza (A'lo)"}
+                          {cfg.key === 'soil' && (
+                            <div className="ml-auto flex items-center gap-1.5 rounded-xl border border-emerald-500/40 bg-emerald-500/15 px-2.5 py-1 backdrop-blur shadow-[0_0_15px_rgba(16,185,129,0.2)]">
+                              <Wind className="h-4 w-4 text-emerald-400 animate-pulse" />
+                              <div className="flex flex-col">
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-300/80">Havo sifati</span>
+                                <span className="text-xs font-black text-emerald-200">
+                                  {data?.latest?.soil?.air_quality != null
+                                    ? `${Math.max(0, 100 - data.latest.soil.air_quality).toFixed(0)}% (${data.latest.soil.air_quality <= 30 ? "A'lo" : data.latest.soil.air_quality <= 60 ? "Me'yorda" : "Ifloslangan"})`
+                                    : "Toza (A'lo)"}
+                                </span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      /* Qozonxona (Kirish & Chiqish & ΔT farqi) */
+                      <div className="flex w-full items-center justify-between gap-2">
+                        <div className="flex items-baseline gap-1.5">
+                          <span className="text-xs font-bold uppercase text-slate-400">Kirish:</span>
+                          <span className="font-mono text-2xl font-black text-cyan-400 sm:text-3xl lg:text-4xl">
+                            {cfg.series[0].latest != null ? (
+                              <AnimatedNumber value={cfg.series[0].latest} decimals={1} />
+                            ) : (
+                              '—'
+                            )}
+                          </span>
+                          <span className="text-xs font-bold text-slate-400 sm:text-sm">°C</span>
+                        </div>
+
+                        <div className="flex items-baseline gap-1.5">
+                          <span className="text-xs font-bold uppercase text-slate-400">Chiqish:</span>
+                          <span className="font-mono text-2xl font-black text-sky-300 sm:text-3xl lg:text-4xl">
+                            {cfg.series[1]?.latest != null ? (
+                              <AnimatedNumber value={cfg.series[1].latest} decimals={1} />
+                            ) : (
+                              '—'
+                            )}
+                          </span>
+                          <span className="text-xs font-bold text-slate-400 sm:text-sm">°C</span>
+                        </div>
+
+                        {/* Kirish va Chiqish farqi ΔT badge */}
+                        {cfg.series[0].latest != null && cfg.series[1]?.latest != null && (
+                          <div className="hidden flex-col items-end rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-right backdrop-blur sm:flex">
+                            <span className="text-[10px] font-bold uppercase text-cyan-300">ΔT Farq</span>
+                            <span className="font-mono text-sm font-black text-cyan-200">
+                              {Math.abs(cfg.series[0].latest - cfg.series[1].latest).toFixed(1)}°C
                             </span>
                           </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  /* Qozonxona (Kirish & Chiqish & ΔT farqi) */
-                  <div className="flex w-full items-center justify-between gap-2">
-                    <div className="flex items-baseline gap-1.5">
-                      <span className="text-xs font-bold uppercase text-slate-400">Kirish:</span>
-                      <span className="font-mono text-2xl font-black text-cyan-400 sm:text-3xl lg:text-4xl">
-                        {cfg.series[0].latest != null ? (
-                          <AnimatedNumber value={cfg.series[0].latest} decimals={1} />
-                        ) : (
-                          '—'
                         )}
-                      </span>
-                      <span className="text-xs font-bold text-slate-400 sm:text-sm">°C</span>
-                    </div>
+                      </div>
+                    )}
 
-                    <div className="flex items-baseline gap-1.5">
-                      <span className="text-xs font-bold uppercase text-slate-400">Chiqish:</span>
-                      <span className="font-mono text-2xl font-black text-sky-300 sm:text-3xl lg:text-4xl">
-                        {cfg.series[1]?.latest != null ? (
-                          <AnimatedNumber value={cfg.series[1].latest} decimals={1} />
-                        ) : (
-                          '—'
-                        )}
-                      </span>
-                      <span className="text-xs font-bold text-slate-400 sm:text-sm">°C</span>
-                    </div>
-
-                    {/* Kirish va Chiqish farqi ΔT badge */}
-                    {cfg.series[0].latest != null && cfg.series[1]?.latest != null && (
-                      <div className="hidden flex-col items-end rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-right backdrop-blur sm:flex">
-                        <span className="text-[10px] font-bold uppercase text-cyan-300">ΔT Farq</span>
-                        <span className="font-mono text-sm font-black text-cyan-200">
-                          {Math.abs(cfg.series[0].latest - cfg.series[1].latest).toFixed(1)}°C
+                    {/* Trend ko'rsatkichi */}
+                    {single && TrendIcon && s0.trend != null && (
+                      <div
+                        className={`flex items-center gap-1 text-xs font-bold sm:text-sm ${
+                          s0.trend > 0 ? 'text-emerald-400' : 'text-rose-400'
+                        }`}
+                      >
+                        <TrendIcon className="h-4 w-4" />
+                        <span>
+                          {s0.trend > 0 ? '+' : ''}
+                          {s0.trend.toFixed(isElec || cfg.key === 'soil' || cfg.key === 'sound' ? 1 : 2)}
                         </span>
                       </div>
                     )}
                   </div>
-                )}
+                )
 
-                {/* Trend ko'rsatkichi */}
-                {single && TrendIcon && s0.trend != null && (
-                  <div
-                    className={`flex items-center gap-1 text-xs font-bold sm:text-sm ${
-                      s0.trend > 0 ? 'text-emerald-400' : 'text-rose-400'
-                    }`}
-                  >
-                    <TrendIcon className="h-4 w-4" />
-                    <span>
-                      {s0.trend > 0 ? '+' : ''}
-                      {s0.trend.toFixed(isElec || cfg.key === 'soil' || cfg.key === 'sound' ? 1 : 2)}
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              {/* Soatlik 24 Soatlik Grafik */}
-              <div className="relative z-10 flex min-h-[160px] flex-1 flex-col justify-end px-2 pb-3 sm:px-4 sm:pb-4">
-                <div className="mb-1.5 flex items-center justify-between px-2 text-[11px] font-bold tracking-wider text-slate-400">
-                  <span>Oxirgi 24 soatlik dinamika</span>
-                  <span>{cfg.points.length} ta o'lchov</span>
-                </div>
-
-                <div className="h-32 w-full sm:h-36 lg:h-40">
+                const renderChart = (chartType: 'bar' | 'area' = 'bar') => (
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={isElec ? elecData : cfg.points}
-                      margin={{ top: 12, right: 8, left: -20, bottom: 0 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
-                      <XAxis
-                        dataKey="label"
-                        tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 600 }}
-                        axisLine={{ stroke: 'rgba(255,255,255,0.1)' }}
-                        tickLine={false}
-                        interval="preserveStartEnd"
-                        minTickGap={24}
-                      />
-                      <YAxis
-                        domain={
-                          isElec
-                            ? elecDomain
-                            : isWater
-                            ? waterDomain
-                            : isGas
-                            ? gasDomain
-                            : cfg.key === 'soil' || cfg.key === 'sound'
-                            ? [0, 100]
-                            : ['auto', 'auto']
-                        }
-                        tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 600 }}
-                        axisLine={false}
-                        tickLine={false}
-                        tickFormatter={(v) => (isElec ? `${ELEC_NOMINAL + v}` : String(v))}
-                      />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: '#0f172a',
-                          borderColor: 'rgba(255,255,255,0.15)',
-                          borderRadius: '12px',
-                          color: '#f8fafc',
-                          boxShadow: '0 20px 25px -5px rgba(0,0,0,0.5)',
-                        }}
-                        formatter={(val: any, name: any) => {
-                          if (val == null) return ['—', name]
-                          const num = Number(val)
-                          if (isElec) return [`${(ELEC_NOMINAL + num).toFixed(1)} V`, 'Kuchlanish']
-                          if (cfg.key === 'heating') {
-                            const lbl = name === 'v0' ? 'Kirish' : 'Chiqish'
-                            return [`${num.toFixed(1)} °C`, lbl]
+                    {chartType === 'area' ? (
+                      <AreaChart
+                        data={isElec ? elecData : cfg.points}
+                        margin={{ top: 12, right: 8, left: -20, bottom: 0 }}
+                      >
+                        <defs>
+                          <linearGradient id={`grad-${cfg.key}`} x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor={cfg.color} stopOpacity={0.6} />
+                            <stop offset="95%" stopColor={cfg.color} stopOpacity={0.0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
+                        <XAxis
+                          dataKey="label"
+                          tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 600 }}
+                          axisLine={{ stroke: 'rgba(255,255,255,0.1)' }}
+                          tickLine={false}
+                          interval="preserveStartEnd"
+                          minTickGap={24}
+                        />
+                        <YAxis
+                          domain={
+                            isElec
+                              ? elecDomain
+                              : isWater
+                              ? waterDomain
+                              : isGas
+                              ? gasDomain
+                              : cfg.key === 'soil' || cfg.key === 'sound'
+                              ? [0, 100]
+                              : ['auto', 'auto']
                           }
-                          return [`${num.toFixed(isWater || isGas ? 2 : 1)} ${cfg.unit}`, cfg.label]
-                        }}
-                      />
-
-                      {/* Elektr: 220V Markaziy Norma Chizig'i (Pastga va Tepaga o'sadi) */}
-                      {isElec && <ReferenceLine y={0} stroke="#22C55E" strokeDasharray="4 4" strokeWidth={1.5} />}
-
-                      {/* Suv: 2.7 bar Norma Chizig'i */}
-                      {isWater && <ReferenceLine y={WATER_NOMINAL} stroke="#22C55E" strokeDasharray="4 4" strokeWidth={1.5} />}
-
-                      {/* Gaz: 0.27 bar Norma Chizig'i */}
-                      {isGas && <ReferenceLine y={GAS_NOMINAL} stroke="#22C55E" strokeDasharray="4 4" strokeWidth={1.5} />}
-
-                      {/* Bar rendering */}
-                      {cfg.key === 'heating' ? (
-                        <>
-                          <Bar dataKey="v0" name="v0" fill="#06B6D4" radius={[4, 4, 0, 0]} maxBarSize={10} />
-                          <Bar dataKey="v1" name="v1" fill="#38BDF8" radius={[4, 4, 0, 0]} maxBarSize={10} />
-                        </>
-                      ) : (
-                        <Bar
-                          dataKey={isElec ? 'dev' : 'v0'}
-                          radius={isElec ? [4, 4, 4, 4] : [4, 4, 0, 0]}
-                          maxBarSize={isElec ? 14 : 18}
-                        >
-                          {(isElec ? elecData : cfg.points).map((entry: any, index: number) => {
-                            let cellColor = cfg.color
-                            if (isElec) {
-                              const absVal = entry.v0 != null ? entry.v0 : ELEC_NOMINAL
-                              cellColor = voltageColor(absVal)
-                            } else if (isWater) {
-                              cellColor = getWaterColor(entry.v0).color
-                            } else if (isGas) {
-                              cellColor = getGasColor(entry.v0).color
-                            } else if (cfg.key === 'soil') {
-                              const st = getSoilHumidityStatus(entry.v0)
-                              cellColor = st ? st.color : cfg.color
+                          tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 600 }}
+                          axisLine={false}
+                          tickLine={false}
+                          tickFormatter={(v) => (isElec ? `${ELEC_NOMINAL + v}` : String(v))}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: '#0f172a',
+                            borderColor: 'rgba(255,255,255,0.15)',
+                            borderRadius: '12px',
+                            color: '#f8fafc',
+                            boxShadow: '0 20px 25px -5px rgba(0,0,0,0.5)',
+                          }}
+                          formatter={(val: any, name: any) => {
+                            if (val == null) return ['—', name]
+                            const num = Number(val)
+                            if (isElec) return [`${(ELEC_NOMINAL + num).toFixed(1)} V`, 'Kuchlanish']
+                            if (cfg.key === 'heating') {
+                              const lbl = name === 'v0' ? 'Kirish' : 'Chiqish'
+                              return [`${num.toFixed(1)} °C`, lbl]
                             }
-                            return <Cell key={`cell-${index}`} fill={cellColor} opacity={0.9} />
-                          })}
-                        </Bar>
-                      )}
-                    </BarChart>
+                            return [`${num.toFixed(isWater || isGas ? 2 : 1)} ${cfg.unit}`, cfg.label]
+                          }}
+                        />
+                        {isElec && <ReferenceLine y={0} stroke="#22C55E" strokeDasharray="4 4" strokeWidth={1.5} />}
+                        {isWater && <ReferenceLine y={WATER_NOMINAL} stroke="#22C55E" strokeDasharray="4 4" strokeWidth={1.5} />}
+                        {isGas && <ReferenceLine y={GAS_NOMINAL} stroke="#22C55E" strokeDasharray="4 4" strokeWidth={1.5} />}
+                        <Area
+                          type="monotone"
+                          dataKey={isElec ? 'dev' : 'v0'}
+                          stroke={cfg.color}
+                          strokeWidth={2.5}
+                          fillOpacity={1}
+                          fill={`url(#grad-${cfg.key})`}
+                        />
+                      </AreaChart>
+                    ) : (
+                      <BarChart
+                        data={isElec ? elecData : cfg.points}
+                        margin={{ top: 12, right: 8, left: -20, bottom: 0 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
+                        <XAxis
+                          dataKey="label"
+                          tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 600 }}
+                          axisLine={{ stroke: 'rgba(255,255,255,0.1)' }}
+                          tickLine={false}
+                          interval="preserveStartEnd"
+                          minTickGap={24}
+                        />
+                        <YAxis
+                          domain={
+                            isElec
+                              ? elecDomain
+                              : isWater
+                              ? waterDomain
+                              : isGas
+                              ? gasDomain
+                              : cfg.key === 'soil' || cfg.key === 'sound'
+                              ? [0, 100]
+                              : ['auto', 'auto']
+                          }
+                          tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 600 }}
+                          axisLine={false}
+                          tickLine={false}
+                          tickFormatter={(v) => (isElec ? `${ELEC_NOMINAL + v}` : String(v))}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: '#0f172a',
+                            borderColor: 'rgba(255,255,255,0.15)',
+                            borderRadius: '12px',
+                            color: '#f8fafc',
+                            boxShadow: '0 20px 25px -5px rgba(0,0,0,0.5)',
+                          }}
+                          formatter={(val: any, name: any) => {
+                            if (val == null) return ['—', name]
+                            const num = Number(val)
+                            if (isElec) return [`${(ELEC_NOMINAL + num).toFixed(1)} V`, 'Kuchlanish']
+                            if (cfg.key === 'heating') {
+                              const lbl = name === 'v0' ? 'Kirish' : 'Chiqish'
+                              return [`${num.toFixed(1)} °C`, lbl]
+                            }
+                            return [`${num.toFixed(isWater || isGas ? 2 : 1)} ${cfg.unit}`, cfg.label]
+                          }}
+                        />
+                        {isElec && <ReferenceLine y={0} stroke="#22C55E" strokeDasharray="4 4" strokeWidth={1.5} />}
+                        {isWater && <ReferenceLine y={WATER_NOMINAL} stroke="#22C55E" strokeDasharray="4 4" strokeWidth={1.5} />}
+                        {isGas && <ReferenceLine y={GAS_NOMINAL} stroke="#22C55E" strokeDasharray="4 4" strokeWidth={1.5} />}
+                        {cfg.key === 'heating' ? (
+                          <>
+                            <Bar dataKey="v0" name="v0" fill="#06B6D4" radius={[4, 4, 0, 0]} maxBarSize={10} />
+                            <Bar dataKey="v1" name="v1" fill="#38BDF8" radius={[4, 4, 0, 0]} maxBarSize={10} />
+                          </>
+                        ) : (
+                          <Bar
+                            dataKey={isElec ? 'dev' : 'v0'}
+                            radius={isElec ? [4, 4, 4, 4] : [4, 4, 0, 0]}
+                            maxBarSize={isElec ? 14 : 18}
+                          >
+                            {(isElec ? elecData : cfg.points).map((entry: any, index: number) => {
+                              let cellColor = cfg.color
+                              if (isElec) {
+                                const absVal = entry.v0 != null ? entry.v0 : ELEC_NOMINAL
+                                cellColor = voltageColor(absVal)
+                              } else if (isWater) {
+                                cellColor = getWaterColor(entry.v0).color
+                              } else if (isGas) {
+                                cellColor = getGasColor(entry.v0).color
+                              } else if (cfg.key === 'soil') {
+                                const st = getSoilHumidityStatus(entry.v0)
+                                cellColor = st ? st.color : cfg.color
+                              }
+                              return <Cell key={`cell-${index}`} fill={cellColor} opacity={0.9} />
+                            })}
+                          </Bar>
+                        )}
+                      </BarChart>
+                    )}
                   </ResponsiveContainer>
-                </div>
-              </div>
+                )
+
+                if (themeVersion === 'v4') {
+                  // V4: INVERTED LAYOUT (Grafik TEPADA, Raqam PASTDA!)
+                  return (
+                    <>
+                      <div className="relative z-10 flex min-h-[150px] flex-1 flex-col justify-end px-2 pt-2 sm:px-4">
+                        <div className="mb-1 flex items-center justify-between px-2 text-[10px] font-bold uppercase tracking-wider text-purple-300/80">
+                          <span>24 Soatlik Dinamika (Gradient Area)</span>
+                          <span>{cfg.points.length} ta nuqta</span>
+                        </div>
+                        <div className="h-32 w-full sm:h-36 lg:h-40">{renderChart('area')}</div>
+                      </div>
+                      <div className="relative z-10 border-t border-purple-500/20 bg-purple-950/20 backdrop-blur-sm">
+                        {renderKPI()}
+                      </div>
+                    </>
+                  )
+                }
+
+                if (themeVersion === 'v5') {
+                  // V5: SPLIT DUAL-COLUMN LAYOUT (Chapda Raqam, O'ngda Grafik!)
+                  return (
+                    <div className="relative z-10 flex flex-1 flex-col gap-2 p-3 sm:flex-row sm:items-center sm:p-4">
+                      <div className="flex flex-1 flex-col justify-center sm:w-1/2">
+                        {renderKPI()}
+                      </div>
+                      <div className="flex h-36 flex-1 flex-col justify-end rounded-2xl border border-cyan-500/20 bg-cyan-950/20 p-2 backdrop-blur sm:h-full sm:w-1/2">
+                        <div className="mb-1 flex items-center justify-between px-2 text-[10px] font-bold text-cyan-300/80">
+                          <span>Dinamika</span>
+                        </div>
+                        <div className="h-28 w-full sm:h-32 lg:h-36">{renderChart('area')}</div>
+                      </div>
+                    </div>
+                  )
+                }
+
+                // V1, V2, V3: STANDARD LAYOUT (Raqam Tepada, BarChart Pastda)
+                return (
+                  <>
+                    {renderKPI()}
+                    <div className="relative z-10 flex min-h-[160px] flex-1 flex-col justify-end px-2 pb-3 sm:px-4 sm:pb-4">
+                      <div className="mb-1.5 flex items-center justify-between px-2 text-[11px] font-bold tracking-wider text-slate-400">
+                        <span>Oxirgi 24 soatlik dinamika</span>
+                        <span>{cfg.points.length} ta o'lchov</span>
+                      </div>
+                      <div className="h-32 w-full sm:h-36 lg:h-40">{renderChart('bar')}</div>
+                    </div>
+                  </>
+                )
+              })()}
             </div>
           )
         })}
