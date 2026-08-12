@@ -111,7 +111,7 @@ function fakePoints(base: number, amp: number): { label: string; value: number }
 
 // Elektr va suv/gaz uchun nominal qiymatlar
 const ELEC_NOMINAL = 220
-const WATER_NOMINAL = 2.7
+const WATER_NOMINAL = 2.25
 const GAS_NOMINAL = 0.27
 
 function voltageColor(v: number | null): string {
@@ -197,8 +197,8 @@ const CHARTS = [
     color: '#10B981',
     glow: 'rgba(16,185,129,0.5)',
     bg: 'from-emerald-500/20 via-slate-900/80 to-slate-950',
-    nominal: 80 as number | null,
-    // Haqiqiy havo-sifati sensori yo'q — normal ~80% namunaviy qiymat ko'rsatamiz
+    nominal: 75 as number | null,
+    // Haqiqiy havo-sifati sensori yo'q — normal namunaviy qiymat ko'rsatamiz
     fake: { base: 80, amp: 3 } as { base: number; amp: number } | null,
   },
   {
