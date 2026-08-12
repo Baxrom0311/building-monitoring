@@ -1,14 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
+  Area,
+  AreaChart,
   Bar,
   BarChart,
   Cell,
+  Line,
+  LineChart,
   ReferenceLine,
   ResponsiveContainer,
   XAxis,
   YAxis,
 } from 'recharts'
 import {
+  BarChart3,
   Building2,
   Droplets,
   Flame,
@@ -17,10 +22,12 @@ import {
   Droplet,
   RefreshCw,
   RotateCw,
+  Spline,
   Thermometer,
   TrendingDown,
   TrendingUp,
   Volume2,
+  Waves,
   Wind,
   Zap,
 } from 'lucide-react'
@@ -265,6 +272,29 @@ export default function DisplayPage() {
       }
       return next
     })
+  // Grafik turi (Ustun / Maydon / Chiziq) — foydalanuvchi tanlashi uchun, saqlanadi
+  const [chartStyle, setChartStyle] = useState<'bar' | 'area' | 'line'>(() => {
+    try {
+      const s = localStorage.getItem('display_chart_style')
+      return s === 'area' || s === 'line' ? s : 'bar'
+    } catch {
+      return 'bar'
+    }
+  })
+  const cycleChartStyle = () =>
+    setChartStyle((c) => {
+      const order = ['bar', 'area', 'line'] as const
+      const next = order[(order.indexOf(c) + 1) % order.length]
+      try {
+        localStorage.setItem('display_chart_style', next)
+      } catch {
+        /* ignore */
+      }
+      return next
+    })
+  const chartStyleLabel = chartStyle === 'bar' ? 'Ustun' : chartStyle === 'area' ? 'Maydon' : 'Chiziq'
+  const ChartStyleIcon = chartStyle === 'bar' ? BarChart3 : chartStyle === 'area' ? Waves : Spline
+
   // Binolar ro'yxatini ref'да saqlaymiz — timer har 30s poll'da qayta qurilmasin.
   const buildingsRef = useRef<{ id: number; name: string }[]>([])
 
@@ -458,6 +488,14 @@ export default function DisplayPage() {
               </button>
             )}
             <button
+              onClick={cycleChartStyle}
+              title={`Grafik turi: ${chartStyleLabel} (almashtirish uchun bosing)`}
+              className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
+            >
+              <ChartStyleIcon className="h-4 w-4 text-cyan-400" />
+              <span className="hidden sm:inline">{chartStyleLabel}</span>
+            </button>
+            <button
               onClick={fetchData}
               title="Ma'lumotlarni yangilash"
               className="rounded-lg p-1 text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
@@ -566,6 +604,38 @@ export default function DisplayPage() {
 
           // Qozonxona uchun ulkan raqam = ΔT, rangi status bilan; qolganlar valueColor
           const heroColor = cfg.key === 'heating' ? status.color : valueColor
+
+          // ── Chart uchun umumiy: data, Y-domen, dataKey ──
+          const chartData = isElec ? elecData : cfg.points
+          const mainKey = isElec ? 'dev' : 'v0'
+          const yDomain: any = isElec
+            ? elecDomain
+            : isWater
+            ? waterDomain
+            : isGas
+            ? gasDomain
+            : cfg.key === 'soil' || cfg.key === 'sound' || cfg.key === 'air_quality'
+            ? [0, 100]
+            : ['auto', 'auto']
+
+          // ── Norma (me'yor) chizig'i — QALIN, YORQIN, ko'zga tashlanadigan ──
+          const NORMA = '#34D399'
+          const normaLines: any[] = []
+          const pushNorma = (y: number, txt: string) =>
+            normaLines.push(
+              <ReferenceLine
+                key="norma"
+                y={y}
+                stroke={NORMA}
+                strokeWidth={2.5}
+                strokeDasharray="7 5"
+                ifOverflow="extendDomain"
+                label={{ value: txt, position: 'insideTopRight', fill: NORMA, fontSize: 11, fontWeight: 800 }}
+              />,
+            )
+          if (isElec) pushNorma(0, `norma ${ELEC_NOMINAL} ${cfg.unit}`)
+          else if (cfg.nominal != null)
+            pushNorma(cfg.nominal, cfg.unit === '%' ? `norma ${cfg.nominal}%` : `norma ${cfg.nominal} ${cfg.unit}`)
 
           return (
             <div key={cfg.key} className={cardClasses} style={cardStyle}>
@@ -711,65 +781,101 @@ export default function DisplayPage() {
 
                 <div className="min-h-0 w-full flex-1">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={isElec ? elecData : cfg.points}
-                      margin={{ top: 8, right: 6, left: 6, bottom: 0 }}
-                    >
-                      <XAxis dataKey="label" hide />
-                      <YAxis
-                        hide
-                        domain={
-                          isElec
-                            ? elecDomain
-                            : isWater
-                            ? waterDomain
-                            : isGas
-                            ? gasDomain
-                            : cfg.key === 'soil' || cfg.key === 'sound'
-                            ? [0, 100]
-                            : ['auto', 'auto']
-                        }
-                      />
-
-                      {/* Norma chiziqlari (xira) */}
-                      {isElec && <ReferenceLine y={0} stroke="rgba(52,211,153,0.4)" strokeDasharray="4 4" strokeWidth={1} />}
-                      {isWater && (
-                        <ReferenceLine y={WATER_NOMINAL} stroke="rgba(52,211,153,0.4)" strokeDasharray="4 4" strokeWidth={1} />
-                      )}
-                      {isGas && (
-                        <ReferenceLine y={GAS_NOMINAL} stroke="rgba(52,211,153,0.4)" strokeDasharray="4 4" strokeWidth={1} />
-                      )}
-
-                      {/* Bar rendering */}
-                      {cfg.key === 'heating' ? (
-                        <>
-                          <Bar dataKey="v0" name="v0" fill="#06B6D4" radius={[3, 3, 0, 0]} maxBarSize={8} />
-                          <Bar dataKey="v1" name="v1" fill="#38BDF8" radius={[3, 3, 0, 0]} maxBarSize={8} />
-                        </>
-                      ) : (
-                        <Bar
-                          dataKey={isElec ? 'dev' : 'v0'}
-                          radius={isElec ? [3, 3, 3, 3] : [3, 3, 0, 0]}
-                          maxBarSize={isElec ? 8 : 10}
-                        >
-                          {(isElec ? elecData : cfg.points).map((entry: any, index: number) => {
-                            let cellColor = cfg.color
-                            if (isElec) {
-                              const absVal = entry.v0 != null ? entry.v0 : ELEC_NOMINAL
-                              cellColor = voltageColor(absVal)
-                            } else if (isWater) {
-                              cellColor = getWaterColor(entry.v0).color
-                            } else if (isGas) {
-                              cellColor = getGasColor(entry.v0).color
-                            } else if (cfg.key === 'soil') {
-                              const ss = getSoilHumidityStatus(entry.v0)
-                              cellColor = ss ? ss.color : cfg.color
-                            }
-                            return <Cell key={`cell-${index}`} fill={cellColor} />
-                          })}
-                        </Bar>
-                      )}
-                    </BarChart>
+                    {chartStyle === 'area' ? (
+                      /* ── MAYDON (Area) ── */
+                      <AreaChart data={chartData} margin={{ top: 12, right: 8, left: 6, bottom: 0 }}>
+                        <defs>
+                          <linearGradient id={`area-${cfg.key}`} x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor={cfg.key === 'heating' ? '#06B6D4' : heroColor} stopOpacity={0.55} />
+                            <stop offset="100%" stopColor={cfg.key === 'heating' ? '#06B6D4' : heroColor} stopOpacity={0.04} />
+                          </linearGradient>
+                          <linearGradient id={`area-${cfg.key}-2`} x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#38BDF8" stopOpacity={0.5} />
+                            <stop offset="100%" stopColor="#38BDF8" stopOpacity={0.04} />
+                          </linearGradient>
+                        </defs>
+                        <XAxis dataKey="label" hide />
+                        <YAxis hide domain={yDomain} />
+                        {cfg.key === 'heating' ? (
+                          <>
+                            <Area type="monotone" dataKey="v0" stroke="#06B6D4" strokeWidth={2} fill={`url(#area-${cfg.key})`} dot={false} isAnimationActive={false} connectNulls />
+                            <Area type="monotone" dataKey="v1" stroke="#38BDF8" strokeWidth={2} fill={`url(#area-${cfg.key}-2)`} dot={false} isAnimationActive={false} connectNulls />
+                          </>
+                        ) : (
+                          <Area
+                            type="monotone"
+                            dataKey={mainKey}
+                            stroke={heroColor}
+                            strokeWidth={2.5}
+                            fill={`url(#area-${cfg.key})`}
+                            baseValue={isElec ? 0 : undefined}
+                            dot={false}
+                            isAnimationActive={false}
+                            connectNulls
+                          />
+                        )}
+                        {normaLines}
+                      </AreaChart>
+                    ) : chartStyle === 'line' ? (
+                      /* ── CHIZIQ (Line) ── */
+                      <LineChart data={chartData} margin={{ top: 12, right: 8, left: 6, bottom: 0 }}>
+                        <XAxis dataKey="label" hide />
+                        <YAxis hide domain={yDomain} />
+                        {cfg.key === 'heating' ? (
+                          <>
+                            <Line type="monotone" dataKey="v0" stroke="#06B6D4" strokeWidth={2.5} dot={false} isAnimationActive={false} connectNulls />
+                            <Line type="monotone" dataKey="v1" stroke="#38BDF8" strokeWidth={2.5} dot={false} isAnimationActive={false} connectNulls />
+                          </>
+                        ) : (
+                          <Line
+                            type="monotone"
+                            dataKey={mainKey}
+                            stroke={heroColor}
+                            strokeWidth={3}
+                            dot={false}
+                            activeDot={false}
+                            isAnimationActive={false}
+                            connectNulls
+                          />
+                        )}
+                        {normaLines}
+                      </LineChart>
+                    ) : (
+                      /* ── USTUN (Bar) ── */
+                      <BarChart data={chartData} margin={{ top: 12, right: 8, left: 6, bottom: 0 }}>
+                        <XAxis dataKey="label" hide />
+                        <YAxis hide domain={yDomain} />
+                        {cfg.key === 'heating' ? (
+                          <>
+                            <Bar dataKey="v0" name="v0" fill="#06B6D4" radius={[3, 3, 0, 0]} maxBarSize={8} />
+                            <Bar dataKey="v1" name="v1" fill="#38BDF8" radius={[3, 3, 0, 0]} maxBarSize={8} />
+                          </>
+                        ) : (
+                          <Bar
+                            dataKey={mainKey}
+                            radius={isElec ? [3, 3, 3, 3] : [3, 3, 0, 0]}
+                            maxBarSize={isElec ? 8 : 10}
+                          >
+                            {chartData.map((entry: any, index: number) => {
+                              let cellColor = cfg.color
+                              if (isElec) {
+                                const absVal = entry.v0 != null ? entry.v0 : ELEC_NOMINAL
+                                cellColor = voltageColor(absVal)
+                              } else if (isWater) {
+                                cellColor = getWaterColor(entry.v0).color
+                              } else if (isGas) {
+                                cellColor = getGasColor(entry.v0).color
+                              } else if (cfg.key === 'soil') {
+                                const ss = getSoilHumidityStatus(entry.v0)
+                                cellColor = ss ? ss.color : cfg.color
+                              }
+                              return <Cell key={`cell-${index}`} fill={cellColor} />
+                            })}
+                          </Bar>
+                        )}
+                        {normaLines}
+                      </BarChart>
+                    )}
                   </ResponsiveContainer>
                 </div>
               </div>
