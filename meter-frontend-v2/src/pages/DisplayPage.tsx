@@ -49,13 +49,14 @@ interface DisplayData {
   building?: { id: number; name: string; address?: string | null } | null
   buildings?: { id: number; name: string }[]
   // Real-vaqt qiymatlari (soatlik o'rtacha emas) — har utility uchun eng oxirgi xom o'qish
-  latest?: Partial<Record<'electricity' | 'water' | 'gas' | 'soil' | 'sound' | 'heating', LatestValue>>
+  latest?: Partial<Record<'electricity' | 'water' | 'gas' | 'soil' | 'sound' | 'heating' | 'air_quality', LatestValue>>
   electricity: HourlyUtilityStat[]
   water: HourlyUtilityStat[]
   gas: HourlyUtilityStat[]
   soil: HourlyUtilityStat[]
   sound: HourlyUtilityStat[]
   heating?: HourlyUtilityStat[]
+  air_quality?: HourlyUtilityStat[]
 }
 
 // ?building_id=3 bo'lsa kiosk faqat shu bino ma'lumotini ko'rsatadi
@@ -141,6 +142,7 @@ const OLED_THEME = {
     soil: 'from-black via-black to-slate-950',
     sound: 'from-black via-black to-slate-950',
     heating: 'from-black via-black to-slate-950',
+    air_quality: 'from-black via-black to-slate-950',
   },
   cardBorder: {
     electricity: 'border-yellow-400/70 shadow-[0_0_30px_rgba(250,204,21,0.25)] hover:border-yellow-300',
@@ -149,6 +151,7 @@ const OLED_THEME = {
     soil: 'border-teal-400/70 shadow-[0_0_30px_rgba(45,212,191,0.25)] hover:border-teal-300',
     sound: 'border-purple-400/70 shadow-[0_0_30px_rgba(192,132,252,0.25)] hover:border-purple-300',
     heating: 'border-cyan-400/70 shadow-[0_0_30px_rgba(34,211,238,0.25)] hover:border-cyan-300',
+    air_quality: 'border-emerald-400/70 shadow-[0_0_30px_rgba(16,185,129,0.25)] hover:border-emerald-300',
   },
   cardGlow: {
     electricity: 'rgba(250,204,21,0.35)',
@@ -157,6 +160,7 @@ const OLED_THEME = {
     soil: 'rgba(45,212,191,0.35)',
     sound: 'rgba(192,132,252,0.35)',
     heating: 'rgba(34,211,238,0.35)',
+    air_quality: 'rgba(16,185,129,0.35)',
   },
   clockBg: 'border-cyan-500/40 bg-cyan-950/40 backdrop-blur-md shadow-[0_0_15px_rgba(6,182,212,0.3)]',
   clockText: 'text-cyan-300',
@@ -209,6 +213,18 @@ const CHARTS = [
     glow: 'rgba(52,211,153,0.5)',
     bg: 'from-emerald-500/20 via-slate-900/80 to-slate-950',
     nominal: 60 as number | null,
+    fake: null as { base: number; amp: number } | null,
+  },
+  {
+    key: 'air_quality' as const,
+    dataKey: 'avg_air_quality' as keyof HourlyUtilityStat,
+    label: 'Havo sifati',
+    unit: '%',
+    icon: Wind,
+    color: '#10B981',
+    glow: 'rgba(16,185,129,0.5)',
+    bg: 'from-emerald-500/20 via-slate-900/80 to-slate-950',
+    nominal: 90 as number | null,
     fake: null as { base: number; amp: number } | null,
   },
   {
@@ -337,7 +353,15 @@ export default function DisplayPage() {
           ]
         : [{ key: cfg.dataKey, label: cfg.label, color: cfg.color }]
 
-    let points = data ? buildMultiPoints(data[cfg.key] ?? [], seriesDefs.map((s) => s.key)) : []
+    let rawRows = data ? (data[cfg.key as keyof DisplayData] as HourlyUtilityStat[] | undefined) ?? [] : []
+    if (cfg.key === 'air_quality' && data && rawRows.length === 0) {
+      rawRows = (data.soil ?? []).map((r) => ({
+        ...r,
+        avg_air_quality: r.avg_air_quality != null ? Math.max(0, Number((100 - r.avg_air_quality).toFixed(1))) : null,
+      }))
+    }
+
+    let points = buildMultiPoints(rawRows, seriesDefs.map((s) => s.key))
     const hasReal = points.some((p) => seriesDefs.some((_, i) => p[`v${i}`] != null))
     let isFake = false
     if (!hasReal && cfg.fake && data) {
@@ -359,8 +383,12 @@ export default function DisplayPage() {
     })
 
     // Real-vaqt qiymati bilan almashtirish — kattasi joriy o'qishni ko'rsatadi
-    const rawLatest = data?.latest?.[cfg.key]
-    if (rawLatest?.value != null) {
+    const rawLatest = data?.latest?.[cfg.key] ?? (cfg.key === 'air_quality' ? data?.latest?.soil : undefined)
+    if (cfg.key === 'air_quality') {
+      if (rawLatest?.air_quality != null) {
+        series[0].latest = Math.max(0, Number((100 - rawLatest.air_quality).toFixed(1)))
+      }
+    } else if (rawLatest?.value != null) {
       series[0].latest = rawLatest.value
     }
     if (cfg.key === 'heating' && rawLatest?.value_out != null && series[1]) {
@@ -624,20 +652,6 @@ export default function DisplayPage() {
                         )}
                       </div>
                       <span className="text-lg font-bold text-slate-300 sm:text-2xl">{cfg.unit}</span>
-
-                      {cfg.key === 'soil' && (
-                        <div className="ml-auto flex items-center gap-1.5 rounded-xl border border-emerald-500/40 bg-emerald-500/15 px-2.5 py-1 backdrop-blur shadow-[0_0_15px_rgba(16,185,129,0.2)]">
-                          <Wind className="h-4 w-4 text-emerald-400 animate-pulse" />
-                          <div className="flex flex-col">
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-300/80">Havo sifati</span>
-                            <span className="text-xs font-black text-emerald-200">
-                              {data?.latest?.soil?.air_quality != null
-                                ? `${Math.max(0, 100 - data.latest.soil.air_quality).toFixed(0)}% (${data.latest.soil.air_quality <= 30 ? "A'lo" : data.latest.soil.air_quality <= 60 ? "Me'yorda" : "Ifloslangan"})`
-                                : "Toza (A'lo)"}
-                            </span>
-                          </div>
-                        </div>
-                      )}
                     </div>
                   </div>
                 ) : (
