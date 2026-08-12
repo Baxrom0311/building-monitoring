@@ -33,7 +33,7 @@ static void disp_show_reading(const SensorData& d) {
     }
 }
 
-static void disp_show_status(bool wifi_ok, bool srv_ok, bool) {
+static void disp_show_status(bool wifi_ok, bool srv_ok) {
     char buf[LCD_COLS + 1];
     snprintf(buf, sizeof(buf), "W:%-2s S:%-2s",
              wifi_ok ? "OK" : "--",

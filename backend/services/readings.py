@@ -1,14 +1,17 @@
 import json
+import logging
 from datetime import datetime
 
 from fastapi import HTTPException
+from sqlalchemy import func
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import settings
 from core.database import SessionLocal
 from core.time import now_ts
-from models.entities import Device, Reading
+from models.entities import Device, Reading, Sensor
 from models.schemas import MeterReading, MeterReadingBatch
 from repositories.base import model_to_dict
 from repositories.buildings import MeasurementPointRepository
@@ -17,6 +20,8 @@ from repositories.readings import ReadingRepository
 from services import alerts as alert_service
 from services.devices import is_test_meter_serial, mark_test_device
 from services.websocket import ws_manager
+
+logger = logging.getLogger("readings")
 
 
 def _validate_range(name: str, value: float | None, minimum: float | None = None, maximum: float | None = None) -> None:
@@ -82,6 +87,66 @@ def _effective_reading_ts(body: MeterReading, server_ts: int) -> int:
     return server_ts
 
 
+async def _resolve_sensor_id(session: AsyncSession, body: MeterReading, device: Device, ts: int) -> int | None:
+    """Reading uchun birinchi-darajali Sensor'ni topadi/yaratadi (best-effort upsert).
+
+    sensor_uid = source_id (leaf MAC) yoki device_id. MQ135-only soil (namlik 0/None
+    + havo bor) ALOHIDA 'air' sensor bo'ladi (soil ichida yashiringan emas).
+    Xatolik bo'lsa None qaytaradi va reading yozilishi HECH QACHON to'xtamaydi —
+    registry nosozligi ma'lumot yo'qotmasligi kerak."""
+    try:
+        sensor_uid = (body.source_id or body.device_id or "").strip()
+        if not sensor_uid:
+            return None
+        sensor_utility = body.utility_type or "electricity"
+        if (
+            sensor_utility == "soil"
+            and (body.air_quality is not None or body.air_pct is not None)
+            and (body.humidity is None or body.humidity == 0)
+        ):
+            sensor_utility = "air"
+        is_bridged = bool(body.source_id)
+        building_id = None if device.is_test_device else (body.building_id or device.building_id)
+        point_id = None if device.is_test_device else (body.point_id or device.point_id)
+        stmt = pg_insert(Sensor).values(
+            sensor_uid=sensor_uid,
+            utility_type=sensor_utility,
+            sensor_type=body.sensor_type,
+            transport_device_id=device.id,
+            is_bridged=is_bridged,
+            building_id=building_id,
+            point_id=point_id,
+            is_test=device.is_test_device,
+            first_seen=ts,
+            last_seen=ts,
+            created_at=ts,
+            updated_at=ts,
+        )
+        stmt = stmt.on_conflict_do_update(
+            constraint="uq_sensor_uid_utility",
+            set_={
+                # building_id/point_id faqat INSERT'da o'rnatiladi — keyin ustidan
+                # yozilmaydi (qo'lda biriktirilgan bino saqlansin). Faqat transport
+                # va last_seen yangilanadi; sensor_type bo'sh bo'lsa to'ldiriladi.
+                "transport_device_id": device.id,
+                "is_bridged": is_bridged,
+                "last_seen": ts,
+                "updated_at": ts,
+                "sensor_type": func.coalesce(Sensor.sensor_type, stmt.excluded.sensor_type),
+            },
+        ).returning(Sensor.id)
+        # SAVEPOINT ichida — upsert DB xatosi (deadlock, lock_timeout, FK) tashqi
+        # tranzaksiyani "aborted" holatiga tushirmasin; aks holda reading INSERT ham
+        # yiqilib, o'qish YO'QOLARDI. begin_nested faqat savepoint'ni qaytaradi.
+        async with session.begin_nested():
+            res = await session.execute(stmt)
+            row = res.first()
+        return int(row[0]) if row and row[0] is not None else None
+    except Exception as exc:  # noqa: BLE001 — registry nosozligi reading'ni to'xtatmasin
+        logger.warning("sensor resolve failed for %s/%s: %s", body.device_id, body.source_id, exc)
+        return None
+
+
 async def _save_reading_internal(session: AsyncSession, body: MeterReading, ts: int, test_mode: bool = False) -> list[dict]:
     """Bitta session ichida reading saqlash. Alert broadcastlarni qaytaradi."""
     if body.reading_id:
@@ -145,10 +210,14 @@ async def _save_reading_internal(session: AsyncSession, body: MeterReading, ts: 
 
     await alert_service.clear_offline_alerts_for_device(session, body.device_id)
 
+    # Birinchi-darajali Sensor'ni hal qilamiz (dual-write) — best-effort, reading'ni bloklamaydi.
+    sensor_id = await _resolve_sensor_id(session, body, device, ts)
+
     reading = Reading(
         device_id=body.device_id,
         reading_id=body.reading_id,
         sequence_no=body.sequence_no,
+        sensor_id=sensor_id,
         building_id=None if device.is_test_device else body.building_id,
         point_id=None if device.is_test_device else body.point_id,
         utility_type=body.utility_type,

@@ -741,6 +741,12 @@ void loop() {
 #define HEALTH_CHECK_MS   60000UL
 #define OFFLINE_BUF_SIZE  50
 
+// LCD "eskirgan ma'lumot" chegarasi — shu vaqtdan ortiq muvaffaqiyatli o'qish
+// bo'lmasa, LCD oxirgi (eskirgan) qiymatni cheksiz ko'rsatib turmaydi, buning
+// o'rniga aniq "malumot yo'q" holati chiqariladi. RS485_DISPLAY suv rejimidagi
+// g_last_water_ms naqshiga o'xshab (yuqorida qarang, ~60s / 2x o'qish davri).
+#define DISPLAY_STALE_MS (g_cfg.read_interval_ms * 3UL)
+
 // ─── App state ───────────────────────────────────────────────────────────────
 static char  device_id[20] = "";
 static bool  registered    = false;
@@ -748,6 +754,7 @@ static bool  server_ok     = false;
 static bool  prev_wifi_ok  = false;
 
 static unsigned long last_read_ms   = 0;
+static unsigned long last_read_ok_ms = 0;   // oxirgi MUVAFFAQIYATLI sensor o'qish vaqti (LCD stale aniqlash uchun)
 static unsigned long last_cmd_ms    = 0;
 static unsigned long last_health_ms = 0;
 #ifdef SENSOR_SOUND
@@ -1039,9 +1046,29 @@ void loop() {
 #else
             diag_error("Sensor o'qish xato");
 #endif
+            // LCD eskirgan (oxirgi muvaffaqiyatli) qiymatni cheksiz ko'rsatib
+            // turmasin — RS485_DISPLAY suv rejimidagi g_last_water_ms naqshiga
+            // o'xshab, DISPLAY_STALE_MS dan ortiq muvaffaqiyatli o'qish
+            // bo'lmasa aniq "malumot yo'q" holatini chiqaramiz.
+            if (last_read_ok_ms == 0 || now - last_read_ok_ms > DISPLAY_STALE_MS) {
+                SensorData stale = {};
+                stale.valid = false;
+#ifdef SENSOR_HEATING
+                // disp_heating.h d.valid'ga emas, isnan() ga qaraydi —
+                // "--.-" ko'rsatilishi uchun haroratlar aniq NAN bo'lishi kerak.
+                stale.temperature_in_c  = NAN;
+                stale.temperature_out_c = NAN;
+#endif
+#ifdef SENSOR_ELECTRICITY
+                lcd_show_electricity(stale);
+#else
+                disp_show_reading(stale);
+#endif
+            }
             return;
         }
 
+        last_read_ok_ms = now;
         disp_show_reading(d);
 
         // Serverga yuborish — faqat POST, server_check periodic bo'ladi

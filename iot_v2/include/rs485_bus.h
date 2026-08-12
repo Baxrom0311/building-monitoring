@@ -35,7 +35,12 @@
   #define RS485_BAUD    19200
 #endif
 #ifndef RS485_MAX_FRAME
-  #define RS485_MAX_FRAME  384   // Eng katta JSON (elektr emas, u alohida bus'da) uchun zaxira bilan
+  // electricity_rs485_leaf / building_bridge muhitlarida elektr hisoblagich
+  // JSON'i ham AYNAN shu RS-485 shinasidan yuboriladi (Serial2 faqat DLMS
+  // uchun band — natija shu Serial1 shinaga chiqadi). Hozircha elektr JSON'i
+  // ~300-330 bayt (meter_serial 31 belgigacha bo'lishi mumkin), shuning uchun
+  // kelajakda maydon qo'shilsa ham zaxira qolishi uchun 512 bayt qilib qo'yilgan.
+  #define RS485_MAX_FRAME  512
 #endif
 // ─── Bridge -> leaf komanda baytlari ─────────────────────────────────────────
 // Adresli poll (Modbus uslubi) — to'qnashuvni butunlay yo'qotadi:

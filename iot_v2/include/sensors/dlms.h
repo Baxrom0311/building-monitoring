@@ -61,8 +61,15 @@ static uint16_t fcs16(const uint8_t* d, size_t n) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // HDLC frame builder
 // ═══════════════════════════════════════════════════════════════════════════════
-static void hdlc_build(uint8_t dest, uint8_t src, uint8_t ctrl,
+static bool hdlc_build(uint8_t dest, uint8_t src, uint8_t ctrl,
                         const uint8_t* info, size_t ilen) {
+    // 11 = flag+fmt(2)+dest+src+ctrl+hcs(2)+fcs(2)+flag oldindan/keyingi qo'shimchalar
+    if (ilen > sizeof(dlms_tx) - 11) {
+        LOG_PRINTF("hdlc_build: ilen=%u juda katta (max %u)\n",
+                   (unsigned)ilen, (unsigned)(sizeof(dlms_tx) - 11));
+        dlms_tx_len = 0;
+        return false;
+    }
     if (ilen == 0) {
         uint16_t tot = 7;
         uint8_t fd[5] = {(uint8_t)(0xA0|(tot>>8)),(uint8_t)(tot&0xFF),dest,src,ctrl};
@@ -85,6 +92,7 @@ static void hdlc_build(uint8_t dest, uint8_t src, uint8_t ctrl,
         dlms_tx[10+ilen] = 0x7E;
         dlms_tx_len = 11 + ilen;
     }
+    return true;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -235,7 +243,13 @@ static bool hls5_gmac(const uint8_t ak[16], const uint8_t systitle[8],
 
     uint8_t aad[64];
     aad[0] = 0x10;
-    if (s_len > 63) s_len = 63;
+    if (s_len > 63) {
+        // Challenge aad[64] buferga sig'maydi — kesib tashlab noto'g'ri
+        // auth tag hisoblagandan ko'ra, urinishni butunlay muvaffaqiyatsiz
+        // qilamiz (chaqiruvchi hls5_ok=false qabul qiladi).
+        LOG_PRINTF("hls5_gmac: s_len=%u > 63, auth rad etildi\n", (unsigned)s_len);
+        return false;
+    }
     memcpy(aad + 1, s_chal, s_len);
 
     mbedtls_gcm_context gcm;
@@ -309,6 +323,11 @@ static bool dlms_connect_reader() {
         if (hls5_gmac(ak, syst, 0, stoc, stoc_len, resp))
             hls5_ok = hls5_complete(resp);
     }
+    // dlms_aarq() marks dlms_connected=true as soon as the LLC-level AARE
+    // accept matches, before HLS5 auth is verified above. Keep the global
+    // state consistent with this function's own return value — don't rely
+    // on the caller to disconnect on a failed/unauthenticated association.
+    if (!hls5_ok) dlms_connected = false;
     return hls5_ok;
 }
 

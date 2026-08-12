@@ -78,7 +78,14 @@ static SensorData g_sensor_meta;
 // ─── LCD: elektr ko'rsatkichlari ──────────────────────────────────────────────
 #if !defined(RS485_LEAF) || defined(HAVE_LCD)
 static void lcd_show_electricity(const SensorData& d) {
-    if (!g_elec_lcd_ok || !d.valid) return;
+    if (!g_elec_lcd_ok) return;
+    if (!d.valid) {
+        // Uzoq vaqt o'qish muvaffaqiyatsiz bo'lganda — eskirgan qiymatni
+        // cheksiz ko'rsatib turish o'rniga aniq "malumot yo'q" holati
+        // (RS485_DISPLAY suv rejimidagi "Suv: malumot yo'q" naqshiga o'xshab).
+        elec_lcd_row(0, "El: malumot yo'q");
+        return;
+    }
     char row0[ELEC_LCD_COLS + 1];
     float v = isnan(d.voltage_l1) ? 0.0f : d.voltage_l1;
     float i = isnan(d.current_l1) ? 0.0f : d.current_l1;

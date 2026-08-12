@@ -67,6 +67,20 @@ static void nvs_health_check() {
     }
 }
 
+// Server URL'ni normallashtiradi: sxema yo'q bo'lsa "http://" qo'shadi,
+// eskirgan ":8001" portini olib tashlaydi. cfg_load(), cfg_save() va
+// cfg_save_server() bir xil qoidani qo'llashi uchun umumiy joyga chiqarilgan.
+static void cfg_normalize_server_url(char* url, size_t len) {
+    if (strncmp(url, "http", 4) != 0) {
+        char tmp[CFG_SERVER_LEN];
+        strncpy(tmp, url, sizeof(tmp) - 1);
+        tmp[sizeof(tmp) - 1] = '\0';
+        snprintf(url, len, "http://%s", tmp);
+    }
+    char* p = strstr(url, ":8001");
+    if (p) memmove(p, p + 5, strlen(p + 5) + 1);
+}
+
 static void cfg_load() {
     strncpy(g_cfg.server_url, DEFAULT_SERVER_URL, CFG_SERVER_LEN - 1);
 #ifdef DEFAULT_DEVICE_TOKEN
@@ -104,14 +118,7 @@ static void cfg_load() {
         g_prefs.end();
     }
 
-    if (strncmp(g_cfg.server_url, "http", 4) != 0) {
-        char tmp[CFG_SERVER_LEN];
-        strncpy(tmp, g_cfg.server_url, CFG_SERVER_LEN - 1);
-        tmp[CFG_SERVER_LEN - 1] = '\0';
-        snprintf(g_cfg.server_url, CFG_SERVER_LEN, "http://%s", tmp);
-    }
-    char* p = strstr(g_cfg.server_url, ":8001");
-    if (p) memmove(p, p + 5, strlen(p + 5) + 1);
+    cfg_normalize_server_url(g_cfg.server_url, CFG_SERVER_LEN);
 }
 
 static bool cfg_parse_test_mode(const char* mode) {
@@ -124,7 +131,11 @@ static bool cfg_parse_test_mode(const char* mode) {
 
 static void cfg_save(const char* srv, const char* tok,
                      const char* mode, const char* prv) {
-    if (srv && srv[0]) strncpy(g_cfg.server_url, srv, CFG_SERVER_LEN - 1);
+    if (srv && srv[0]) {
+        strncpy(g_cfg.server_url, srv, CFG_SERVER_LEN - 1);
+        g_cfg.server_url[CFG_SERVER_LEN - 1] = '\0';
+        cfg_normalize_server_url(g_cfg.server_url, CFG_SERVER_LEN);
+    }
     if (tok) {
         strncpy(g_cfg.device_token, tok, CFG_TOKEN_LEN - 1);
         g_cfg.device_token[CFG_TOKEN_LEN - 1] = '\0';
@@ -173,8 +184,9 @@ static void cfg_save_server(const char* url) {
     if (!url || !url[0]) return;
     strncpy(g_cfg.server_url, url, CFG_SERVER_LEN - 1);
     g_cfg.server_url[CFG_SERVER_LEN - 1] = '\0';
+    cfg_normalize_server_url(g_cfg.server_url, CFG_SERVER_LEN);
     g_prefs.begin("app", false);
-    _nvs_put_str("srv", url);
+    _nvs_put_str("srv", g_cfg.server_url);
     g_prefs.end();
     LOG_PRINTF("Server saqlandi: %s\n", g_cfg.server_url);
 }

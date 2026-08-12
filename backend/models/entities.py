@@ -310,6 +310,48 @@ class DeviceProvisioningToken(Base):
     created_at: Mapped[int | None] = mapped_column(Integer)
 
 
+class Sensor(Base):
+    """Birinchi-darajali sensor — bridge (Device) ostidagi har bir leaf.
+
+    Bitta fizik ESP (bridge) bir necha RS-485 leaf sensorni o'z device_id'si ostida
+    uzatadi; har leaf o'z MAC'i (source_id) va bitta utility_type ga ega.
+    sensor_uid = coalesce(source_id, device_id): bridge ostidagi leaf -> leaf MAC;
+    to'g'ridan-to'g'ri qurilma -> o'z MAC'i. MQ135 havo sensori alohida 'air'
+    sensor bo'ladi (soil o'qishi ichida yashiringan emas). UNIQUE(sensor_uid,
+    utility_type) bitta fizik sensorning bir necha identifikatorini birlashtiradi
+    (masalan B4BFE91279D0 ning bridge-forwarded + self elektri bittaga)."""
+
+    __tablename__ = "sensors"
+    __table_args__ = (
+        UniqueConstraint("sensor_uid", "utility_type", name="uq_sensor_uid_utility"),
+        Index("idx_sensors_transport_active", "transport_device_id", "is_active"),
+        Index("idx_sensors_building_utility_active", "building_id", "utility_type", "is_active"),
+        Index("idx_sensors_uid", "sensor_uid"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    # device_id String(128) ga mos — source_id yo'q uzun device_id upsertда tushib qolmasin
+    sensor_uid: Mapped[str] = mapped_column(String(128), nullable=False)  # coalesce(source_id, device_id)
+    utility_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    sensor_type: Mapped[str | None] = mapped_column(String(64))  # MQ135, SHT3x, DS18B20, TE71...
+    # Hozir uzatayotgan ESP (bridge yoki o'zi). Reading o'z device_id'sini saqlaydi,
+    # shuning uchun transport o'zgarsa ham tarix buzilmaydi.
+    transport_device_id: Mapped[str] = mapped_column(ForeignKey("devices.id"), nullable=False)
+    is_bridged: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    building_id: Mapped[int | None] = mapped_column(ForeignKey("buildings.id"))  # PER-SENSOR bog'lanish
+    point_id: Mapped[int | None] = mapped_column(ForeignKey("measurement_points.id"))
+    name: Mapped[str | None] = mapped_column(String(255))
+    meter_serial: Mapped[str | None] = mapped_column(String(128))
+    calibration_offset: Mapped[float | None] = mapped_column(Float)
+    calibration_scale: Mapped[float | None] = mapped_column(Float)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    is_test: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    first_seen: Mapped[int | None] = mapped_column(Integer)
+    last_seen: Mapped[int | None] = mapped_column(Integer)
+    created_at: Mapped[int | None] = mapped_column(Integer)
+    updated_at: Mapped[int | None] = mapped_column(Integer)
+
+
 class Reading(Base):
     __tablename__ = "readings"
     __table_args__ = (
@@ -319,6 +361,7 @@ class Reading(Base):
         Index("idx_readings_building_ts", "building_id", "ts"),
         Index("idx_readings_ts", "ts"),
         Index("idx_readings_building_utility_ts", "building_id", "utility_type", "ts"),
+        Index("idx_readings_sensor_ts", "sensor_id", "ts"),
         UniqueConstraint("device_id", "reading_id", name="uq_device_reading_id"),
     )
 
@@ -328,6 +371,9 @@ class Reading(Base):
     sequence_no: Mapped[int | None] = mapped_column(Integer)
     building_id: Mapped[int | None] = mapped_column(ForeignKey("buildings.id"))
     point_id: Mapped[int | None] = mapped_column(ForeignKey("measurement_points.id"))
+    # Birinchi-darajali sensor (leaf) FK — nullable (additiv, eski qatorlar NULL;
+    # backfill to'ldiradi). Reading o'z device_id/source_id/utility_type'ini ham saqlaydi.
+    sensor_id: Mapped[int | None] = mapped_column(ForeignKey("sensors.id"))
     utility_type: Mapped[str] = mapped_column(String(32), default="electricity", nullable=False)
     # RS-485 bridge o'z nomidan yuborganda leaf sensorining asl MAC'i —
     # bitta bridge qurilma ichida sensorlarni ajratish uchun.
@@ -377,12 +423,14 @@ class HourlyUtilityStats(Base):
         UniqueConstraint("bucket_ts", "device_id", "utility_type", name="uq_hourly_stats_device_utility"),
         Index("idx_hourly_stats_building_utility_bucket", "building_id", "utility_type", "bucket_ts"),
         Index("idx_hourly_stats_device_bucket", "device_id", "bucket_ts"),
+        Index("idx_hourly_stats_sensor_bucket", "sensor_id", "bucket_ts"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     bucket_ts: Mapped[int] = mapped_column(Integer, nullable=False)
     building_id: Mapped[int | None] = mapped_column(ForeignKey("buildings.id"))
     point_id: Mapped[int | None] = mapped_column(ForeignKey("measurement_points.id"))
+    sensor_id: Mapped[int | None] = mapped_column(ForeignKey("sensors.id"))
     device_id: Mapped[str] = mapped_column(String(128), ForeignKey("devices.id"), nullable=False)
     utility_type: Mapped[str] = mapped_column(String(32), nullable=False)
     samples: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

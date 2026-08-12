@@ -20,6 +20,7 @@ struct SensorData {
 // ─── Ichki holat ──────────────────────────────────────────────────────────────
 static float s_level_smooth = 1.5f;   // Boshlang'ich holat ~1.5% (tinch xona)
 static float s_quiet_p2p    = 40.0f;   // Tinch xona toza p2p apparat bazasi
+static bool  s_mic_fault    = false;   // true = mikrofon hali haqiqiy bazaga ega emas
 
 // Single frame P2P (tok va 0/4095 apparat impulslari 100% filtrlangan)
 static float _get_p2p_clean() {
@@ -42,15 +43,10 @@ static float _get_p2p_clean() {
 
 // ═══════════════════════════════════════════════════════════════════════════════
 
-static void sensor_init() {
-    analogReadResolution(12);
-    analogSetAttenuation(ADC_11db);
-    pinMode(PIN_SOUND_ADC, INPUT);
-
-    for (int i = 0; i < 10; i++) analogRead(PIN_SOUND_ADC);
-    s_level_smooth = 1.5f;
-
-    // Yoqilgan vaqtda xonadagi haqiqiy apparat p2p bazasini o'lchab olish
+// Tinch xona p2p bazasini o'lchash. Toza namuna umuman topilmasa (mikrofon
+// uzilgan/nosoz) soxta baza o'rnatilmaydi — false qaytaradi, s_quiet_p2p
+// o'zgarishsiz qoladi.
+static bool _calibrate_baseline() {
     float p2p_sum = 0.0f;
     int p2p_cnt = 0;
     for (int i = 0; i < 15; i++) {
@@ -61,13 +57,31 @@ static void sensor_init() {
         }
         delay(10);
     }
-    if (p2p_cnt > 0) {
-        s_quiet_p2p = p2p_sum / (float)p2p_cnt;
-    } else {
-        s_quiet_p2p = 500.0f;
-    }
+    if (p2p_cnt == 0) return false;
+    s_quiet_p2p = p2p_sum / (float)p2p_cnt;
+    return true;
+}
 
-    LOG_PRINTF("Ovoz sensori toza P2P drayver tayyor (GPIO%d, quiet_baseline=%.0f)\n", PIN_SOUND_ADC, s_quiet_p2p);
+static void sensor_init() {
+    analogReadResolution(12);
+    analogSetAttenuation(ADC_11db);
+    pinMode(PIN_SOUND_ADC, INPUT);
+
+    for (int i = 0; i < 10; i++) analogRead(PIN_SOUND_ADC);
+    s_level_smooth = 1.5f;
+
+    // Yoqilgan vaqtda xonadagi haqiqiy apparat p2p bazasini o'lchab olish.
+    // Muvaffaqiyatsiz bo'lsa (p2p_cnt==0) soxta baza (masalan 500.0f) qo'yilmaydi —
+    // bu signal = max(0, avg_p2p - baza) ni doim floor qilib qo'yardi va uzilgan
+    // mikrofon "tinch xona" bilan adashtirilardi. Buning o'rniga xato bayrog'i
+    // qo'yiladi va sensor_read() har chaqirilganda qayta kalibrovka urinadi.
+    if (_calibrate_baseline()) {
+        s_mic_fault = false;
+        LOG_PRINTF("Ovoz sensori toza P2P drayver tayyor (GPIO%d, quiet_baseline=%.0f)\n", PIN_SOUND_ADC, s_quiet_p2p);
+    } else {
+        s_mic_fault = true;
+        LOG_PRINTF("XATO: Ovoz sensori (GPIO%d) kalibrovka vaqtida toza namuna bermadi — mikrofon uzilgan yoki nosoz\n", PIN_SOUND_ADC);
+    }
 }
 
 static bool sensor_connect() { return true; }
@@ -79,6 +93,19 @@ static bool sensor_read(SensorData& d) {
         sim = constrain(sim, 0.0f, 95.0f);
         d = {sim, true};
         return true;
+    }
+
+    // Boshlang'ich kalibrovka muvaffaqiyatsiz bo'lgan bo'lsa — har o'qishda
+    // qayta urinib ko'ramiz (mikrofon keyinroq ulanishi/tuzalishi mumkin).
+    if (s_mic_fault) {
+        if (_calibrate_baseline()) {
+            s_mic_fault = false;
+            LOG_PRINTF("Ovoz sensori qayta kalibrovka qilindi (GPIO%d, quiet_baseline=%.0f)\n", PIN_SOUND_ADC, s_quiet_p2p);
+        } else {
+            LOG_PRINTF("Ovoz sensori xato: mikrofon hali ham toza namuna bermayapti (GPIO%d)\n", PIN_SOUND_ADC);
+            d = {0.0f, false};
+            return false;
+        }
     }
 
     // 8 ta ketma-ket toza audio ramka o'qish (o'rtachalash)
@@ -95,8 +122,9 @@ static bool sensor_read(SensorData& d) {
     }
 
     if (valid_count == 0) {
-        d = {1.5f, true};
-        return true;
+        LOG_PRINTF("Ovoz sensori xato: bu siklda barcha 8 ramka filtrlab tashlandi (GPIO%d)\n", PIN_SOUND_ADC);
+        d = {0.0f, false};
+        return false;
     }
 
     float avg_p2p = p2p_sum / (float)valid_count;

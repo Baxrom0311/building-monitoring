@@ -31,6 +31,14 @@
 #endif
 #define SOIL_ADC_SAMPLES  16    // Shovqin uchun o'rtacha
 
+// ─── Nosozlik (fault) chegaralari ──────────────────────────────────────────────
+// Simlangan datchik raw ADC qiymatini [SOIL_ADC_WET, SOIL_ADC_DRY] oralig'idan
+// bir oz chetga chiqarishi mumkin (shovqin), lekin uzilgan/qisqa tutashgan
+// datchik rels kuchlanishiga (0 yoki VCC) "yopishib" qoladi — bu holatni
+// haqiqiy o'lchovdan ajratish uchun chegaradan tashqariga chiqish nazorat qilinadi.
+#define SOIL_FAULT_MARGIN_PCT   0.10f   // Kalibrovka oralig'ining 10%
+#define SOIL_FAULT_MARGIN_MIN   50      // Kamida shuncha ADC birligi (shovqin uchun)
+
 // ─── MQ135 havo sifati sensori (ixtiyoriy, -DHAVE_MQ135) ─────────────────────
 // Analog AOUT → GPIO[PIN_MQ135]. Yuqori qiymat = havo ifloslangan (gaz/tutun).
 #ifdef HAVE_MQ135
@@ -96,7 +104,37 @@ static bool sensor_read(SensorData& d) {
     }
     int raw = (int)(sum / SOIL_ADC_SAMPLES);
 
-    float pct = (float)(SOIL_ADC_DRY - raw) / (float)(SOIL_ADC_DRY - SOIL_ADC_WET) * 100.0f;
+    // ── Kalibrovka tekshiruvi (0/0 = NaN) ───────────────────────────────────
+    // SOIL_ADC_DRY == SOIL_ADC_WET bo'lsa (noto'g'ri build_flags), bo'linish
+    // 0.0f/0.0f = NaN beradi. constrain() taqqoslashga asoslangan bo'lgani
+    // uchun NaN'ni ushlamaydi va u to'g'ridan-to'g'ri JSON'ga sizib chiqadi.
+    int span = SOIL_ADC_DRY - SOIL_ADC_WET;
+    if (span == 0) {
+        d.valid = false;
+        LOG_PRINTF("Tuproq: XATO kalibrovka (SOIL_ADC_DRY == SOIL_ADC_WET == %d)\n", SOIL_ADC_DRY);
+        return false;
+    }
+
+    // ── Nosozlik (uzilgan/qisqa tutashgan datchik) tekshiruvi ───────────────
+    // raw qiymat kalibrovka oralig'idan sezilarli darajada chetga chiqsa,
+    // bu haqiqiy namlik emas, balki uzilgan yoki rels kuchlanishiga
+    // "yopishib qolgan" datchikni bildiradi.
+    int lo = min(SOIL_ADC_WET, SOIL_ADC_DRY);
+    int hi = max(SOIL_ADC_WET, SOIL_ADC_DRY);
+    int margin = max((int)(abs(span) * SOIL_FAULT_MARGIN_PCT), SOIL_FAULT_MARGIN_MIN);
+    if (raw <= lo - margin || raw >= hi + margin) {
+        d.valid = false;
+        LOG_PRINTF("Tuproq: XATO datchik (uzilgan/qisqa tutashgan?) raw=%d, kutilgan oraliq [%d..%d] ±%d\n",
+                   raw, lo, hi, margin);
+        return false;
+    }
+
+    float pct = (float)(SOIL_ADC_DRY - raw) / (float)span * 100.0f;
+    if (isnan(pct)) {
+        d.valid = false;
+        LOG_PRINTF("Tuproq: XATO hisoblash NaN chiqdi (raw=%d)\n", raw);
+        return false;
+    }
     pct = constrain(pct, 0.0f, 100.0f);
 
     d.humidity = pct;

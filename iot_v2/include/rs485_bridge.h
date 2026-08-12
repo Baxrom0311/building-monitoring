@@ -132,6 +132,16 @@ static bool rs485_extract_id(const char* json, char* out, size_t out_sz) {
 }
 
 #if defined(HAVE_LCD)
+static unsigned long g_last_elec_lcd_ms = 0;   // oxirgi marta LCD'da elektr ko'rsatilgan vaqt (staleness uchun)
+
+// Elektr leaf shuncha vaqt yangi o'qish bermasa — LCD'da eskirgan qiymatni
+// cheksiz ko'rsatib turish o'rniga aniq "malumot yo'q" holati ko'rsatiladi.
+// RS485_BRIDGE_POLL_MS (bitta to'liq poll sikli) ning ~3x'i — bir-ikki
+// ketma-ket miss qisqa shovqin uchun ekranni o'zgartirmaydi, lekin leaf
+// haqiqatan uzilib qolsa (RS485_DISPLAY suv rejimidagi ~60s naqshiga
+// o'xshab) tezda "malumot yo'q" ko'rinadi.
+#define RS485_BRIDGE_ELEC_STALE_MS (RS485_BRIDGE_POLL_MS * 3UL)
+
 // Yig'ilgan leaf o'qishini LCD'da ko'rsatadi (0-qatorda qiymat, 1-qatorda
 // "A1TECH  BRR"). building_bridge SENSOR_ELECTRICITY'ning elec_lcd_row()'idan
 // foydalanadi (rs485_bridge.h electricity.h'dan keyin include qilinadi).
@@ -148,6 +158,16 @@ static void rs485_bridge_lcd_show(const char* json) {
              (float)(doc["voltage_l1"] | 0.0f), (int)(doc["power_w"] | 0));
     elec_lcd_row(0, r0);
     elec_lcd_row(1, "A1TECH  BRR");
+    g_last_elec_lcd_ms = millis();
+}
+
+// Elektr leaf uzoq vaqt javob bermasa — LCD'da oxirgi (eskirgan) voltaj/quvvat
+// qiymatini cheksiz ko'rsatib turish o'rniga aniq ogohlantirish chiqaradi.
+// rs485_bridge_poll_cycle() har sikl oxirida chaqiradi.
+static void rs485_bridge_lcd_check_stale() {
+    if (g_last_elec_lcd_ms == 0) return;   // hali birorta elektr o'qish kelmagan
+    if (millis() - g_last_elec_lcd_ms <= RS485_BRIDGE_ELEC_STALE_MS) return;
+    elec_lcd_row(0, "El: malumot yo'q");
 }
 #endif
 
@@ -263,4 +283,7 @@ static void rs485_bridge_poll_cycle() {
     }
     LOG_PRINTF("RS485 bridge: sikl #%lu tugadi — %d/%d leaf javob berdi\n",
                (unsigned long)rs485_cycle_no, ok, rs485_roster_n);
+#if defined(HAVE_LCD)
+    rs485_bridge_lcd_check_stale();
+#endif
 }
