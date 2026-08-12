@@ -867,6 +867,19 @@ void setup() {
                     LOG_PRINTLN("WiFi: portal yopildi, hali ulanmagan — bitta ulanish urinishi...");
                     if (wifi_connect_boot(DEFAULT_WIFI_SSID, DEFAULT_WIFI_PASS)) break;
 
+                    // ESP32/arduino-esp32'da AP<->STA rejimini qayta-qayta
+                    // almashtirish sekin-asta heap'ni siqadi (hujjatlashtirilgan
+                    // platforma darajasidagi muammo, bu loyihaga xos emas).
+                    // WiFi kunlab/haftalab topilmasa, bu to'planib borishi
+                    // mumkin — heap juda kamaysa, defragmentatsiya qilishning
+                    // yagona ishonchli yo'li toza qayta yuklanish.
+                    if (ESP.getFreeHeap() < MIN_HEAP_BYTES) {
+                        LOG_PRINTF("WiFi: heap juda kam qoldi (%u bayt) — xavfsizlik uchun qayta yuklanmoqda\n",
+                                   (unsigned)ESP.getFreeHeap());
+                        unsigned long t = millis(); while (millis() - t < 200) yield();
+                        ESP.restart();
+                    }
+
                     LOG_PRINTLN("WiFi: urinish muvaffaqiyatsiz — portal yana ochiladi");
                 }
             } else {

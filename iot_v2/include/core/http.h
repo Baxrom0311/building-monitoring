@@ -83,16 +83,44 @@ static String http_safe_body(HTTPClient& http) {
                    len, HTTP_MAX_RESPONSE);
         return "";
     }
-    // Content-Length yo'q bo'lsa (-1), chunked transfer — stream dan o'qish
-    if (len < 0) {
-        String body = http.getString();
-        if ((int)body.length() > HTTP_MAX_RESPONSE) {
-            LOG_PRINTF("HTTP: chunked javob juda katta (%d)\n", (int)body.length());
-            return "";
-        }
-        return body;
+    if (len >= 0) {
+        // Content-Length ma'lum va limit ichida — xavfsiz, to'g'ridan-to'g'ri.
+        return http.getString();
     }
-    return http.getString();
+    // Content-Length yo'q (-1, chunked/noma'lum uzunlik — masalan nginx
+    // proxy orqali). http.getString() bu holatda LIMIT TEKSHIRUVIDAN OLDIN
+    // butun javobni xotiraga yuklaydi — buzuq/juda katta javob heap'ni
+    // tugatib, qurilmani qulatishi mumkin. O'rniga stream'dan chegaralangan
+    // bufer bilan o'qiymiz — hech qachon HTTP_MAX_RESPONSE dan ortiq
+    // ajratmaymiz, limitdan oshgan qismini shunchaki o'qib tashlab yuboramiz.
+    WiFiClient* stream = http.getStreamPtr();
+    if (!stream) return "";
+    char buf[257];
+    String body;
+    body.reserve(HTTP_MAX_RESPONSE);
+    bool oversized = false;
+    unsigned long t0 = millis();
+    while (millis() - t0 < 5000) {
+        if (!http.connected() && stream->available() == 0) break;
+        size_t avail = stream->available();
+        if (avail == 0) { yield(); continue; }
+        size_t want = avail < sizeof(buf) - 1 ? avail : sizeof(buf) - 1;
+        int n = stream->readBytes(buf, want);
+        if (n <= 0) continue;
+        if (!oversized) {
+            if ((int)body.length() + n > HTTP_MAX_RESPONSE) {
+                oversized = true;
+            } else {
+                buf[n] = 0;
+                body += buf;
+            }
+        }
+    }
+    if (oversized) {
+        LOG_PRINTF("HTTP: chunked javob juda katta (>%d) — rad etildi\n", HTTP_MAX_RESPONSE);
+        return "";
+    }
+    return body;
 }
 
 static bool http_post(const char* path, const String& body) {
