@@ -1,8 +1,8 @@
 #pragma once
 /**
- * sound.h — Ovoz darajasi sensori (mikrofon ADC / DSP Multi-Frame)
+ * sound.h — Ovoz darajasi sensori (mikrofon ADC / Glitch-Proof P2P)
  *
- * 10 ta ketma-ket audio ramka bo'yicha barqaror o'rtachalash DSP filtri
+ * Apparat tok impulslari (0 va 4095) filtrlangan toza AC audio o'lchash drayveri
  */
 
 #include <Arduino.h>
@@ -19,20 +19,38 @@ struct SensorData {
 
 // ─── Ichki holat ──────────────────────────────────────────────────────────────
 static float s_level_smooth = 1.5f;   // Boshlang'ich holat ~1.5% (tinch xona)
-static float s_quiet_p2p    = 500.0f;  // Tinch xona p2p apparat bazasi (500 ADC counts)
+static float s_quiet_p2p    = 40.0f;   // Tinch xona toza p2p apparat bazasi
+
+// Single frame P2P (tok va 0/4095 apparat impulslari 100% filtrlangan)
+static float _get_p2p_clean() {
+    int lo = 4095, hi = 0;
+    int valid_samples = 0;
+    unsigned long start = millis();
+    while (millis() - start < 45) {
+        int v = analogRead(PIN_SOUND_ADC);
+        // 0 va 4095 elektr sakrashlarini filtrlash (faqat toza audio)
+        if (v >= 10 && v <= 4080) {
+            if (v < lo) lo = v;
+            if (v > hi) hi = v;
+            valid_samples++;
+        }
+        delayMicroseconds(100);
+    }
+    if (valid_samples < 10 || hi <= lo) return 0.0f;
+    return (float)(hi - lo);
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 
 static void sensor_init() {
     analogReadResolution(12);
     analogSetAttenuation(ADC_11db);
-    analogSetPinAttenuation(PIN_SOUND_ADC, ADC_11db);
     pinMode(PIN_SOUND_ADC, INPUT);
 
     for (int i = 0; i < 10; i++) analogRead(PIN_SOUND_ADC);
     s_level_smooth = 1.5f;
-    s_quiet_p2p    = 500.0f;
-    LOG_PRINTF("Ovoz sensori DSP Multi-Frame tayyor (GPIO%d)\n", PIN_SOUND_ADC);
+    s_quiet_p2p    = 40.0f;
+    LOG_PRINTF("Ovoz sensori toza P2P drayver tayyor (GPIO%d)\n", PIN_SOUND_ADC);
 }
 
 static bool sensor_connect() { return true; }
@@ -46,62 +64,46 @@ static bool sensor_read(SensorData& d) {
         return true;
     }
 
-    // 10 ta ketma-ket audio ramka bo'yicha o'qish (~500ms davomida o'rtachalash)
-    // Bu impulsli va elektr impuls xatoliklarini 100% filtrlaydi
+    // 8 ta ketma-ket toza audio ramka o'qish (o'rtachalash)
     float p2p_sum = 0.0f;
-    float p2p_max = 0.0f;
-    int valid_frames = 0;
+    int valid_count = 0;
 
-    for (int f = 0; f < 10; f++) {
-        int lo = 4095, hi = 0;
-        int count = 0;
-        unsigned long start = millis();
-        while (millis() - start < 35 && count < 60) {
-            int v = analogRead(PIN_SOUND_ADC);
-            if (v < lo) lo = v;
-            if (v > hi) hi = v;
-            count++;
-            delayMicroseconds(200);
+    for (int f = 0; f < 8; f++) {
+        float p = _get_p2p_clean();
+        if (p > 0.0f) {
+            p2p_sum += p;
+            valid_count++;
         }
-
-        if (count >= 5 && hi > lo) {
-            float frame_p2p = (float)(hi - lo);
-            p2p_sum += frame_p2p;
-            if (frame_p2p > p2p_max) p2p_max = frame_p2p;
-            valid_frames++;
-        }
-        delay(10); // ramkalar oralig'idagi kichik pauza
+        delay(10);
     }
 
-    if (valid_frames == 0) {
+    if (valid_count == 0) {
         d = {1.5f, true};
         return true;
     }
 
-    float avg_p2p = p2p_sum / (float)valid_frames;
+    float avg_p2p = p2p_sum / (float)valid_count;
 
-    // Tinch xona baseline tracking (sekin va barqaror)
-    if (avg_p2p < s_quiet_p2p * 1.30f && avg_p2p > 30.0f) {
-        s_quiet_p2p = s_quiet_p2p * 0.96f + avg_p2p * 0.04f;
+    // Tinch xona p2p bazasini sekin va barqaror kuzatish
+    if (avg_p2p < s_quiet_p2p * 1.30f && avg_p2p > 5.0f) {
+        s_quiet_p2p = s_quiet_p2p * 0.95f + avg_p2p * 0.05f;
     }
 
-    // 70% o'rtacha amplituda + 30% peak amplituda (sakramaydigan barqaror o'lchov)
-    float combined_p2p = (avg_p2p * 0.70f) + (p2p_max * 0.30f);
-    float signal = max(0.0f, combined_p2p - s_quiet_p2p);
+    float signal = max(0.0f, avg_p2p - s_quiet_p2p);
 
     float target_level = 1.5f;
-    if (signal < 25.0f) {
-        target_level = 1.5f; // Tinch xona norma = 1.5% STABIL
+    if (signal < 15.0f) {
+        target_level = 1.5f; // Tinch xona norma = 1.5% ANIQ VA STABIL
     } else {
-        target_level = constrain(1.5f + (signal / 25.0f), 1.5f, 100.0f);
+        target_level = constrain(1.5f + (signal / 14.0f), 1.5f, 100.0f);
     }
 
-    // Yumshoq EMA silliqlash (hech qachon sakramaydi)
-    s_level_smooth = s_level_smooth * 0.65f + target_level * 0.35f;
+    // Yumshoq EMA silliqlash
+    s_level_smooth = s_level_smooth * 0.60f + target_level * 0.40f;
     if (s_level_smooth < 1.5f) s_level_smooth = 1.5f;
 
-    LOG_PRINTF("Ovoz DSP STABIL GPIO%d: avg_p2p=%.0f max_p2p=%.0f baseline=%.0f level=%.1f%%\n",
-               PIN_SOUND_ADC, avg_p2p, p2p_max, s_quiet_p2p, s_level_smooth);
+    LOG_PRINTF("Ovoz ADC GPIO%d: avg_p2p=%.1f baseline=%.1f level=%.1f%%\n",
+               PIN_SOUND_ADC, avg_p2p, s_quiet_p2p, s_level_smooth);
 
     d = {s_level_smooth, true};
     return true;
