@@ -206,6 +206,60 @@ class AnalyticsRepository(BaseRepository[HourlyUtilityStats]):
             stmt = stmt.where(HourlyUtilityStats.device_id == device_id)
         return list((await self.session.scalars(stmt.order_by(desc(HourlyUtilityStats.bucket_ts)).limit(limit))).all())
 
+    # Utility → (natija ustuni, Reading ustuni, yaxlitlash) — display sparkline uchun
+    _BUCKET_FIELDS = {
+        "electricity": [("avg_voltage_l1", Reading.voltage_l1, 1)],
+        "water": [
+            ("avg_pressure_bottom_bar", Reading.pressure_bottom_bar, 3),
+            ("avg_pressure_top_bar", Reading.pressure_top_bar, 3),
+        ],
+        "gas": [("avg_pressure_bar", Reading.pressure_bar, 4)],
+        "soil": [
+            ("avg_humidity", Reading.humidity, 1),
+            ("avg_air_quality", Reading.air_quality, 1),
+        ],
+        "sound": [("avg_level", Reading.level, 1)],
+        "heating": [
+            ("avg_temperature_in_c", Reading.temperature_in_c, 1),
+            ("avg_temperature_out_c", Reading.temperature_out_c, 1),
+        ],
+    }
+
+    async def bucketed_utility_stats(
+        self,
+        cutoff: int,
+        utility_type: str,
+        bucket_sec: int = 900,
+        building_id: int | None = None,
+        limit: int = 500,
+    ) -> list[dict]:
+        """Xom o'qishlardan JONLI mayda-bucket statistikasi (display sparkline uchun).
+
+        hourly_utility_stats jadvali faqat soatlik — elektr kabi klasterlangan
+        ma'lumot 24 soatda atigi 6 ustun berardi. bucket_sec=900 (15 daqiqa) bilan
+        ancha zichroq grafik chiqadi. Bucket bo'yicha guruhlaydi (qurilmalararo
+        o'rtacha) — shu bilan bir binodagi bir nechta sensor avtomatik birlashadi.
+        """
+        bucket_ts = Reading.ts - (Reading.ts % bucket_sec)
+        cols = [bucket_ts.label("bucket_ts"), func.count().label("samples")]
+        for label, col, digits in self._BUCKET_FIELDS.get(utility_type, []):
+            cols.append(rnd(func.avg(col), digits).label(label))
+        stmt = (
+            select(*cols)
+            .join(Device, Device.id == Reading.device_id)
+            .where(
+                and_(
+                    Reading.ts >= cutoff,
+                    Reading.utility_type == utility_type,
+                    Device.is_test_device.is_(False),
+                )
+            )
+        )
+        if building_id:
+            stmt = stmt.where(Reading.building_id == building_id)
+        stmt = stmt.group_by(bucket_ts).order_by(desc(bucket_ts)).limit(limit)
+        return [dict(row) for row in (await self.session.execute(stmt)).mappings().all()]
+
     async def energy_by_building_rows(
         self,
         from_ts: int,

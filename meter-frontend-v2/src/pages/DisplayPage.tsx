@@ -77,7 +77,7 @@ function buildMultiPoints(rows: HourlyUtilityStat[], keys: (keyof HourlyUtilityS
   }
   return Object.keys(byTs)
     .sort((a, b) => Number(a) - Number(b))
-    .slice(-24)
+    .slice(-96) // 15-daqiqalik bucket → 24 soat uchun to'liq zich sparkline
     .map((ts) => byTs[Number(ts)])
 }
 
@@ -583,15 +583,23 @@ export default function DisplayPage() {
                 style={{ background: status.color }}
               />
 
-              {/* ── ZONA 1: Sarlavha satri ── */}
-              <div className="relative z-10 flex shrink-0 items-start justify-between gap-3 px-5 pb-1 pt-4">
-                <div className="flex items-center gap-3">
-                  <Icon className="h-6 w-6 shrink-0 text-slate-500 sm:h-7 sm:w-7" />
-                  <div>
-                    <h2 className="text-sm font-medium uppercase tracking-[0.12em] text-slate-400 sm:text-[15px]">
-                      {cfg.label}
-                    </h2>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+              {/* ── Yuqori satr: chapda nom, o'ngda katta son + status ── */}
+              <div className="relative z-10 flex shrink-0 items-start justify-between gap-3 px-5 pb-2 pt-4">
+                {/* Chap: ikonka + nom + badge (norma) */}
+                <div className="flex min-w-0 items-start gap-3">
+                  <Icon className="mt-0.5 h-6 w-6 shrink-0 text-slate-500 sm:h-7 sm:w-7" />
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h2 className="truncate text-sm font-medium uppercase tracking-[0.12em] text-slate-400 sm:text-[15px]">
+                        {cfg.label}
+                      </h2>
+                      {cfg.isFake && (
+                        <span className="shrink-0 rounded border border-white/10 px-1.5 py-0.5 text-[9px] font-semibold text-slate-500">
+                          Namunaviy
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
                       <SensorStatusBadge sensorKey={cfg.key} value={s0.latest} />
                       {cfg.nominal != null && (
                         <span className="text-[11px] text-slate-500">
@@ -607,117 +615,106 @@ export default function DisplayPage() {
                   </div>
                 </div>
 
-                {cfg.isFake && (
-                  <span className="shrink-0 rounded-md border border-white/10 bg-transparent px-2 py-0.5 text-[10px] font-semibold text-slate-500">
-                    Namunaviy
-                  </span>
-                )}
-              </div>
-
-              {/* ── ZONA 2: Qahramon satr (katta raqam + status so'zi) ── */}
-              <div className="relative z-10 flex flex-1 flex-col justify-center px-5 py-1">
-                {single ? (
-                  <>
-                    <span
-                      key={s0.latest ?? 'na'}
-                      className="value-tick inline-flex items-baseline gap-2 transition-colors duration-500"
-                    >
+                {/* O'ng: katta son + status so'zi (yuqori-o'ng — chartga joy ochadi) */}
+                <div className="flex shrink-0 flex-col items-end text-right">
+                  {single ? (
+                    <>
                       <span
-                        className="font-sans font-semibold tabular-nums leading-none tracking-[-0.02em] text-[clamp(2.75rem,6vw,5rem)]"
-                        style={{ color: heroColor }}
+                        key={s0.latest ?? 'na'}
+                        className="value-tick inline-flex items-baseline gap-1.5 transition-colors duration-500"
                       >
-                        {s0.latest != null ? <AnimatedNumber value={s0.latest} decimals={decimals} /> : '—'}
+                        <span
+                          className="font-sans font-semibold leading-none tabular-nums tracking-[-0.02em] text-[clamp(2.25rem,4.4vw,3.75rem)]"
+                          style={{ color: heroColor }}
+                        >
+                          {s0.latest != null ? <AnimatedNumber value={s0.latest} decimals={decimals} /> : '—'}
+                        </span>
+                        <span className="text-base font-medium text-slate-500 sm:text-lg">{cfg.unit}</span>
                       </span>
-                      <span className="text-lg font-medium text-slate-500 sm:text-2xl">{cfg.unit}</span>
-                    </span>
 
-                    {/* Status so'zi + nuqta (+ trend) */}
-                    <span className="mt-1.5 inline-flex items-center gap-2">
-                      <span className="relative inline-flex h-2.5 w-2.5">
-                        {isDanger && (
-                          <span
-                            className="absolute inline-flex h-full w-full animate-ping rounded-full"
-                            style={{ background: status.color, opacity: 0.6 }}
-                          />
+                      {/* Status so'zi + nuqta (+ trend) */}
+                      <span className="mt-1 inline-flex items-center gap-2">
+                        {TrendIcon && s0.trend != null && (
+                          <span className="inline-flex items-center gap-0.5 text-xs font-medium text-slate-500">
+                            <TrendIcon className="h-3.5 w-3.5" />
+                            {s0.trend > 0 ? '+' : ''}
+                            {s0.trend.toFixed(decimals)}
+                          </span>
                         )}
-                        <span className="relative inline-flex h-2.5 w-2.5 rounded-full" style={{ background: status.color }} />
-                      </span>
-                      <span
-                        className="text-lg font-bold uppercase tracking-wide sm:text-xl"
-                        style={{ color: status.color }}
-                      >
-                        {status.label}
-                      </span>
-                      {TrendIcon && s0.trend != null && (
-                        <span className="inline-flex items-center gap-0.5 text-xs font-medium text-slate-500">
-                          <TrendIcon className="h-3.5 w-3.5" />
-                          {s0.trend > 0 ? '+' : ''}
-                          {s0.trend.toFixed(decimals)}
+                        <span className="relative inline-flex h-2.5 w-2.5">
+                          {isDanger && (
+                            <span
+                              className="absolute inline-flex h-full w-full animate-ping rounded-full"
+                              style={{ background: status.color, opacity: 0.6 }}
+                            />
+                          )}
+                          <span className="relative inline-flex h-2.5 w-2.5 rounded-full" style={{ background: status.color }} />
                         </span>
-                      )}
-                    </span>
-                  </>
-                ) : (
-                  /* Qozonxona: ΔT qahramon raqam + Kirish/Chiqish kichik ko'rsatkichlar */
-                  <>
-                    <span
-                      key={dT ?? 'na'}
-                      className="value-tick inline-flex items-baseline gap-2 transition-colors duration-500"
-                    >
-                      <span
-                        className="font-sans font-semibold tabular-nums leading-none tracking-[-0.02em] text-[clamp(2.75rem,6vw,5rem)]"
-                        style={{ color: heroColor }}
-                      >
-                        {dT != null ? <AnimatedNumber value={dT} decimals={1} /> : '—'}
+                        <span
+                          className="text-base font-bold uppercase tracking-wide sm:text-lg"
+                          style={{ color: status.color }}
+                        >
+                          {status.label}
+                        </span>
                       </span>
-                      <span className="text-lg font-medium text-slate-500 sm:text-2xl">°C ΔT</span>
-                    </span>
-
-                    <span className="mt-1.5 inline-flex items-center gap-2">
-                      <span className="h-2.5 w-2.5 rounded-full" style={{ background: status.color }} />
+                    </>
+                  ) : (
+                    /* Qozonxona: ΔT qahramon raqam + Kirish/Chiqish kichik satr */
+                    <>
                       <span
-                        className="text-lg font-bold uppercase tracking-wide sm:text-xl"
-                        style={{ color: status.color }}
+                        key={dT ?? 'na'}
+                        className="value-tick inline-flex items-baseline gap-1.5 transition-colors duration-500"
                       >
-                        {status.label}
+                        <span
+                          className="font-sans font-semibold leading-none tabular-nums tracking-[-0.02em] text-[clamp(2.25rem,4.4vw,3.75rem)]"
+                          style={{ color: heroColor }}
+                        >
+                          {dT != null ? <AnimatedNumber value={dT} decimals={1} /> : '—'}
+                        </span>
+                        <span className="text-base font-medium text-slate-500 sm:text-lg">°C ΔT</span>
                       </span>
-                    </span>
 
-                    {/* Kirish / Chiqish kichik sub-figuralari */}
-                    <div className="mt-2 flex gap-5 text-slate-300">
-                      <div className="flex flex-col">
-                        <span className="text-[10px] font-medium uppercase tracking-wide text-slate-500">Kirish</span>
-                        <span className="text-base font-semibold tabular-nums sm:text-lg">
+                      <span className="mt-1 inline-flex items-center gap-2">
+                        <span className="h-2.5 w-2.5 rounded-full" style={{ background: status.color }} />
+                        <span
+                          className="text-base font-bold uppercase tracking-wide sm:text-lg"
+                          style={{ color: status.color }}
+                        >
+                          {status.label}
+                        </span>
+                      </span>
+
+                      <div className="mt-1 flex gap-4 tabular-nums text-slate-300">
+                        <span className="text-xs">
+                          <span className="text-slate-500">Kir </span>
                           {cfg.series[0].latest != null ? (
-                            <AnimatedNumber value={cfg.series[0].latest} decimals={1} suffix="°C" />
+                            <AnimatedNumber value={cfg.series[0].latest} decimals={1} suffix="°" />
                           ) : (
                             '—'
                           )}
                         </span>
-                      </div>
-                      <div className="flex flex-col">
-                        <span className="text-[10px] font-medium uppercase tracking-wide text-slate-500">Chiqish</span>
-                        <span className="text-base font-semibold tabular-nums sm:text-lg">
+                        <span className="text-xs">
+                          <span className="text-slate-500">Chiq </span>
                           {cfg.series[1]?.latest != null ? (
-                            <AnimatedNumber value={cfg.series[1].latest} decimals={1} suffix="°C" />
+                            <AnimatedNumber value={cfg.series[1].latest} decimals={1} suffix="°" />
                           ) : (
                             '—'
                           )}
                         </span>
                       </div>
-                    </div>
-                  </>
-                )}
+                    </>
+                  )}
+                </div>
               </div>
 
-              {/* ── ZONA 4: Sparkline (o'qlar/tooltip/grid yashirin) ── */}
-              <div className="relative z-10 shrink-0 px-2 pb-3">
-                <div className="mb-1 flex items-center justify-between px-2 text-[11px] text-slate-500">
+              {/* ── Chart: qolgan vertikal joyni to'liq egallaydi (kattaroq) ── */}
+              <div className="relative z-10 flex min-h-0 flex-1 flex-col px-2 pb-3">
+                <div className="mb-1 flex items-center justify-between px-3 text-[11px] text-slate-500">
                   <span>Oxirgi 24 soatlik dinamika</span>
                   <span>{cfg.points.length} ta o'lchov</span>
                 </div>
 
-                <div className="h-24 w-full sm:h-28 lg:h-32">
+                <div className="min-h-0 w-full flex-1">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart
                       data={isElec ? elecData : cfg.points}

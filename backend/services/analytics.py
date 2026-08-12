@@ -59,6 +59,25 @@ async def list_hourly_stats(
     return {"stats": [model_to_dict(row) for row in rows], "hours": hours, "total": len(rows)}
 
 
+async def list_bucketed_stats(
+    building_id: int | None = None,
+    utility_type: str = "electricity",
+    hours: int = 24,
+    bucket_sec: int = 900,
+    limit: int = 500,
+) -> list[dict]:
+    """Display sparkline uchun jonli mayda-bucket (default 15 daq) statistika."""
+    cutoff = now_ts() - hours * 3600
+    async with SessionLocal() as session:
+        return await AnalyticsRepository(session).bucketed_utility_stats(
+            cutoff=cutoff,
+            utility_type=utility_type,
+            bucket_sec=bucket_sec,
+            building_id=building_id,
+            limit=limit,
+        )
+
+
 async def energy_by_building(
     from_ts: int,
     to_ts: int,

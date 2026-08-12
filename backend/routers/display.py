@@ -18,30 +18,12 @@ async def public_display(building_id: Optional[int] = None):
     (kiosk ekranini bitta domga bog'lash uchun: /display?building_id=3).
     """
     async def stats(utility: str) -> list:
-        result = await analytics_service.list_hourly_stats(
-            building_id=building_id, utility_type=utility, hours=24, limit=500
+        # 15-daqiqalik jonli bucket — soatlik jadval elektr uchun 24 soatda atigi
+        # ~6 ustun berardi; mayda bucket sparkline'ni ancha zichlashtiradi. Bucket
+        # bo'yicha o'rtacha — bir binodagi bir nechta ovoz sensori avtomatik birlashadi.
+        return await analytics_service.list_bucketed_stats(
+            building_id=building_id, utility_type=utility, hours=24, bucket_sec=900, limit=500
         )
-        raw_stats = result["stats"]
-        # Agar bino bo'yicha bir nechta ovoz datchigi bo'lsa, soatlik bucket_ts bo'yicha ularning o'rtachasini yig'ish
-        if utility == "sound" and raw_stats:
-            buckets: dict[int, list[float]] = {}
-            row_map: dict[int, dict] = {}
-            for row in raw_stats:
-                bts = row.get("bucket_ts")
-                lvl = row.get("avg_level")
-                if bts and lvl is not None:
-                    if bts not in buckets:
-                        buckets[bts] = []
-                        row_map[bts] = dict(row)
-                    buckets[bts].append(float(lvl))
-            combined = []
-            for bts in sorted(buckets.keys()):
-                vals = buckets[bts]
-                r = row_map[bts]
-                r["avg_level"] = round(sum(vals) / len(vals), 1)
-                combined.append(r)
-            return combined
-        return raw_stats
 
     building_info = None
     latest: dict = {}
