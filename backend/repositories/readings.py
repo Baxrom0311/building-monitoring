@@ -35,6 +35,36 @@ class ReadingRepository(BaseRepository[Reading]):
         stmt = stmt.distinct(Reading.utility_type).order_by(Reading.utility_type, desc(Reading.ts))
         return list((await self.session.scalars(stmt)).all())
 
+    async def latest_sound_average(self, building_id: int | None = None, max_age_seconds: int = 7200) -> dict | None:
+        """Bino ichidagi barcha aktiv ovoz datchiklarining (masalan 3 ta ovoz sensori)
+        oxirgi o'qishlari bo'yicha O'RTACHA qiymatni hisoblab qaytaradi."""
+        from core.time import now_ts
+        cutoff = now_ts() - max_age_seconds
+        subq_stmt = select(Reading.device_id, func.max(Reading.ts).label("max_ts")).where(
+            and_(Reading.utility_type == "sound", Reading.ts > cutoff)
+        )
+        if building_id is not None:
+            subq_stmt = subq_stmt.where(Reading.building_id == building_id)
+        subq = subq_stmt.group_by(Reading.device_id).subquery()
+
+        stmt = (
+            select(
+                func.avg(Reading.level).label("avg_level"),
+                func.max(Reading.ts).label("max_ts"),
+                func.count().label("sensor_count"),
+            )
+            .join(subq, and_(Reading.device_id == subq.c.device_id, Reading.ts == subq.c.max_ts))
+            .where(Reading.utility_type == "sound")
+        )
+        res = (await self.session.execute(stmt)).mappings().one_or_none()
+        if res and res["sensor_count"] and res["avg_level"] is not None:
+            return {
+                "value": round(float(res["avg_level"]), 1),
+                "ts": res["max_ts"],
+                "sensor_count": res["sensor_count"],
+            }
+        return None
+
     async def exists_external_id(self, device_id: str, reading_id: str) -> bool:
         existing = await self.session.scalar(
             select(Reading.id).where(and_(Reading.device_id == device_id, Reading.reading_id == reading_id))

@@ -21,7 +21,27 @@ async def public_display(building_id: Optional[int] = None):
         result = await analytics_service.list_hourly_stats(
             building_id=building_id, utility_type=utility, hours=24, limit=500
         )
-        return result["stats"]
+        raw_stats = result["stats"]
+        # Agar bino bo'yicha bir nechta ovoz datchigi bo'lsa, soatlik bucket_ts bo'yicha ularning o'rtachasini yig'ish
+        if utility == "sound" and raw_stats:
+            buckets: dict[int, list[float]] = {}
+            row_map: dict[int, dict] = {}
+            for row in raw_stats:
+                bts = row.get("bucket_ts")
+                lvl = row.get("avg_level")
+                if bts and lvl is not None:
+                    if bts not in buckets:
+                        buckets[bts] = []
+                        row_map[bts] = dict(row)
+                    buckets[bts].append(float(lvl))
+            combined = []
+            for bts in sorted(buckets.keys()):
+                vals = buckets[bts]
+                r = row_map[bts]
+                r["avg_level"] = round(sum(vals) / len(vals), 1)
+                combined.append(r)
+            return combined
+        return raw_stats
 
     building_info = None
     latest: dict = {}
@@ -34,7 +54,7 @@ async def public_display(building_id: Optional[int] = None):
         # Displey ekranida bino tanlash uchun aktiv binolar ro'yxati (id + nom)
         all_buildings = await repo.list_active()
 
-        # Real-vaqt qiymati — har utility uchun eng oxirgi xom o'qish (soatlik o'rtacha emas)
+        # Real-vaqt qiymati — har utility uchun eng oxirgi xom o'qish
         reading_repo = ReadingRepository(session)
         for r in await reading_repo.latest_per_utility(building_id=building_id):
             if r.utility_type == "electricity":
@@ -53,6 +73,11 @@ async def public_display(building_id: Optional[int] = None):
                     "value_out": r.temperature_out_c,
                     "ts": r.ts,
                 }
+
+        # Agar binoda 1 ta dan ko'p ovoz datchigi (masalan 3 ta ovoz sensori) bo'lsa, ularning o'rtachasini olish
+        sound_avg = await reading_repo.latest_sound_average(building_id=building_id)
+        if sound_avg:
+            latest["sound"] = sound_avg
     buildings = [{"id": b.id, "name": b.name} for b in all_buildings]
 
     return {
