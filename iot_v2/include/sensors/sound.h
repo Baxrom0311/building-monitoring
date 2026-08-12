@@ -2,7 +2,7 @@
 /**
  * sound.h — Ovoz darajasi sensori (mikrofon ADC)
  *
- * GPIO 34 (ADC1_CH6) — ESP32 analog kiritish pini
+ * Signal filtrlash: USB va elektr shovqinlaridan xoli Mean Absolute Deviation (MAD)
  */
 
 #include <Arduino.h>
@@ -18,20 +18,30 @@ struct SensorData {
 };
 
 // ─── Ichki holat ──────────────────────────────────────────────────────────────
-static float s_level_smooth = 7.5f; // Boshlang'ich holat ~7.5% (tinch xona)
+static float s_level_smooth = 7.0f; // Boshlang'ich holat ~7% (tinch xona)
 
-// ADC amplituda: 80ms audio sample oyna ichida peak-to-peak o'lchash (hi - lo)
-static int _sound_amplitude() {
-    int lo = 4095, hi = 0;
+// ADC raqamli audio signal energiyasi (Mean Absolute Deviation - MAD)
+// USB va elektr apparat shovqinlarini filtrlash uchun Mean Deviation ishlatiladi.
+static float _sound_average_deviation() {
+    long sum = 0;
+    int count = 0;
+    static int samples[200];
+    
     unsigned long start = millis();
-    while (millis() - start < 80) {
+    while (millis() - start < 60 && count < 200) {
         int v = analogRead(PIN_SOUND_ADC);
-        if (v < lo) lo = v;
-        if (v > hi) hi = v;
-        delayMicroseconds(40);
+        samples[count++] = v;
+        sum += v;
+        delayMicroseconds(100);
     }
-    if (hi <= lo) return 0;
-    return hi - lo;
+    if (count == 0) return 0.0f;
+    
+    float mean = (float)sum / (float)count;
+    float dev_sum = 0.0f;
+    for (int i = 0; i < count; i++) {
+        dev_sum += fabs((float)samples[i] - mean);
+    }
+    return dev_sum / (float)count;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -43,8 +53,8 @@ static void sensor_init() {
     pinMode(PIN_SOUND_ADC, INPUT);
 
     for (int i = 0; i < 10; i++) analogRead(PIN_SOUND_ADC);
-    s_level_smooth = 7.5f;
-    LOG_PRINTF("Ovoz sensori tayyor (GPIO%d, ADC_11db 0-3.3V)\n", PIN_SOUND_ADC);
+    s_level_smooth = 7.0f;
+    LOG_PRINTF("Ovoz sensori MAD filtr tayyor (GPIO%d, ADC_11db)\n", PIN_SOUND_ADC);
 }
 
 static bool sensor_connect() { return true; }
@@ -58,26 +68,25 @@ static bool sensor_read(SensorData& d) {
         return true;
     }
 
-    int amp = _sound_amplitude();
+    float dev = _sound_average_deviation();
 
-    // Mikrofon ADC peak-to-peak o'lchovi (0-4095)
-    // Tinch xona baseline = ~20-50 ADC counts
-    // Gapirish / muloqot = ~300-900 ADC counts
-    // Baland shovqin / baqirish = 2400+ ADC counts
+    // Tinch xona MAD baseline = ~5-12 ADC counts
+    // Odatiy muloqot / gapirish = ~60-180 ADC counts
+    // Baland shovqin / baqirish = 300+ ADC counts
     
-    float signal = max(0.0f, (float)amp - 40.0f);
+    float sound_energy = max(0.0f, dev - 10.0f);
     
     // Tinch xona norma = 7.0%
-    // 2400 ADC P2P = 100% full scale
-    float target_level = constrain(7.0f + (signal / 2400.0f) * 100.0f, 7.0f, 100.0f);
+    // 330.0 MAD deviation = 100% full scale
+    float target_level = constrain(7.0f + (sound_energy / 3.3f), 7.0f, 100.0f);
 
-    // EMA silliqlashtirish: o'sish 0.40 (tez sezish), tushish 0.12
-    float alpha = (target_level > s_level_smooth) ? 0.40f : 0.12f;
+    // EMA silliqlashtirish: o'sish 0.35 (tez sezish), tushish 0.12
+    float alpha = (target_level > s_level_smooth) ? 0.35f : 0.12f;
     s_level_smooth += (target_level - s_level_smooth) * alpha;
 
     if (s_level_smooth < 7.0f) s_level_smooth = 7.0f;
 
-    LOG_PRINTF("Ovoz ADC GPIO%d: amp=%d signal=%.1f level=%.1f%%\n", PIN_SOUND_ADC, amp, signal, s_level_smooth);
+    LOG_PRINTF("Ovoz ADC GPIO%d: dev=%.1f energy=%.1f level=%.1f%%\n", PIN_SOUND_ADC, dev, sound_energy, s_level_smooth);
 
     d = {s_level_smooth, true};
     return true;
