@@ -223,12 +223,12 @@ const CHARTS = [
   {
     key: 'heating' as const,
     dataKey: 'avg_temperature_in_c' as keyof HourlyUtilityStat,
-    label: 'Qozonxona kirish harorati',
+    label: 'Qozonxona harorati',
     unit: '°C',
     icon: Thermometer,
-    color: '#FB7185',
-    glow: 'rgba(251,113,133,0.5)',
-    bg: 'from-rose-500/20 via-slate-900/80 to-slate-950',
+    color: '#06B6D4',
+    glow: 'rgba(6,182,212,0.5)',
+    bg: 'from-cyan-500/20 via-slate-900/80 to-slate-950',
     // Qozonxona normasi ΔT (kirish-chiqish farqi) orqali baholanadi — HEATING_DELTA_NORMA
     nominal: null as number | null,
     fake: null as { base: number; amp: number } | null,
@@ -328,8 +328,8 @@ export default function DisplayPage() {
     const seriesDefs =
       cfg.key === 'heating'
         ? [
-            { key: 'avg_temperature_in_c' as keyof HourlyUtilityStat, label: 'Kirish', color: '#34D399' },
-            { key: 'avg_temperature_out_c' as keyof HourlyUtilityStat, label: 'Chiqish', color: '#F87171' },
+            { key: 'avg_temperature_in_c' as keyof HourlyUtilityStat, label: 'Kirish', color: '#06B6D4' },
+            { key: 'avg_temperature_out_c' as keyof HourlyUtilityStat, label: 'Chiqish', color: '#38BDF8' },
           ]
         : [{ key: cfg.dataKey, label: cfg.label, color: cfg.color }]
 
@@ -593,11 +593,11 @@ export default function DisplayPage() {
                 <div className="relative z-10 flex shrink-0 items-center justify-between gap-3 px-4 pt-1 sm:px-6">
                   {/* Kirish harorati (Katta 5xl/6xl) */}
                   <div>
-                    <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-400">
-                      <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-cyan-400">
+                      <span className="h-2 w-2 rounded-full bg-cyan-400" />
                       Kirish harorati
                     </div>
-                    <div className="font-mono text-4xl font-black tabular-nums leading-none text-emerald-400 sm:text-5xl lg:text-6xl">
+                    <div className="font-mono text-4xl font-black tabular-nums leading-none text-cyan-400 sm:text-5xl lg:text-6xl">
                       {s0.latest != null ? <AnimatedNumber value={s0.latest} decimals={1} /> : '—'}
                       <span className="ml-1.5 text-xl font-bold text-slate-400 sm:ml-2 sm:text-2xl">{cfg.unit}</span>
                     </div>
