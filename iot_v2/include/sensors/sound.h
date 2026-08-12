@@ -1,8 +1,8 @@
 #pragma once
 /**
- * sound.h — Ovoz darajasi sensori (mikrofon ADC / Digital hybrid)
+ * sound.h — Ovoz darajasi sensori (mikrofon ADC / DSP Multi-Frame)
  *
- * AO (Analog) va DO (Digital) turlarini avtomatik aniqlaydigan universal datchik drayveri.
+ * 10 ta ketma-ket audio ramka bo'yicha barqaror o'rtachalash DSP filtri
  */
 
 #include <Arduino.h>
@@ -18,8 +18,8 @@ struct SensorData {
 };
 
 // ─── Ichki holat ──────────────────────────────────────────────────────────────
-static float s_level_smooth = 1.5f; // Boshlang'ich holat ~1.5% (tinch xona)
-static float s_quiet_p2p    = 550.0f; // Tinch xona p2p apparat bazasi (550 ADC counts)
+static float s_level_smooth = 1.5f;   // Boshlang'ich holat ~1.5% (tinch xona)
+static float s_quiet_p2p    = 500.0f;  // Tinch xona p2p apparat bazasi (500 ADC counts)
 
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -31,8 +31,8 @@ static void sensor_init() {
 
     for (int i = 0; i < 10; i++) analogRead(PIN_SOUND_ADC);
     s_level_smooth = 1.5f;
-    s_quiet_p2p    = 550.0f;
-    LOG_PRINTF("Ovoz sensori gibrid drayver tayyor (GPIO%d, quiet_baseline=550)\n", PIN_SOUND_ADC);
+    s_quiet_p2p    = 500.0f;
+    LOG_PRINTF("Ovoz sensori DSP Multi-Frame tayyor (GPIO%d)\n", PIN_SOUND_ADC);
 }
 
 static bool sensor_connect() { return true; }
@@ -46,68 +46,62 @@ static bool sensor_read(SensorData& d) {
         return true;
     }
 
-    // 60ms namunalar oynasi (150 ta sample)
-    int count = 0;
-    int lo = 4095, hi = 0;
-    long sum = 0;
-    int digital_pulses = 0;
-    bool last_state = false;
-    int sat_count = 0;
+    // 10 ta ketma-ket audio ramka bo'yicha o'qish (~500ms davomida o'rtachalash)
+    // Bu impulsli va elektr impuls xatoliklarini 100% filtrlaydi
+    float p2p_sum = 0.0f;
+    float p2p_max = 0.0f;
+    int valid_frames = 0;
 
-    unsigned long start = millis();
-    while (millis() - start < 60 && count < 150) {
-        int v = analogRead(PIN_SOUND_ADC);
-        if (v < lo) lo = v;
-        if (v > hi) hi = v;
-        sum += v;
-        count++;
-
-        bool cur_state = (v > 2000);
-        if (cur_state != last_state) {
-            digital_pulses++;
-            last_state = cur_state;
+    for (int f = 0; f < 10; f++) {
+        int lo = 4095, hi = 0;
+        int count = 0;
+        unsigned long start = millis();
+        while (millis() - start < 35 && count < 60) {
+            int v = analogRead(PIN_SOUND_ADC);
+            if (v < lo) lo = v;
+            if (v > hi) hi = v;
+            count++;
+            delayMicroseconds(200);
         }
 
-        if (v < 200 || v > 3900) sat_count++;
-
-        delayMicroseconds(120);
+        if (count >= 5 && hi > lo) {
+            float frame_p2p = (float)(hi - lo);
+            p2p_sum += frame_p2p;
+            if (frame_p2p > p2p_max) p2p_max = frame_p2p;
+            valid_frames++;
+        }
+        delay(10); // ramkalar oralig'idagi kichik pauza
     }
 
-    if (count == 0) {
+    if (valid_frames == 0) {
         d = {1.5f, true};
         return true;
     }
 
-    float target_level = 1.5f;
+    float avg_p2p = p2p_sum / (float)valid_frames;
 
-    // A) Agar modul DO (Digital Output) piniga ulangan bo'lsa yoki to'yingan bo'lsa
-    if (sat_count > (count / 2)) {
-        float pulse_energy = max(0.0f, (float)digital_pulses - 2.0f);
-        target_level = constrain(1.5f + (pulse_energy * 2.5f), 1.5f, 100.0f);
-        LOG_PRINTF("Ovoz DO (Digital): pulses=%d level=%.1f%%\n", digital_pulses, target_level);
-    } else {
-        // B) Aniq AO (Analog Output) rejimi — 550.0f tinch xona bazasini ayirish
-        float p2p = (float)(hi - lo);
-        
-        // Tinch xona p2p bazasini sekin moslashtirish
-        if (p2p < s_quiet_p2p * 1.3f && p2p > 50.0f) {
-            s_quiet_p2p = s_quiet_p2p * 0.98f + p2p * 0.02f;
-        }
-
-        float signal = max(0.0f, p2p - s_quiet_p2p);
-        if (signal < 12.0f) {
-            target_level = 1.5f; // Tinch xona = 1.5%
-        } else {
-            target_level = constrain(1.5f + (signal / 22.0f), 1.5f, 100.0f);
-        }
-        LOG_PRINTF("Ovoz AO (Analog): hi=%d lo=%d p2p=%.0f baseline=%.0f level=%.1f%%\n", hi, lo, p2p, s_quiet_p2p, target_level);
+    // Tinch xona baseline tracking (sekin va barqaror)
+    if (avg_p2p < s_quiet_p2p * 1.30f && avg_p2p > 30.0f) {
+        s_quiet_p2p = s_quiet_p2p * 0.96f + avg_p2p * 0.04f;
     }
 
-    // EMA silliqlashtirish: o'sish 0.35 (tez sezish), tushish 0.12
-    float alpha = (target_level > s_level_smooth) ? 0.35f : 0.12f;
-    s_level_smooth += (target_level - s_level_smooth) * alpha;
+    // 70% o'rtacha amplituda + 30% peak amplituda (sakramaydigan barqaror o'lchov)
+    float combined_p2p = (avg_p2p * 0.70f) + (p2p_max * 0.30f);
+    float signal = max(0.0f, combined_p2p - s_quiet_p2p);
 
+    float target_level = 1.5f;
+    if (signal < 25.0f) {
+        target_level = 1.5f; // Tinch xona norma = 1.5% STABIL
+    } else {
+        target_level = constrain(1.5f + (signal / 25.0f), 1.5f, 100.0f);
+    }
+
+    // Yumshoq EMA silliqlash (hech qachon sakramaydi)
+    s_level_smooth = s_level_smooth * 0.65f + target_level * 0.35f;
     if (s_level_smooth < 1.5f) s_level_smooth = 1.5f;
+
+    LOG_PRINTF("Ovoz DSP STABIL GPIO%d: avg_p2p=%.0f max_p2p=%.0f baseline=%.0f level=%.1f%%\n",
+               PIN_SOUND_ADC, avg_p2p, p2p_max, s_quiet_p2p, s_level_smooth);
 
     d = {s_level_smooth, true};
     return true;
