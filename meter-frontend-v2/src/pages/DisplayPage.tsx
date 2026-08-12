@@ -545,36 +545,37 @@ export default function DisplayPage() {
           return (
             <div
               key={cfg.key}
-              className="group relative flex min-h-[340px] flex-col overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03] shadow-2xl shadow-black/40 backdrop-blur-xl transition-all duration-300 hover:border-white/20 hover:bg-white/[0.05] lg:min-h-0"
+              className="group relative flex min-h-[340px] flex-col overflow-hidden rounded-3xl border border-white/15 bg-gradient-to-b from-white/[0.06] via-slate-900/85 to-slate-950/95 shadow-2xl shadow-black/60 backdrop-blur-2xl transition-all duration-300 hover:scale-[1.015] hover:border-white/30 hover:shadow-[0_20px_50px_rgba(0,0,0,0.8)] lg:min-h-0"
             >
               {/* Tepa aksent chizig'i */}
               <div
-                className="absolute inset-x-0 top-0 h-1"
+                className="absolute inset-x-0 top-0 h-1.5"
                 style={{
-                  background: `linear-gradient(90deg, transparent, ${cfg.key === 'soil' && soilStatus ? soilStatus.color : cfg.color}, transparent)`,
+                  background: `linear-gradient(90deg, transparent 5%, ${cfg.key === 'soil' && soilStatus ? soilStatus.color : cfg.color} 50%, transparent 95%)`,
+                  boxShadow: `0 2px 10px ${cfg.key === 'soil' && soilStatus ? soilStatus.color : cfg.color}`,
                 }}
               />
               {/* Glow */}
               <div
-                className="pointer-events-none absolute inset-0 opacity-50 transition-opacity duration-300 group-hover:opacity-70"
-                style={{ background: `radial-gradient(ellipse 90% 55% at 50% 0%, ${cfg.glow}, transparent)` }}
+                className="pointer-events-none absolute inset-0 opacity-40 transition-opacity duration-300 group-hover:opacity-65"
+                style={{ background: `radial-gradient(circle 280px at 50% 10%, ${cfg.glow}, transparent 80%)` }}
               />
 
               {/* Sarlavha */}
               <div className="relative z-10 flex shrink-0 items-center justify-between gap-3 px-4 pb-1 pt-4 sm:px-6 sm:pt-5">
                 <div className="flex items-center gap-3">
                   <div
-                    className="flex h-11 w-11 items-center justify-center rounded-2xl border transition-all sm:h-14 sm:w-14"
+                    className="flex h-11 w-11 items-center justify-center rounded-2xl border shadow-xl transition-all group-hover:scale-105 sm:h-14 sm:w-14"
                     style={{
-                      background: cfg.key === 'soil' && soilStatus ? soilStatus.bgColor : cfg.glow,
-                      borderColor: cfg.key === 'soil' && soilStatus ? soilStatus.borderColor : `${cfg.color}55`,
-                      boxShadow: `0 8px 24px -8px ${cfg.key === 'soil' && soilStatus ? soilStatus.color : cfg.color}`,
+                      background: cfg.key === 'soil' && soilStatus ? soilStatus.bgColor : `${cfg.color}18`,
+                      borderColor: cfg.key === 'soil' && soilStatus ? soilStatus.borderColor : `${cfg.color}45`,
+                      boxShadow: `0 8px 25px -4px ${cfg.key === 'soil' && soilStatus ? soilStatus.color : cfg.color}40`,
                     }}
                   >
-                    <Icon className="h-6 w-6 sm:h-7 sm:w-7" style={{ color: cfg.key === 'soil' && soilStatus ? soilStatus.color : cfg.color }} />
+                    <Icon className="h-6 w-6 sm:h-7 sm:w-7" style={{ color: cfg.key === 'soil' && soilStatus ? soilStatus.color : cfg.color, filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.5))' }} />
                   </div>
                   <div>
-                    <div className="text-base font-bold text-white sm:text-lg">{cfg.label}</div>
+                    <div className="text-base font-extrabold tracking-tight text-white sm:text-lg">{cfg.label}</div>
                     {cfg.isFake && <div className="text-[11px] text-slate-400 sm:text-xs">Namunaviy · normal bosim</div>}
                   </div>
                 </div>
@@ -594,10 +595,10 @@ export default function DisplayPage() {
                   {/* Kirish harorati (Katta 5xl/6xl) */}
                   <div>
                     <div className="flex items-center gap-1.5 text-xs font-bold text-cyan-400">
-                      <span className="h-2 w-2 rounded-full bg-cyan-400" />
+                      <span className="h-2 w-2 rounded-full bg-cyan-400 animate-pulse" />
                       Kirish harorati
                     </div>
-                    <div className="font-mono text-4xl font-black tabular-nums leading-none text-cyan-400 sm:text-5xl lg:text-6xl">
+                    <div className="font-mono text-4xl font-black tabular-nums leading-none text-cyan-400 sm:text-5xl lg:text-6xl" style={{ textShadow: '0 0 20px rgba(6,182,212,0.35)' }}>
                       {s0.latest != null ? <AnimatedNumber value={s0.latest} decimals={1} /> : '—'}
                       <span className="ml-1.5 text-xl font-bold text-slate-400 sm:ml-2 sm:text-2xl">{cfg.unit}</span>
                     </div>
@@ -608,15 +609,15 @@ export default function DisplayPage() {
                     const ok = cfg.deltaT != null && Math.abs(cfg.deltaT - HEATING_DELTA_NORMA) <= HEATING_DELTA_MARGIN
                     const dColor = cfg.deltaT == null ? '#94a3b8' : ok ? '#34D399' : '#FBBF24'
                     return (
-                      <div className="flex flex-col items-end rounded-2xl border border-white/10 bg-white/5 px-3 py-1.5 backdrop-blur-md sm:px-4 sm:py-2">
-                        <div className="text-[11px] font-bold text-slate-300 sm:text-xs">
+                      <div className="flex flex-col items-end rounded-2xl border border-white/15 bg-white/10 px-3.5 py-2 backdrop-blur-xl shadow-lg transition-all group-hover:border-white/25">
+                        <div className="text-[11px] font-extrabold uppercase tracking-wider text-slate-300 sm:text-xs">
                           ΔT (Farq)
                         </div>
-                        <div className="font-mono text-2xl font-black tabular-nums leading-none sm:text-3xl lg:text-4xl" style={{ color: dColor }}>
+                        <div className="font-mono text-2xl font-black tabular-nums leading-none sm:text-3xl lg:text-4xl" style={{ color: dColor, textShadow: `0 0 16px ${dColor}44` }}>
                           {cfg.deltaT != null ? <AnimatedNumber value={cfg.deltaT} decimals={1} /> : '—'}
                           <span className="ml-1 text-sm font-bold text-slate-400 sm:text-base">{cfg.unit}</span>
                         </div>
-                        <div className="mt-0.5 text-[10px] font-semibold text-slate-400">
+                        <div className="mt-0.5 text-[10px] font-bold text-slate-400">
                           norma {HEATING_DELTA_NORMA}°C
                         </div>
                       </div>
@@ -626,7 +627,7 @@ export default function DisplayPage() {
               ) : single ? (
                 <>
                   <div className="relative z-10 flex shrink-0 items-end justify-between gap-3 px-4 pt-1 sm:px-6">
-                    <div className="font-mono text-4xl font-black tabular-nums leading-none sm:text-5xl lg:text-6xl" style={{ color: valueColor }}>
+                    <div className="font-mono text-4xl font-black tabular-nums leading-none sm:text-5xl lg:text-6xl" style={{ color: valueColor, textShadow: `0 0 20px ${valueColor}35` }}>
                       {s0.latest != null ? <AnimatedNumber value={s0.latest} decimals={1} /> : '—'}
                       <span className="ml-1.5 text-xl font-bold text-slate-400 sm:ml-2 sm:text-2xl">{cfg.unit}</span>
                     </div>
