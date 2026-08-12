@@ -19,6 +19,7 @@ struct SensorData {
 
 // ─── Ichki holat ──────────────────────────────────────────────────────────────
 static float s_level_smooth = 7.0f; // Boshlang'ich holat ~7% (tinch xona)
+static float s_quiet_p2p    = 550.0f; // Tinch xona p2p apparat bazasi (550 ADC counts)
 
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -30,7 +31,8 @@ static void sensor_init() {
 
     for (int i = 0; i < 10; i++) analogRead(PIN_SOUND_ADC);
     s_level_smooth = 7.0f;
-    LOG_PRINTF("Ovoz sensori gibrid drayver tayyor (GPIO%d, ADC_11db)\n", PIN_SOUND_ADC);
+    s_quiet_p2p    = 550.0f;
+    LOG_PRINTF("Ovoz sensori gibrid drayver tayyor (GPIO%d, quiet_baseline=550)\n", PIN_SOUND_ADC);
 }
 
 static bool sensor_connect() { return true; }
@@ -76,21 +78,25 @@ static bool sensor_read(SensorData& d) {
         return true;
     }
 
-    float mean = (float)sum / (float)count;
     float target_level = 7.0f;
 
-    // A) Agar modul DO (Digital Output) piniga ulangan bo'lsa yoki to'yingan bo'lsa (sat_count > 60)
+    // A) Agar modul DO (Digital Output) piniga ulangan bo'lsa yoki to'yingan bo'lsa
     if (sat_count > (count / 2)) {
-        // Ritmik impulslar bo'yicha hisoblash
         float pulse_energy = max(0.0f, (float)digital_pulses - 2.0f);
         target_level = constrain(7.0f + (pulse_energy * 2.2f), 7.0f, 100.0f);
         LOG_PRINTF("Ovoz DO (Digital): pulses=%d level=%.1f%%\n", digital_pulses, target_level);
     } else {
-        // B) Aniq AO (Analog Output) rejimi
+        // B) Aniq AO (Analog Output) rejimi — 550.0f tinch xona bazasini ayirish
         float p2p = (float)(hi - lo);
-        float signal = max(0.0f, p2p - 40.0f);
-        target_level = constrain(7.0f + (signal / 15.0f), 7.0f, 100.0f);
-        LOG_PRINTF("Ovoz AO (Analog): hi=%d lo=%d p2p=%.0f level=%.1f%%\n", hi, lo, p2p, target_level);
+        
+        // Tinch xona p2p bazasini sekin moslashtirish
+        if (p2p < s_quiet_p2p * 1.3f && p2p > 50.0f) {
+            s_quiet_p2p = s_quiet_p2p * 0.98f + p2p * 0.02f;
+        }
+
+        float signal = max(0.0f, p2p - s_quiet_p2p);
+        target_level = constrain(7.0f + (signal / 22.0f), 7.0f, 100.0f);
+        LOG_PRINTF("Ovoz AO (Analog): hi=%d lo=%d p2p=%.0f baseline=%.0f level=%.1f%%\n", hi, lo, p2p, s_quiet_p2p, target_level);
     }
 
     // EMA silliqlashtirish: o'sish 0.35 (tez sezish), tushish 0.12
