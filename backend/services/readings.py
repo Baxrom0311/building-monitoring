@@ -164,6 +164,7 @@ async def _save_reading_internal(session: AsyncSession, body: MeterReading, ts: 
         temperature_in_c=body.temperature_in_c,
         temperature_out_c=body.temperature_out_c,
         humidity=body.humidity,
+        air_quality=body.air_quality if body.air_quality is not None else body.air_pct,
         level=body.level,
         raw_payload=json.dumps(body.model_dump(), ensure_ascii=False, default=str),
         created_at=ts,

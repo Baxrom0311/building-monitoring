@@ -23,6 +23,7 @@ import {
   TrendingDown,
   TrendingUp,
   Volume2,
+  Wind,
   Zap,
 } from 'lucide-react'
 import { API_BASE_URL } from '@/lib/env'
@@ -40,6 +41,7 @@ const BASE = API_BASE_URL || window.location.origin
 interface LatestValue {
   value: number | null
   value_out?: number | null
+  air_quality?: number | null
   ts?: number
 }
 
@@ -746,20 +748,36 @@ export default function DisplayPage() {
               <div className="relative z-10 flex shrink-0 items-baseline justify-between px-4 py-2 sm:px-6 sm:py-3">
                 {single ? (
                   <div className="flex items-baseline gap-2">
-                    <div
-                      className="font-mono text-4xl font-black tracking-tight sm:text-5xl lg:text-6xl"
-                      style={{
-                        color: valueColor,
-                        textShadow: `0 0 35px ${valueColor}60, 0 4px 12px rgba(0,0,0,0.9)`,
-                      }}
-                    >
-                      {s0.latest != null ? (
-                        <AnimatedNumber value={s0.latest} decimals={isElec || cfg.key === 'soil' || cfg.key === 'sound' ? 1 : 2} />
-                      ) : (
-                        '—'
+                    <div className="flex items-baseline gap-2">
+                      <div
+                        className="font-mono text-4xl font-black tracking-tight sm:text-5xl lg:text-6xl"
+                        style={{
+                          color: valueColor,
+                          textShadow: `0 0 35px ${valueColor}60, 0 4px 12px rgba(0,0,0,0.9)`,
+                        }}
+                      >
+                        {s0.latest != null ? (
+                          <AnimatedNumber value={s0.latest} decimals={isElec || cfg.key === 'soil' || cfg.key === 'sound' ? 1 : 2} />
+                        ) : (
+                          '—'
+                        )}
+                      </div>
+                      <span className="text-lg font-bold text-slate-300 sm:text-2xl">{cfg.unit}</span>
+
+                      {cfg.key === 'soil' && (
+                        <div className="ml-auto flex items-center gap-1.5 rounded-xl border border-emerald-500/40 bg-emerald-500/15 px-2.5 py-1 backdrop-blur shadow-[0_0_15px_rgba(16,185,129,0.2)]">
+                          <Wind className="h-4 w-4 text-emerald-400 animate-pulse" />
+                          <div className="flex flex-col">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-300/80">Havo sifati</span>
+                            <span className="text-xs font-black text-emerald-200">
+                              {data?.latest?.soil?.air_quality != null
+                                ? `${Math.max(0, 100 - data.latest.soil.air_quality).toFixed(0)}% (${data.latest.soil.air_quality <= 30 ? "A'lo" : data.latest.soil.air_quality <= 60 ? "Me'yorda" : "Ifloslangan"})`
+                                : "Toza (A'lo)"}
+                            </span>
+                          </div>
+                        </div>
                       )}
                     </div>
-                    <span className="text-lg font-bold text-slate-300 sm:text-2xl">{cfg.unit}</span>
                   </div>
                 ) : (
                   /* Qozonxona (Kirish & Chiqish & ΔT farqi) */

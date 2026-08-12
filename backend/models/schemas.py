@@ -959,6 +959,8 @@ class MeterReading(BaseModel):
     temperature_out_c: Optional[float] = None  # Qozonxona chiqish suvi (DS18B20)
 
     humidity: Optional[float] = None
+    air_quality: Optional[float] = None
+    air_pct: Optional[float] = None
     level: Optional[float] = None  # Ovoz darajasi (0–100%)
 
 

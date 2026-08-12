@@ -362,6 +362,7 @@ class Reading(Base):
     temperature_in_c: Mapped[float | None] = mapped_column(Float)   # Qozonxona kirish (DS18B20)
     temperature_out_c: Mapped[float | None] = mapped_column(Float)  # Qozonxona chiqish (DS18B20)
     humidity: Mapped[float | None] = mapped_column(Float)
+    air_quality: Mapped[float | None] = mapped_column(Float) # Havo sifati / MQ135 (%)
     level: Mapped[float | None] = mapped_column(Float)   # Ovoz darajasi (0–100%)
     raw_payload: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[int | None] = mapped_column(Integer)
@@ -394,6 +395,7 @@ class HourlyUtilityStats(Base):
     avg_flow_rate: Mapped[float | None] = mapped_column(Float)
     max_volume_m3: Mapped[float | None] = mapped_column(Float)
     avg_humidity: Mapped[float | None] = mapped_column(Float)
+    avg_air_quality: Mapped[float | None] = mapped_column(Float) # Havo sifati o'rtachasi (%)
     avg_level: Mapped[float | None] = mapped_column(Float)   # Ovoz o'rtachasi
     min_level: Mapped[float | None] = mapped_column(Float)
     max_level: Mapped[float | None] = mapped_column(Float)
