@@ -49,8 +49,25 @@ static void sensor_init() {
 
     for (int i = 0; i < 10; i++) analogRead(PIN_SOUND_ADC);
     s_level_smooth = 1.5f;
-    s_quiet_p2p    = 40.0f;
-    LOG_PRINTF("Ovoz sensori toza P2P drayver tayyor (GPIO%d)\n", PIN_SOUND_ADC);
+
+    // Yoqilgan vaqtda xonadagi haqiqiy apparat p2p bazasini o'lchab olish
+    float p2p_sum = 0.0f;
+    int p2p_cnt = 0;
+    for (int i = 0; i < 15; i++) {
+        float p = _get_p2p_clean();
+        if (p > 10.0f) {
+            p2p_sum += p;
+            p2p_cnt++;
+        }
+        delay(10);
+    }
+    if (p2p_cnt > 0) {
+        s_quiet_p2p = p2p_sum / (float)p2p_cnt;
+    } else {
+        s_quiet_p2p = 500.0f;
+    }
+
+    LOG_PRINTF("Ovoz sensori toza P2P drayver tayyor (GPIO%d, quiet_baseline=%.0f)\n", PIN_SOUND_ADC, s_quiet_p2p);
 }
 
 static bool sensor_connect() { return true; }
@@ -85,17 +102,17 @@ static bool sensor_read(SensorData& d) {
     float avg_p2p = p2p_sum / (float)valid_count;
 
     // Tinch xona p2p bazasini sekin va barqaror kuzatish
-    if (avg_p2p < s_quiet_p2p * 1.30f && avg_p2p > 5.0f) {
-        s_quiet_p2p = s_quiet_p2p * 0.95f + avg_p2p * 0.05f;
+    if (avg_p2p < s_quiet_p2p * 1.25f && avg_p2p > 10.0f) {
+        s_quiet_p2p = s_quiet_p2p * 0.96f + avg_p2p * 0.04f;
     }
 
     float signal = max(0.0f, avg_p2p - s_quiet_p2p);
 
     float target_level = 1.5f;
-    if (signal < 15.0f) {
+    if (signal < 20.0f) {
         target_level = 1.5f; // Tinch xona norma = 1.5% ANIQ VA STABIL
     } else {
-        target_level = constrain(1.5f + (signal / 14.0f), 1.5f, 100.0f);
+        target_level = constrain(1.5f + (signal / 20.0f), 1.5f, 100.0f);
     }
 
     // Yumshoq EMA silliqlash
