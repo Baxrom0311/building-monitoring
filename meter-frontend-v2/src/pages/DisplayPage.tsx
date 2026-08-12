@@ -7,6 +7,9 @@ import {
   Cell,
   Line,
   LineChart,
+  PolarAngleAxis,
+  RadialBar,
+  RadialBarChart,
   ReferenceLine,
   ResponsiveContainer,
   XAxis,
@@ -15,8 +18,11 @@ import {
 import {
   BarChart3,
   Building2,
+  CircleDot,
   Droplets,
   Flame,
+  Gauge,
+  GripHorizontal,
   Maximize2,
   Minimize2,
   Droplet,
@@ -273,19 +279,20 @@ export default function DisplayPage() {
       }
       return next
     })
-  // Grafik turi (Ustun / Maydon / Chiziq) — foydalanuvchi tanlashi uchun, saqlanadi
-  const [chartStyle, setChartStyle] = useState<'bar' | 'area' | 'line'>(() => {
+  // Grafik turi — foydalanuvchi tanlashi uchun, saqlanadi. Standart + no-standart turlar
+  const CHART_ORDER = ['bar', 'area', 'line', 'lollipop', 'gauge', 'dots'] as const
+  type ChartStyle = (typeof CHART_ORDER)[number]
+  const [chartStyle, setChartStyle] = useState<ChartStyle>(() => {
     try {
-      const s = localStorage.getItem('display_chart_style')
-      return s === 'area' || s === 'line' ? s : 'bar'
+      const s = localStorage.getItem('display_chart_style') as ChartStyle | null
+      return s && CHART_ORDER.includes(s) ? s : 'bar'
     } catch {
       return 'bar'
     }
   })
   const cycleChartStyle = () =>
     setChartStyle((c) => {
-      const order = ['bar', 'area', 'line'] as const
-      const next = order[(order.indexOf(c) + 1) % order.length]
+      const next = CHART_ORDER[(CHART_ORDER.indexOf(c) + 1) % CHART_ORDER.length]
       try {
         localStorage.setItem('display_chart_style', next)
       } catch {
@@ -293,8 +300,16 @@ export default function DisplayPage() {
       }
       return next
     })
-  const chartStyleLabel = chartStyle === 'bar' ? 'Ustun' : chartStyle === 'area' ? 'Maydon' : 'Chiziq'
-  const ChartStyleIcon = chartStyle === 'bar' ? BarChart3 : chartStyle === 'area' ? Waves : Spline
+  const CHART_META: Record<ChartStyle, { label: string; icon: typeof BarChart3 }> = {
+    bar: { label: 'Ustun', icon: BarChart3 },
+    area: { label: 'Maydon', icon: Waves },
+    line: { label: 'Chiziq', icon: Spline },
+    lollipop: { label: 'Nuqtali', icon: CircleDot },
+    gauge: { label: 'Radial', icon: Gauge },
+    dots: { label: 'Lenta', icon: GripHorizontal },
+  }
+  const chartStyleLabel = CHART_META[chartStyle].label
+  const ChartStyleIcon = CHART_META[chartStyle].icon
 
   // Binolar ro'yxatini ref'да saqlaymiz — timer har 30s poll'da qayta qurilmasin.
   const buildingsRef = useRef<{ id: number; name: string }[]>([])
@@ -638,6 +653,57 @@ export default function DisplayPage() {
           else if (cfg.nominal != null)
             pushNorma(cfg.nominal, cfg.unit === '%' ? `norma ${cfg.nominal}%` : `norma ${cfg.nominal} ${cfg.unit}`)
 
+          // Har bir nuqtaning status rangi (ustun/lollipop/lenta uchun umumiy)
+          const cellColorFor = (entry: any): string => {
+            const v = entry?.v0
+            if (v == null) return 'rgba(148,163,184,0.22)'
+            if (isElec) return voltageColor(v)
+            if (isWater) return getWaterColor(v).color
+            if (isGas) return getGasColor(v).color
+            if (cfg.key === 'soil') {
+              const ss = getSoilHumidityStatus(v)
+              return ss ? ss.color : cfg.color
+            }
+            return getSensorStatus(cfg.key, v).color
+          }
+
+          // Lollipop (nuqtali tayoqcha) — Bar uchun maxsus shakl: poya + kalla nuqta
+          const LolliShape = (props: any) => {
+            const { x, y, width, height, fill, payload } = props
+            const cx = x + width / 2
+            const v = payload?.[mainKey]
+            const flip = isElec && v != null && v < 0
+            const valueEnd = flip ? y + height : y
+            const baseEnd = flip ? y : y + height
+            return (
+              <g>
+                <line x1={cx} y1={baseEnd} x2={cx} y2={valueEnd} stroke={fill} strokeWidth={2} strokeOpacity={0.4} />
+                <circle cx={cx} cy={valueEnd} r={3.5} fill={fill} />
+              </g>
+            )
+          }
+
+          // Radial gauge (spidometr) uchun joriy qiymatning foizli o'rni
+          let gMin = 0
+          let gMax = 100
+          let gVal = s0.latest ?? 0
+          if (isElec) {
+            gMin = 180
+            gMax = 260
+            gVal = s0.latest ?? 220
+          } else if (isWater) {
+            gMin = 0
+            gMax = 5
+          } else if (isGas) {
+            gMin = 0
+            gMax = 0.5
+          } else if (cfg.key === 'heating') {
+            gMin = 0
+            gMax = 40
+            gVal = dT ?? 0
+          }
+          const gaugePct = Math.max(0, Math.min(100, ((gVal - gMin) / (gMax - gMin)) * 100))
+
           return (
             <div key={cfg.key} className={cardClasses} style={cardStyle}>
               {/* Anomaliya (orta/yomon) uchun yumshoq rangli to'ldiruvchi qatlam */}
@@ -781,6 +847,53 @@ export default function DisplayPage() {
                 </div>
 
                 <div className="min-h-0 w-full flex-1">
+                  {chartStyle === 'dots' ? (
+                    /* ── LENTA: 24 soatlik status timeline (rangli segmentlar) ── */
+                    <div className="flex h-full w-full items-center gap-[2px] px-1">
+                      {chartData.map((entry: any, index: number) => (
+                        <div
+                          key={index}
+                          className="h-2/3 min-w-[2px] flex-1 rounded-full transition-colors duration-500"
+                          style={{ background: cellColorFor(entry) }}
+                          title={entry.label}
+                        />
+                      ))}
+                    </div>
+                  ) : chartStyle === 'gauge' ? (
+                    /* ── RADIAL: spidometr (joriy qiymat vs oraliq) ── */
+                    <div className="relative h-full w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <RadialBarChart
+                          innerRadius="60%"
+                          outerRadius="100%"
+                          data={[{ value: gaugePct }]}
+                          startAngle={220}
+                          endAngle={-40}
+                        >
+                          <PolarAngleAxis type="number" domain={[0, 100]} angleAxisId={0} tick={false} />
+                          <RadialBar
+                            background={{ fill: 'rgba(255,255,255,0.06)' }}
+                            dataKey="value"
+                            cornerRadius={12}
+                            fill={heroColor}
+                            angleAxisId={0}
+                            isAnimationActive={false}
+                          />
+                        </RadialBarChart>
+                      </ResponsiveContainer>
+                      <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                        <span className="text-xl font-bold" style={{ color: heroColor }}>
+                          {status.label}
+                        </span>
+                        {cfg.nominal != null && (
+                          <span className="mt-0.5 text-xs text-slate-500">
+                            norma {cfg.nominal}
+                            {cfg.unit === '%' ? '%' : ` ${cfg.unit}`}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
                   <ResponsiveContainer width="100%" height="100%">
                     {chartStyle === 'area' ? (
                       /* ── MAYDON (Area) ── */
@@ -841,6 +954,25 @@ export default function DisplayPage() {
                         )}
                         {normaLines}
                       </LineChart>
+                    ) : chartStyle === 'lollipop' ? (
+                      /* ── NUQTALI (Lollipop) — poya + kalla nuqta ── */
+                      <BarChart data={chartData} margin={{ top: 12, right: 8, left: 6, bottom: 0 }}>
+                        <XAxis dataKey="label" hide />
+                        <YAxis hide domain={yDomain} />
+                        {cfg.key === 'heating' ? (
+                          <>
+                            <Bar dataKey="v0" shape={LolliShape} fill="#06B6D4" isAnimationActive={false} />
+                            <Bar dataKey="v1" shape={LolliShape} fill="#38BDF8" isAnimationActive={false} />
+                          </>
+                        ) : (
+                          <Bar dataKey={mainKey} shape={LolliShape} isAnimationActive={false}>
+                            {chartData.map((entry: any, index: number) => (
+                              <Cell key={`cell-${index}`} fill={cellColorFor(entry)} />
+                            ))}
+                          </Bar>
+                        )}
+                        {normaLines}
+                      </BarChart>
                     ) : (
                       /* ── USTUN (Bar) ── */
                       <BarChart data={chartData} margin={{ top: 12, right: 8, left: 6, bottom: 0 }}>
@@ -857,27 +989,16 @@ export default function DisplayPage() {
                             radius={isElec ? [3, 3, 3, 3] : [3, 3, 0, 0]}
                             maxBarSize={isElec ? 8 : 10}
                           >
-                            {chartData.map((entry: any, index: number) => {
-                              let cellColor = cfg.color
-                              if (isElec) {
-                                const absVal = entry.v0 != null ? entry.v0 : ELEC_NOMINAL
-                                cellColor = voltageColor(absVal)
-                              } else if (isWater) {
-                                cellColor = getWaterColor(entry.v0).color
-                              } else if (isGas) {
-                                cellColor = getGasColor(entry.v0).color
-                              } else if (cfg.key === 'soil') {
-                                const ss = getSoilHumidityStatus(entry.v0)
-                                cellColor = ss ? ss.color : cfg.color
-                              }
-                              return <Cell key={`cell-${index}`} fill={cellColor} />
-                            })}
+                            {chartData.map((entry: any, index: number) => (
+                              <Cell key={`cell-${index}`} fill={cellColorFor(entry)} />
+                            ))}
                           </Bar>
                         )}
                         {normaLines}
                       </BarChart>
                     )}
                   </ResponsiveContainer>
+                  )}
                 </div>
               </div>
             </div>
