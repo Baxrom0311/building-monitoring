@@ -144,6 +144,15 @@ function getWaterColor(val: number | null): { color: string; status: string } {
   return { color: '#FB7185', status: 'Xavfli past' }
 }
 
+// Gaz bosimi normasi va rang darajalari
+const GAS_NOMINAL = 0.27
+function getGasColor(val: number | null): { color: string; status: string } {
+  if (val == null) return { color: '#94a3b8', status: 'Nomalum' }
+  if (val >= 0.23 && val <= 0.33) return { color: '#22C55E', status: 'Yaxshi' }
+  if (val >= 0.15 && val < 0.23) return { color: '#FBBF24', status: 'Past bosim' }
+  return { color: '#FB7185', status: 'Xavfli' }
+}
+
 // Qozonxona normal ΔT (kirish-chiqish farqi) va ruxsat etilgan chetlanish
 const HEATING_DELTA_NORMA = 20
 const HEATING_DELTA_MARGIN = 10 // norma ±10°C ichida — sog'lom
@@ -180,12 +189,12 @@ const CHARTS = [
     label: 'Gaz bosimi',
     unit: 'bar',
     icon: Flame,
-    color: '#FB923C',
-    glow: 'rgba(251,146,60,0.5)',
+    color: '#22C55E',
+    glow: 'rgba(34,197,94,0.5)',
     bg: 'from-orange-500/20 via-slate-900/80 to-slate-950',
-    nominal: 0.3 as number | null,
-    // Real ma'lumot bo'lmasa — normal gaz bosimi (~0.27 bar) namunaviy ko'rsatiladi
-    fake: { base: 0.27, amp: 0.03 } as { base: number; amp: number } | null,
+    nominal: GAS_NOMINAL as number | null,
+    // Real ma'lumot bo'lmasa — normal gaz bosimi (0.27 bar) namunaviy ko'rsatiladi
+    fake: { base: GAS_NOMINAL, amp: 0.03 } as { base: number; amp: number } | null,
   },
   {
     key: 'soil' as const,
@@ -508,12 +517,27 @@ export default function DisplayPage() {
             Number((WATER_NOMINAL + waterMaxDiff + 0.3).toFixed(1)),
           ]
 
+          // Gaz: 0.27 bar aynan grafik o'rtasida bo'lishi uchun simmetrik Y-domen
+          const isGas = cfg.key === 'gas'
+          const gasVals = isGas
+            ? cfg.points.map((p) => p.v0).filter((n): n is number => typeof n === 'number')
+            : []
+          const gasMaxDiff = gasVals.length
+            ? Math.max(0.08, ...gasVals.map((v) => Math.abs(v - GAS_NOMINAL)))
+            : 0.1
+          const gasDomain: [number, number] = [
+            Math.max(0, Number((GAS_NOMINAL - gasMaxDiff - 0.04).toFixed(2))),
+            Number((GAS_NOMINAL + gasMaxDiff + 0.04).toFixed(2)),
+          ]
+
           const soilStatus = cfg.key === 'soil' ? getSoilHumidityStatus(s0.latest) : null
           const valueColor =
             isElec && s0.latest != null
               ? voltageColor(s0.latest)
               : isWater && s0.latest != null
               ? getWaterColor(s0.latest).color
+              : isGas && s0.latest != null
+              ? getGasColor(s0.latest).color
               : cfg.key === 'soil' && soilStatus
               ? soilStatus.color
               : cfg.color
@@ -675,7 +699,7 @@ export default function DisplayPage() {
                         tickLine={false}
                         axisLine={false}
                         width={44}
-                        domain={isElec ? elecDomain : isWater ? waterDomain : ['auto', 'auto']}
+                        domain={isElec ? elecDomain : isWater ? waterDomain : isGas ? gasDomain : ['auto', 'auto']}
                         allowDecimals={!isElec}
                         tickFormatter={(v) => `${isElec ? Math.round(Number(v) + ELEC_NOMINAL) : v}`}
                       />
@@ -719,7 +743,7 @@ export default function DisplayPage() {
                       {(isElec || (cfg.nominal != null && cfg.key !== 'soil')) && (
                         <ReferenceLine
                           y={isElec ? 0 : cfg.nominal!}
-                          stroke={isElec || isWater ? '#22C55E' : cfg.color}
+                          stroke={isElec || isWater || isGas ? '#22C55E' : cfg.color}
                           strokeDasharray="6 5"
                           strokeWidth={2}
                           strokeOpacity={0.9}
@@ -743,6 +767,12 @@ export default function DisplayPage() {
                         <Bar dataKey="v0" name={cfg.label} radius={[6, 6, 0, 0]} maxBarSize={28}>
                           {cfg.points.map((p, idx) => (
                             <Cell key={idx} fill={p.v0 != null ? getWaterColor(p.v0).color : cfg.color} />
+                          ))}
+                        </Bar>
+                      ) : isGas ? (
+                        <Bar dataKey="v0" name={cfg.label} radius={[6, 6, 0, 0]} maxBarSize={28}>
+                          {cfg.points.map((p, idx) => (
+                            <Cell key={idx} fill={p.v0 != null ? getGasColor(p.v0).color : cfg.color} />
                           ))}
                         </Bar>
                       ) : cfg.key === 'soil' ? (
