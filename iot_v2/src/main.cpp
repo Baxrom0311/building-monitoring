@@ -23,6 +23,7 @@
 
 #include <Arduino.h>
 #include <string.h>
+#include "core/watchdog.h"
 
 #define PIN_RX   16
 #define PIN_TX   17
@@ -50,6 +51,7 @@ static size_t read_with_timeout(uint8_t* buf, size_t max, unsigned long timeout_
     size_t n = 0;
     unsigned long last = millis();
     while (millis() - last < timeout_ms && n < max) {
+        wdt_feed();
         if (Serial2.available()) {
             buf[n++] = (uint8_t)Serial2.read();
             last = millis();
@@ -68,9 +70,11 @@ void setup() {
     Serial.println("=== EX518 IEC62056-21 Mode C TEST (WiFi/LoRa YO'Q) ===");
     Serial.printf("RS-485: RX=%d TX=%d DE=%d (A=klemma30 B=klemma31)\n",
                    (int)PIN_RX, (int)PIN_TX, (int)PIN_DE);
+    wdt_init();
 }
 
 void loop() {
+    wdt_feed();
     Serial.println("\n--- Wake-up so'rovi: 300 baud, 7E1 ---");
     Serial2.end();
     unsigned long t = millis(); while (millis() - t < 50) yield();
@@ -130,7 +134,7 @@ void loop() {
         }
     }
 
-    t = millis(); while (millis() - t < 5000) yield();
+    t = millis(); while (millis() - t < 5000) { wdt_feed(); yield(); }
 }
 
 // ADS1115 INDUSTRIAL PRESSURE MONITOR
@@ -148,6 +152,7 @@ void loop() {
 #include <Arduino.h>
 #include <Wire.h>
 #include <Adafruit_ADS1X15.h>
+#include "core/watchdog.h"
 
 // ─── Apparat konfiguratsiya ─────────────────────────────────────────────────
 #define ADS_SDA         21
@@ -297,9 +302,15 @@ void setup() {
     Serial.println();
 
     Wire.begin(ADS_SDA, ADS_SCL);
+    wdt_init();
     if (!ads.begin(ADS_ADDR)) {
         Serial.println("XATO: ADS1115 topilmadi (0x48)! Ulanishni tekshiring:");
         Serial.println("  SDA → GPIO21,  SCL → GPIO22,  VDD → 3.3V,  GND → GND");
+        // DIQQAT: bu yerda ATAYLAB wdt_feed() chaqirilMAYDI — wdt_init() setup()
+        // boshida chaqirilgani uchun WDT_TIMEOUT_S (30s) o'tgach watchdog o'zi
+        // qurilmani qayta yuklaydi (xavfsiz — xuddi shu "sensor topilmadi"
+        // xabari/kutish holatiga o'zi tiklanadi), qattiq qo'l bilan quvvatni
+        // o'chirib-yoqish shart bo'lmaydi (audit FIX B).
         while (true) { delay(1000); }
     }
     ads.setGain(GAIN_ONE);
@@ -317,6 +328,7 @@ void setup() {
 static unsigned long last_ms = 0;
 
 void loop() {
+    wdt_feed();
     unsigned long now = millis();
     if (now - last_ms < READ_INTERVAL_MS && last_ms != 0) return;
     last_ms = now;
@@ -329,6 +341,7 @@ void loop() {
 // havo sifati) ni har 2s da o'qib Serial'ga chiqaradi. Stol ustida sinash uchun.
 #include <Arduino.h>
 #include "core/log.h"
+#include "core/watchdog.h"
 
 #ifndef PIN_SOIL_ADC
   #define PIN_SOIL_ADC 34
@@ -355,9 +368,11 @@ void setup() {
     LOG_PRINTF("Namlik: GPIO%d (quruq=%d nam=%d)  |  MQ135: GPIO%d\n",
                PIN_SOIL_ADC, SOIL_ADC_DRY, SOIL_ADC_WET, PIN_MQ135);
     LOG_PRINTLN();
+    wdt_init();
 }
 
 void loop() {
+    wdt_feed();
     long ssum = 0, asum = 0;
     for (int i = 0; i < 16; i++) {
         ssum += analogRead(PIN_SOIL_ADC);
@@ -387,12 +402,14 @@ void loop() {
 //      A/B sini o'zi eshitadi). Shunda modul orqali echo bo'ladi.
 #include <Arduino.h>
 #include "core/log.h"
+#include "core/watchdog.h"
 #include "rs485_bus.h"
 
 void setup() {
     Serial.begin(115200);
     unsigned long _t = millis(); while (millis() - _t < 300) yield();
     rs485_init();
+    wdt_init();
     LOG_PRINTLN();
     LOG_PRINTLN("=== RS-485 SELF-TEST ===");
     LOG_PRINTF("Bus: RX=%d TX=%d DE=%d @%lu baud\n",
@@ -401,6 +418,7 @@ void setup() {
 }
 
 void loop() {
+    wdt_feed();
     static uint32_t counter = 0;
     char msg[48];
     int len = snprintf(msg, sizeof(msg), "{\"test\":%lu,\"hello\":\"A1TECH\"}",
@@ -431,20 +449,49 @@ void loop() {
 // Bridge poll qilib turganda, shu leaf'da bridge poll baytlari ko'rinishi kerak.
 #include <Arduino.h>
 #include "core/log.h"
+#include "core/watchdog.h"
 #include "rs485_bus.h"
 
 void setup() {
     Serial.begin(115200);
     unsigned long _t = millis(); while (millis() - _t < 300) yield();
     rs485_init();   // Serial1 @19200 on RX=32/TX=33, DE(GPIO25)=LOW → qabul
+    wdt_init();
     LOG_PRINTLN();
     LOG_PRINTLN("=== RS-485 XOM RX MONITOR (GPIO32) ===");
     LOG_PRINTF("RX=%d TX=%d DE=%d @%lu baud. Shinadan xom baytlar:\n",
                RS485_BUS_RX, RS485_BUS_TX, RS485_BUS_DE, (unsigned long)RS485_BAUD);
     LOG_PRINTLN("(bridge poll qilsa — bayt oqimi ko'rinishi SHART)\n");
+
+    // Passiv tinglash — DISCOVER yuborishdan OLDIN shinada allaqachon faol
+    // master/bridge bormi tekshiramiz (audit FIX C: bu diagnostika vositasi
+    // LIVE produksiya shinasiga ulanganda ikkinchi "master" bo'lib
+    // to'qnashmasligi uchun).
+    {
+        LOG_PRINTLN("RS-485: passiv tinglash (3s) — shina bandligini tekshiramiz...");
+        bool bus_traffic = false;
+        unsigned long listen_t0 = millis();
+        while (millis() - listen_t0 < 3000) {
+            wdt_feed();
+            uint8_t pbuf[RS485_MAX_FRAME + 1];
+            if (rs485_recv_frame(pbuf, RS485_MAX_FRAME, 300) > 0) { bus_traffic = true; break; }
+        }
+        if (bus_traffic) {
+            Serial.println();
+            Serial.println("!!! OGOHLANTIRISH !!! OGOHLANTIRISH !!! OGOHLANTIRISH !!!");
+            Serial.println("!!! Shinada FAOLLIK topildi — bu LIVE PRODUKSIYA shinasi bo'lishi mumkin!");
+            Serial.println("!!! Bu diagnostika vositasini shu shinada ishlatish real bridge/master");
+            Serial.println("!!! bilan to'qnashuvga olib kelishi mumkin. Ehtiyot bo'ling!");
+            Serial.println("!!! OGOHLANTIRISH !!! OGOHLANTIRISH !!! OGOHLANTIRISH !!!");
+            Serial.println();
+        } else {
+            LOG_PRINTLN("RS-485: shina jim — davom etilmoqda.\n");
+        }
+    }
 }
 
 void loop() {
+    wdt_feed();
     static uint32_t total = 0, pkt = 0, last_rx = 0, last_disc = 0;
     // Har 2.5s da DISCOVER yuboramiz — leaf'lar javob bersin (ular so'ralganда gapiradi).
     // So'ng KELGAN XOM baytlarni ko'rsatamiz (parse yo'q — signal bormi tekshiramiz).
@@ -476,6 +523,7 @@ void loop() {
 #include <ArduinoJson.h>
 #include <string.h>
 #include "core/log.h"
+#include "core/watchdog.h"
 #include "rs485_bus.h"
 #ifdef HAVE_LCD
   #include "display/lcd.h"
@@ -485,6 +533,7 @@ void setup() {
     Serial.begin(115200);
     unsigned long _t = millis(); while (millis() - _t < 300) yield();
     rs485_init();
+    wdt_init();
 #ifdef HAVE_LCD
     lcd_init();
     lcd_row(0, "RS485 Master");
@@ -495,6 +544,32 @@ void setup() {
     LOG_PRINTF("Bus: RX=%d TX=%d DE=%d @%lu baud\n",
                RS485_BUS_RX, RS485_BUS_TX, RS485_BUS_DE, (unsigned long)RS485_BAUD);
     LOG_PRINTLN("DISCOVER + adresli POLL. Leaf javoblari kutilmoqda...\n");
+
+    // Passiv tinglash — DISCOVER/POLL yuborishni boshlashdan OLDIN shinada
+    // allaqachon faol master/bridge bormi tekshiramiz (audit FIX C: texnik
+    // xodim bu vositani LIVE produksiya shinasiga ulasa, ikkinchi "master"
+    // sifatida to'qnashib, haqiqiy trafikni buzmasligi uchun).
+    {
+        LOG_PRINTLN("RS-485: passiv tinglash (3s) — shina bandligini tekshiramiz...");
+        bool bus_traffic = false;
+        unsigned long listen_t0 = millis();
+        while (millis() - listen_t0 < 3000) {
+            wdt_feed();
+            uint8_t pbuf[RS485_MAX_FRAME + 1];
+            if (rs485_recv_frame(pbuf, RS485_MAX_FRAME, 300) > 0) { bus_traffic = true; break; }
+        }
+        if (bus_traffic) {
+            Serial.println();
+            Serial.println("!!! OGOHLANTIRISH !!! OGOHLANTIRISH !!! OGOHLANTIRISH !!!");
+            Serial.println("!!! Shinada FAOLLIK topildi — bu LIVE PRODUKSIYA shinasi bo'lishi mumkin!");
+            Serial.println("!!! Bu diagnostika vositasini shu shinada ishlatish real bridge bilan");
+            Serial.println("!!! to'qnashib, produksiya trafikini buzishi mumkin. Ehtiyot bo'ling!");
+            Serial.println("!!! OGOHLANTIRISH !!! OGOHLANTIRISH !!! OGOHLANTIRISH !!!");
+            Serial.println();
+        } else {
+            LOG_PRINTLN("RS-485: shina jim — davom etilmoqda.\n");
+        }
+    }
 }
 
 static char m_roster[8][13];
@@ -548,6 +623,7 @@ static void m_lcd_show(const char* json) {
 #endif
 
 void loop() {
+    wdt_feed();
     // 1) DISCOVER — yangi leaflarni topamiz
     uint8_t cmd = RS485_CMD_DISCOVER;
     rs485_send_frame(&cmd, 1);
@@ -598,7 +674,7 @@ void loop() {
     }
 
     LOG_PRINTF("Sikl tugadi — %d leaf ma'lum.\n\n", m_roster_n);
-    unsigned long t = millis(); while (millis() - t < 3000) yield();
+    unsigned long t = millis(); while (millis() - t < 3000) { wdt_feed(); yield(); }
 }
 
 #elif defined(RS485_DISPLAY)
@@ -608,6 +684,7 @@ void loop() {
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #include "core/log.h"
+#include "core/watchdog.h"
 #include "rs485_bus.h"
 #include "display/lcd.h"
 
@@ -640,6 +717,7 @@ void setup() {
     Serial.begin(115200);
     unsigned long _t = millis(); while (millis() - _t < 300) yield();
     rs485_init();                 // DE LOW = qabul; kerak bo'lganда o'zi ham so'raydi
+    wdt_init();
     lcd_init();
     lcd_row(0, "Suv kutilmoqda");
     lcd_row(1, "A1TECH  BRR");
@@ -652,6 +730,7 @@ void setup() {
 }
 
 void loop() {
+    wdt_feed();
     uint8_t buf[RS485_MAX_FRAME + 1];
 
     // 1) Passiv tinglash — bridge poll qilsa, leaf javobini shinadan ilib olamiz
@@ -757,6 +836,7 @@ static unsigned long last_read_ms   = 0;
 static unsigned long last_read_ok_ms = 0;   // oxirgi MUVAFFAQIYATLI sensor o'qish vaqti (LCD stale aniqlash uchun)
 static unsigned long last_cmd_ms    = 0;
 static unsigned long last_health_ms = 0;
+static unsigned long last_heap_log_ms = 0;  // diag_log_heap_trend() kadensasi (audit FIX E)
 #ifdef SENSOR_SOUND
 static unsigned long last_sound_lcd_ms = 0;
 #define SOUND_LCD_MS  200UL   // Sound LCD har 200ms yangilansin
@@ -777,13 +857,21 @@ static int    off_count = 0;
 #define MIN_HEAP_BYTES  16384
 
 static void buf_push(const String& json) {
-    // Heap himoyasi: juda kam joy qolsa, eski yozuvlarni tozalash
+    // Heap himoyasi: juda kam joy qolsa, BUTUN buferni tozalash o'rniga
+    // faqat ENG ESKI bitta yozuvni tashlaymiz (buf_flush() dagi bilan bir
+    // xil aylanma indeks formulasi) — qurilma asta-sekin (1 tadan) degradatsiya
+    // qiladi, hamma offline ma'lumotni bir zarbada yo'qotmaydi (audit FIX D).
     if (ESP.getFreeHeap() < MIN_HEAP_BYTES) {
-        LOG_PRINTF("HEAP OGOHLANTIRISH: %d bayt qoldi — bufer tozalanadi\n",
-                   (int)ESP.getFreeHeap());
-        for (int i = 0; i < OFFLINE_BUF_SIZE; i++) off_buf[i] = "";
-        off_head = 0;
-        off_count = 0;
+        if (off_count > 0) {
+            int oldest = (off_head - off_count + OFFLINE_BUF_SIZE) % OFFLINE_BUF_SIZE;
+            LOG_PRINTF("HEAP OGOHLANTIRISH: %d bayt qoldi — eng eski yozuv tashlanmoqda (buferda %d ta)\n",
+                       (int)ESP.getFreeHeap(), off_count);
+            off_buf[oldest] = "";
+            off_count--;
+        } else {
+            LOG_PRINTF("HEAP OGOHLANTIRISH: %d bayt qoldi — bufer allaqachon bo'sh\n",
+                       (int)ESP.getFreeHeap());
+        }
         return;
     }
     off_buf[off_head] = json;
@@ -832,6 +920,7 @@ void setup() {
     LOG_PRINTLN("║       Meter Monitor v" FW_VERSION "            ║");
     LOG_PRINTLN("╚══════════════════════════════════════════╝");
     LOG_PRINTF("ID: %s\n", device_id);
+    diag_log_reset_reason();   // Nega qayta yuklandi? (audit FIX E)
 
     cfg_load();
     nvs_health_check();
@@ -863,18 +952,39 @@ void setup() {
   #define DEFAULT_WIFI_PASS ""
 #endif
     {
+        // "Sozlangan" — NVS'da (esp_wifi o'zining ichki NVS'i) saqlangan SSID
+        // bormi (wifi.h: wifi_has_saved_creds()). Bu haqiqiy birinchi yoqish /
+        // BOOT tugma bilan WiFi reset (yuqorida — wm.resetSettings() aynan shu
+        // NVS'ni tozalaydi) holatlarini ANIQ ajratadi build-flag orqali berilgan
+        // DEFAULT_WIFI_SSID'dan (masalan building_bridge/sound_wifi) — chunki
+        // muvaffaqiyatli WiFi.begin(def_ssid,...) o'zi ham shu NVS'ga yoziladi,
+        // shuning uchun "saqlangan" keyingi bootlarda avtomatik true bo'ladi.
+        // Faqat HALI HECH QACHON saqlanmagan bo'lsa (haqiqiy birinchi
+        // yoqish/BOOT-reset) portal ochiladi — router vaqtincha o'chiq bo'lgani
+        // uchun portalда ABADIY QOTIB QOLMASLIK kerak (audit FIX A).
+        bool wifi_configured = wifi_has_saved_creds();
         bool wifi_ok = wifi_connect_boot(DEFAULT_WIFI_SSID, DEFAULT_WIFI_PASS);
         if (!wifi_ok) {
+            if (!wifi_configured) {
+                // Haqiqiy birinchi yoqish — sozlash portali kerak (mo'ljallangan UX).
 #if defined(HAVE_LCD) && defined(SENSOR_ELECTRICITY)
-            // Elektr/bridge LCD (elec_lcd_row) — foydalanuvchi AP nomini ko'rsin
-            elec_lcd_row(0, "WiFi Sozlash:");
-            elec_lcd_row(1, WIFI_AP_NAME);
+                // Elektr/bridge LCD (elec_lcd_row) — foydalanuvchi AP nomini ko'rsin
+                elec_lcd_row(0, "WiFi Sozlash:");
+                elec_lcd_row(1, WIFI_AP_NAME);
 #elif defined(HAVE_LCD)
-            lcd_row(0, "WiFi AP Portal");
-            lcd_row(1, WIFI_AP_NAME);
+                lcd_row(0, "WiFi AP Portal");
+                lcd_row(1, WIFI_AP_NAME);
 #endif
-            LOG_PRINTF("WiFi: Ulanish bo'lmadi — AP '%s' Sozlash Portali ochilmoqda...\n", WIFI_AP_NAME);
-            wifi_portal(WIFI_AP_NAME, WIFI_AP_PASS, device_id, g_cfg.meter_serial);
+                LOG_PRINTF("WiFi: sozlanmagan qurilma — AP '%s' Sozlash Portali ochilmoqda...\n", WIFI_AP_NAME);
+                wifi_portal(WIFI_AP_NAME, WIFI_AP_PASS, device_id, g_cfg.meter_serial);
+            } else {
+                // Sozlamalar BOR, lekin boot vaqtida ulanib bo'lmadi (router
+                // vaqtincha o'chiq/qayta yuklanmoqda). Portal OCHILMAYDI —
+                // watchdog o'z vaqtida ishga tushishi uchun setup() davom
+                // etadi, wifi_loop() esa fonda qayta ulanishga urinadi.
+                LOG_PRINTLN("WiFi: saqlangan sozlamalar bor, lekin boot vaqtida ulanib bo'lmadi — "
+                             "portal OCHILMAYDI, fonda qayta urinadi (router qayta yuklanayotgan bo'lishi mumkin)");
+            }
         }
     }
 
@@ -948,6 +1058,16 @@ void setup() {
 void loop() {
     unsigned long now = millis();
     wdt_feed();
+
+    // Lokal heap trend logi — WiFi/server holatidan MUSTAQIL, health-check
+    // bilan bir xil kadensa (HEALTH_CHECK_MS). api.h orqali heap faqat
+    // server ulanganda ko'rinadi — aynan WiFi uzilgan/xotira sizayotgan
+    // paytda bu ENG kerakli, shuning uchun lokal Serial logga alohida
+    // yoziladi (audit FIX E).
+    if (last_heap_log_ms == 0 || now - last_heap_log_ms >= HEALTH_CHECK_MS) {
+        last_heap_log_ms = now;
+        diag_log_heap_trend();
+    }
 
     // WiFi uzilish aniqlash
     bool wifi_now = (WiFi.status() == WL_CONNECTED);

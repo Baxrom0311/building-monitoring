@@ -35,6 +35,10 @@ jobs:
           - building_bridge
           # RS-485 bino-ichi "leaf" — bridge bilan bog'liq umumiy kod yo'li
           - water_rs485_leaf
+          # RS-485 leaf display — dalada suv sensori uchun LCD ko'rsatkich
+          - water_display
+          # RS-485 bino-ichi diagnostika: master/poll simulyatori (dala vositasi)
+          - rs485_master_test
 
     steps:
       - name: Checkout
