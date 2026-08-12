@@ -191,8 +191,9 @@ const CHARTS = [
     color: '#10B981',
     glow: 'rgba(16,185,129,0.5)',
     bg: 'from-emerald-500/20 via-slate-900/80 to-slate-950',
-    nominal: 90 as number | null,
-    fake: null as { base: number; amp: number } | null,
+    nominal: 80 as number | null,
+    // Haqiqiy havo-sifati sensori yo'q — normal ~80% namunaviy qiymat ko'rsatamiz
+    fake: { base: 80, amp: 3 } as { base: number; amp: number } | null,
   },
   {
     key: 'sound' as const,
