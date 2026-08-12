@@ -18,7 +18,10 @@
   #define SOUND_SAMPLES   300
 #endif
 #ifndef SOUND_FIGHT_REF
-  #define SOUND_FIGHT_REF 2500.0f
+  #define SOUND_FIGHT_REF 1200.0f  // Tayyor kalibrovka: 1200 ADC peak-to-peak = 100% shovqin
+#endif
+#ifndef DEFAULT_SOUND_NOISE_FLOOR
+  #define DEFAULT_SOUND_NOISE_FLOOR 80.0f // Tayyor kalibrovka: tinch xona noise floor
 #endif
 
 struct SensorData {
@@ -27,14 +30,14 @@ struct SensorData {
 };
 
 // ─── Ichki holat ──────────────────────────────────────────────────────────────
-static float s_noise_floor  = 0.0f;
+static float s_noise_floor  = DEFAULT_SOUND_NOISE_FLOOR;
 static float s_level_smooth = 0.0f;
 
-// ADC amplituda: 50ms audio sample oyna ichida peak-to-peak o'lchash
+// ADC amplituda: 100ms audio sample oyna ichida peak-to-peak o'lchash (barcha chastotalarni qamrab oladi)
 static int _sound_amplitude() {
     int lo = 4095, hi = 0;
     unsigned long start = millis();
-    while (millis() - start < 50) {
+    while (millis() - start < 100) {
         int v = analogRead(PIN_SOUND_ADC);
         if (v < lo) lo = v;
         if (v > hi) hi = v;
@@ -52,14 +55,13 @@ static void sensor_init() {
     pinMode(PIN_SOUND_ADC, INPUT);
     for (int i = 0; i < 10; i++) analogRead(PIN_SOUND_ADC);
 
-    // Boshlang'ich noise floor — 10 ta o'qishning o'rtachasi
-    long sum = 0;
-    for (int i = 0; i < 10; i++) sum += _sound_amplitude();
-    s_noise_floor = (float)sum / 10.0f;
-    if (s_noise_floor < 10.0f) s_noise_floor = 10.0f;
+    // Oldindan tayyor kalibrovka noise floor bilan boshlash
+    int sample_amp = _sound_amplitude();
+    s_noise_floor = (sample_amp > 10) ? (float)sample_amp : DEFAULT_SOUND_NOISE_FLOOR;
+    if (s_noise_floor < 30.0f) s_noise_floor = 30.0f;
     s_level_smooth = 0.0f;
 
-    LOG_PRINTF("Ovoz sensori (GPIO%d) noise=%.0f\n", PIN_SOUND_ADC, s_noise_floor);
+    LOG_PRINTF("Ovoz sensori tayyor kalibrovka (GPIO%d) noise=%.0f ref=%.0f\n", PIN_SOUND_ADC, s_noise_floor, SOUND_FIGHT_REF);
 }
 
 static bool sensor_connect() { return true; }
@@ -76,15 +78,15 @@ static bool sensor_read(SensorData& d) {
     int amp = _sound_amplitude();
 
     // Avtomatik noise floor moslashuvi (asta-sekin)
-    if ((float)amp < s_noise_floor * 1.5f) {
-        s_noise_floor = s_noise_floor * 0.95f + (float)amp * 0.05f;
+    if ((float)amp < s_noise_floor * 1.5f && (float)amp > 10.0f) {
+        s_noise_floor = s_noise_floor * 0.96f + (float)amp * 0.04f;
     }
 
     float real = max(0.0f, (float)amp - s_noise_floor);
     float target_level = constrain((real / SOUND_FIGHT_REF) * 100.0f, 0.0f, 100.0f);
 
-    // EMA silliqlashtirish (sakramaydigan tekis harakat): o'sish 0.25, tushish 0.08
-    float alpha = (target_level > s_level_smooth) ? 0.25f : 0.08f;
+    // EMA silliqlashtirish: o'sish 0.35, tushish 0.10
+    float alpha = (target_level > s_level_smooth) ? 0.35f : 0.10f;
     s_level_smooth += (target_level - s_level_smooth) * alpha;
 
     if (s_level_smooth < 0.5f) s_level_smooth = 0.0f;
