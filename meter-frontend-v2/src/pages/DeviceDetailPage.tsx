@@ -18,6 +18,7 @@ import {
   ToggleRight,
   Trash2,
   Volume2,
+  Wind,
   Zap,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -82,6 +83,7 @@ const UTILITY_LABELS: Record<string, string> = {
   water: 'Suv',
   gas: 'Gaz',
   soil: "Yerto'la namligi",
+  air: 'Havo sifati',
   sound: 'Ovoz',
   heating: 'Issiqlik',
 }
@@ -91,6 +93,7 @@ const UTILITY_ICONS: Record<string, LucideIcon> = {
   water: Droplets,
   gas: Flame,
   soil: Sprout,
+  air: Wind,
   sound: Volume2,
   heating: Thermometer,
 }
@@ -98,6 +101,7 @@ const UTILITY_ICONS: Record<string, LucideIcon> = {
 // Bitta sensor kartasi uchun qisqa qiymat matni (utility_type'ga qarab)
 function formatSensorValue(s: DeviceSensor): string {
   const r = s.last_reading
+  if (!r) return '—'
   switch (s.utility_type) {
     case 'electricity':
       return `${r.voltage_l1 ?? '—'} V · ${r.power_w ?? '—'} W`
@@ -107,6 +111,8 @@ function formatSensorValue(s: DeviceSensor): string {
       return `${r.pressure_bar ?? '—'} bar`
     case 'soil':
       return r.humidity != null ? `${r.humidity.toFixed(1)} %` : '—'
+    case 'air':
+      return r.air_quality != null ? `${r.air_quality.toFixed(1)} %` : '—'
     case 'sound':
       return r.level != null ? `${r.level.toFixed(1)} %` : '—'
     case 'heating':

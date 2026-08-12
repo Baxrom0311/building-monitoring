@@ -183,11 +183,14 @@ export function useDeviceLatest(id: string): UseQueryResult<Reading> {
 }
 
 export interface DeviceSensor {
+  sensor_id?: number
+  sensor_uid?: string
   source_id: string | null
   utility_type: string
   sensor_type: string | null
-  ts: number
-  last_reading: Reading
+  is_bridged?: boolean
+  ts: number | null
+  last_reading: Reading | null
 }
 
 export function useDeviceSensors(id: string): UseQueryResult<DeviceSensor[]> {

@@ -355,10 +355,31 @@ async def latest_reading(device_id: str) -> dict:
 
 
 async def device_sensors(device_id: str) -> dict:
-    """Qurilma ichidagi sensorlar (RS-485 bridge ostidagi leaf'lar) — har biri
-    uchun oxirgi o'qish. Oddiy bitta-sensorli qurilmada bitta yozuv qaytadi."""
+    """Qurilma (bridge yoki o'zi) uzatayotgan sensorlar — har biri uchun oxirgi o'qish.
+
+    Birinchi-darajali `sensors` jadvalidan o'qiydi, shuning uchun MQ135 havo sensori
+    ('air') soil'dan alohida to'g'ri ko'rinadi va bridge ostidagi leaf'lar aniq ajraladi.
+    sensors bo'sh bo'lsa (backfill oldidan) eski xatti-harakatga (readings-guruh) qaytadi."""
     async with SessionLocal() as session:
-        rows = await ReadingRepository(session).latest_per_sensor(device_id)
+        repo = ReadingRepository(session)
+        pairs = await repo.sensors_with_latest(device_id)
+        if pairs:
+            sensors = [
+                {
+                    "sensor_id": s.id,
+                    "sensor_uid": s.sensor_uid,
+                    "source_id": s.sensor_uid if s.is_bridged else None,
+                    "utility_type": s.utility_type,
+                    "sensor_type": s.sensor_type,
+                    "is_bridged": s.is_bridged,
+                    "last_reading": model_to_dict(latest) if latest is not None else None,
+                    "ts": latest.ts if latest is not None else s.last_seen,
+                }
+                for s, latest in pairs
+            ]
+            return {"device_id": device_id, "sensors": sensors}
+        # Fallback (sensors hali to'ldirilmagan bo'lsa)
+        rows = await repo.latest_per_sensor(device_id)
     sensors = [
         {
             "source_id": r.source_id,

@@ -1,12 +1,33 @@
 from sqlalchemy import and_, desc, func, select
 from sqlalchemy.orm import aliased
 
-from models.entities import Device, Reading
+from models.entities import Device, Reading, Sensor
 from repositories.base import BaseRepository
 
 
 class ReadingRepository(BaseRepository[Reading]):
     model = Reading
+
+    async def sensors_with_latest(self, device_id: str) -> list[tuple[Sensor, Reading | None]]:
+        """Qurilma (bridge yoki o'zi) uzatayotgan barcha sensorlar + har birining
+        oxirgi o'qishi. sensors jadvalidan o'qiydi — shu bilan MQ135 'air' sensori
+        soil'dan alohida to'g'ri ko'rinadi (birinchi-darajali sensor modeli)."""
+        sensors = list(
+            (
+                await self.session.scalars(
+                    select(Sensor)
+                    .where(Sensor.transport_device_id == device_id, Sensor.is_active.is_(True))
+                    .order_by(Sensor.utility_type, Sensor.sensor_uid)
+                )
+            ).all()
+        )
+        out: list[tuple[Sensor, Reading | None]] = []
+        for s in sensors:
+            latest = await self.session.scalar(
+                select(Reading).where(Reading.sensor_id == s.id).order_by(desc(Reading.ts)).limit(1)
+            )
+            out.append((s, latest))
+        return out
 
     async def latest_for_device(self, device_id: str) -> Reading | None:
         return await self.session.scalar(
