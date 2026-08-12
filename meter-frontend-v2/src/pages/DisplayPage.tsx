@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
+  Area,
+  AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
@@ -12,13 +14,15 @@ import {
 } from 'recharts'
 import {
   Building2,
+  Droplet,
   Droplets,
   Flame,
+  LayoutGrid,
   Maximize2,
   Minimize2,
-  Droplet,
   RefreshCw,
   RotateCw,
+  Sparkles,
   Thermometer,
   TrendingDown,
   TrendingUp,
@@ -263,6 +267,16 @@ function LiveDot({ ok }: { ok: boolean }) {
 }
 
 export default function DisplayPage() {
+  const initialStyle = (new URLSearchParams(window.location.search).get('style') as 'v1' | 'classic') || 'v1'
+  const [displayStyle, setDisplayStyle] = useState<'v1' | 'classic'>(initialStyle)
+
+  const changeStyle = (newStyle: 'v1' | 'classic') => {
+    setDisplayStyle(newStyle)
+    const searchParams = new URLSearchParams(window.location.search)
+    searchParams.set('style', newStyle)
+    window.history.replaceState(null, '', `${window.location.pathname}?${searchParams.toString()}`)
+  }
+
   const [data, setData] = useState<DisplayData | null>(null)
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
   const [online, setOnline] = useState(true)
@@ -434,6 +448,32 @@ export default function DisplayPage() {
               ))}
             </select>
           )}
+
+          {/* Style Switcher Pills (V1 vs Klasik) */}
+          <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-white/5 p-1 backdrop-blur-md">
+            <button
+              onClick={() => changeStyle('v1')}
+              className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold transition-all ${
+                displayStyle === 'v1'
+                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 shadow-sm shadow-cyan-500/30'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Sparkles className="h-3.5 w-3.5 text-cyan-400" />
+              <span>V1: Cyber-Glow</span>
+            </button>
+            <button
+              onClick={() => changeStyle('classic')}
+              className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold transition-all ${
+                displayStyle === 'classic'
+                  ? 'bg-blue-500/20 text-blue-300 border border-blue-500/50 shadow-sm shadow-blue-500/30'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <LayoutGrid className="h-3.5 w-3.5 text-blue-400" />
+              <span>Klasik</span>
+            </button>
+          </div>
 
           {/* Status badge + harakat tugmalari */}
           <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-2.5 py-1.5 text-slate-400 backdrop-blur sm:gap-3 sm:px-3 sm:py-2">
@@ -674,6 +714,85 @@ export default function DisplayPage() {
                   <div className="flex h-full items-center justify-center">
                     <span className="text-sm text-slate-500">O'lchov ma'lumoti kutilmoqda...</span>
                   </div>
+                ) : displayStyle === 'v1' ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={isElec ? elecData : cfg.points} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
+                      <defs>
+                        {cfg.series.map((s) => (
+                          <linearGradient key={s.index} id={`v1_area_${cfg.key}_${s.index}`} x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor={s.color} stopOpacity={0.4} />
+                            <stop offset="100%" stopColor={s.color} stopOpacity={0.02} />
+                          </linearGradient>
+                        ))}
+                      </defs>
+                      <CartesianGrid strokeDasharray="2 6" stroke="rgba(255,255,255,0.06)" vertical={false} />
+                      <XAxis
+                        dataKey="label"
+                        tick={{ fontSize: 11, fill: '#64748b' }}
+                        tickLine={false}
+                        axisLine={false}
+                        interval="preserveStartEnd"
+                        minTickGap={40}
+                      />
+                      <YAxis
+                        tick={{ fontSize: 11, fill: '#64748b' }}
+                        tickLine={false}
+                        axisLine={false}
+                        width={44}
+                        domain={isElec ? elecDomain : isWater ? waterDomain : isGas ? gasDomain : ['auto', 'auto']}
+                        allowDecimals={!isElec}
+                        tickFormatter={(v) => `${isElec ? Math.round(Number(v) + ELEC_NOMINAL) : v}`}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          background: 'rgba(15,23,42,0.92)',
+                          border: `1px solid ${cfg.color}50`,
+                          borderRadius: 14,
+                          fontSize: 13,
+                          color: '#f1f5f9',
+                          boxShadow: `0 10px 30px -10px ${cfg.color}40`,
+                          backdropFilter: 'blur(12px)',
+                        }}
+                        labelStyle={{ color: '#94a3b8', fontWeight: 700, marginBottom: 4 }}
+                        formatter={(v, name) =>
+                          isElec
+                            ? [`${(Number(v ?? 0) + ELEC_NOMINAL).toFixed(1)} ${cfg.unit}`, cfg.label]
+                            : [`${Number(v ?? 0)} ${cfg.unit}`, name]
+                        }
+                        cursor={{ stroke: `${cfg.color}50`, strokeWidth: 1, strokeDasharray: '4 4' }}
+                      />
+                      {(isElec || (cfg.nominal != null && cfg.key !== 'soil')) && (
+                        <ReferenceLine
+                          y={isElec ? 0 : cfg.nominal!}
+                          stroke={isElec || isWater || isGas ? '#22C55E' : cfg.color}
+                          strokeDasharray="6 5"
+                          strokeWidth={2}
+                          strokeOpacity={0.9}
+                          label={{
+                            value: isElec ? `norma ${ELEC_NOMINAL}${cfg.unit}` : `norma ${cfg.nominal} ${cfg.unit}`,
+                            position: 'insideTopRight',
+                            fill: '#22C55E',
+                            fontSize: 11,
+                            fontWeight: 700,
+                            opacity: 0.95,
+                          }}
+                        />
+                      )}
+                      {cfg.series.map((s) => (
+                        <Area
+                          key={s.index}
+                          type="monotone"
+                          dataKey={(isElec ? 'dev' : `v${s.index}`) as any}
+                          name={s.label}
+                          stroke={s.color}
+                          strokeWidth={3}
+                          fill={`url(#v1_area_${cfg.key}_${s.index})`}
+                          dot={false}
+                          activeDot={{ r: 6, fill: s.color, stroke: '#0f172a', strokeWidth: 2 }}
+                        />
+                      ))}
+                    </AreaChart>
+                  </ResponsiveContainer>
                 ) : (
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={elecData} margin={{ top: 6, right: 16, left: 0, bottom: 0 }} barCategoryGap="20%">
