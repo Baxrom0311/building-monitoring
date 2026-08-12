@@ -583,39 +583,58 @@ export default function DisplayPage() {
                 style={{ background: status.color }}
               />
 
-              {/* ── Yuqori satr: chapda nom, o'ngda katta son + status ── */}
+              {/* Dekorativ katta suv-belgi ikonka (kreativ identifikator) */}
+              <Icon
+                className="pointer-events-none absolute -bottom-7 -right-5 z-0 h-44 w-44 rotate-12"
+                style={{ color: status.color, opacity: 0.06 }}
+              />
+
+              {/* ── Yuqori satr: chapda katta nom+status, o'ngda katta son ── */}
               <div className="relative z-10 flex shrink-0 items-start justify-between gap-3 px-5 pb-2 pt-4">
-                {/* Chap: ikonka + nom + badge (norma) */}
-                <div className="flex min-w-0 items-start gap-3">
-                  <Icon className="mt-0.5 h-6 w-6 shrink-0 text-slate-500 sm:h-7 sm:w-7" />
+                {/* Chap: rangli ikonka tile + katta nom + katta status/norma */}
+                <div className="flex min-w-0 items-start gap-3.5">
+                  <div
+                    className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border sm:h-14 sm:w-14"
+                    style={{
+                      backgroundColor: status.bgColor,
+                      borderColor: `${status.color}55`,
+                      boxShadow: `0 8px 24px -8px ${status.color}`,
+                    }}
+                  >
+                    <Icon className="h-7 w-7 sm:h-8 sm:w-8" style={{ color: status.color }} />
+                  </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <h2 className="truncate text-sm font-medium uppercase tracking-[0.12em] text-slate-400 sm:text-[15px]">
+                      <h2 className="truncate text-xl font-bold tracking-tight text-slate-100 sm:text-2xl">
                         {cfg.label}
                       </h2>
                       {cfg.isFake && (
-                        <span className="shrink-0 rounded border border-white/10 px-1.5 py-0.5 text-[9px] font-semibold text-slate-500">
+                        <span className="shrink-0 rounded-md border border-amber-400/30 bg-amber-400/10 px-1.5 py-0.5 text-[10px] font-bold text-amber-300">
                           Namunaviy
                         </span>
                       )}
                     </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                      <SensorStatusBadge sensorKey={cfg.key} value={s0.latest} />
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <SensorStatusBadge
+                        sensorKey={cfg.key}
+                        value={cfg.key === 'heating' ? dT : s0.latest}
+                        size="lg"
+                      />
                       {cfg.nominal != null && (
-                        <span className="text-[11px] text-slate-500">
-                          (norma {cfg.nominal} {cfg.unit})
+                        <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-sm font-semibold text-slate-300">
+                          norma {cfg.nominal} {cfg.unit}
                         </span>
                       )}
                       {cfg.key === 'heating' && (
-                        <span className="text-[11px] text-slate-500">
-                          (norma ΔT {HEATING_DELTA_NORMA}°C)
+                        <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-sm font-semibold text-slate-300">
+                          norma ΔT {HEATING_DELTA_NORMA}°C
                         </span>
                       )}
                     </div>
                   </div>
                 </div>
 
-                {/* O'ng: katta son + status so'zi (yuqori-o'ng — chartga joy ochadi) */}
+                {/* O'ng: katta son (status endi chapdagi katta pill'da) */}
                 <div className="flex shrink-0 flex-col items-end text-right">
                   {single ? (
                     <>
@@ -624,39 +643,21 @@ export default function DisplayPage() {
                         className="value-tick inline-flex items-baseline gap-1.5 transition-colors duration-500"
                       >
                         <span
-                          className="font-sans font-semibold leading-none tabular-nums tracking-[-0.02em] text-[clamp(2.25rem,4.4vw,3.75rem)]"
-                          style={{ color: heroColor }}
+                          className="font-sans font-bold leading-none tabular-nums tracking-[-0.02em] text-[clamp(2.5rem,5vw,4.25rem)]"
+                          style={{ color: heroColor, textShadow: `0 0 40px ${heroColor}33` }}
                         >
                           {s0.latest != null ? <AnimatedNumber value={s0.latest} decimals={decimals} /> : '—'}
                         </span>
-                        <span className="text-base font-medium text-slate-500 sm:text-lg">{cfg.unit}</span>
+                        <span className="text-lg font-semibold text-slate-400 sm:text-xl">{cfg.unit}</span>
                       </span>
 
-                      {/* Status so'zi + nuqta (+ trend) */}
-                      <span className="mt-1 inline-flex items-center gap-2">
-                        {TrendIcon && s0.trend != null && (
-                          <span className="inline-flex items-center gap-0.5 text-xs font-medium text-slate-500">
-                            <TrendIcon className="h-3.5 w-3.5" />
-                            {s0.trend > 0 ? '+' : ''}
-                            {s0.trend.toFixed(decimals)}
-                          </span>
-                        )}
-                        <span className="relative inline-flex h-2.5 w-2.5">
-                          {isDanger && (
-                            <span
-                              className="absolute inline-flex h-full w-full animate-ping rounded-full"
-                              style={{ background: status.color, opacity: 0.6 }}
-                            />
-                          )}
-                          <span className="relative inline-flex h-2.5 w-2.5 rounded-full" style={{ background: status.color }} />
+                      {TrendIcon && s0.trend != null && (
+                        <span className="mt-1 inline-flex items-center gap-1 text-sm font-medium text-slate-400">
+                          <TrendIcon className="h-4 w-4" />
+                          {s0.trend > 0 ? '+' : ''}
+                          {s0.trend.toFixed(decimals)} {cfg.unit}
                         </span>
-                        <span
-                          className="text-base font-bold uppercase tracking-wide sm:text-lg"
-                          style={{ color: status.color }}
-                        >
-                          {status.label}
-                        </span>
-                      </span>
+                      )}
                     </>
                   ) : (
                     /* Qozonxona: ΔT qahramon raqam + Kirish/Chiqish kichik satr */
@@ -666,40 +667,34 @@ export default function DisplayPage() {
                         className="value-tick inline-flex items-baseline gap-1.5 transition-colors duration-500"
                       >
                         <span
-                          className="font-sans font-semibold leading-none tabular-nums tracking-[-0.02em] text-[clamp(2.25rem,4.4vw,3.75rem)]"
-                          style={{ color: heroColor }}
+                          className="font-sans font-bold leading-none tabular-nums tracking-[-0.02em] text-[clamp(2.5rem,5vw,4.25rem)]"
+                          style={{ color: heroColor, textShadow: `0 0 40px ${heroColor}33` }}
                         >
                           {dT != null ? <AnimatedNumber value={dT} decimals={1} /> : '—'}
                         </span>
-                        <span className="text-base font-medium text-slate-500 sm:text-lg">°C ΔT</span>
+                        <span className="text-lg font-semibold text-slate-400 sm:text-xl">°C ΔT</span>
                       </span>
 
-                      <span className="mt-1 inline-flex items-center gap-2">
-                        <span className="h-2.5 w-2.5 rounded-full" style={{ background: status.color }} />
-                        <span
-                          className="text-base font-bold uppercase tracking-wide sm:text-lg"
-                          style={{ color: status.color }}
-                        >
-                          {status.label}
-                        </span>
-                      </span>
-
-                      <div className="mt-1 flex gap-4 tabular-nums text-slate-300">
-                        <span className="text-xs">
+                      <div className="mt-1.5 flex gap-2 tabular-nums">
+                        <span className="rounded-lg bg-white/[0.05] px-2.5 py-1 text-sm">
                           <span className="text-slate-500">Kir </span>
-                          {cfg.series[0].latest != null ? (
-                            <AnimatedNumber value={cfg.series[0].latest} decimals={1} suffix="°" />
-                          ) : (
-                            '—'
-                          )}
+                          <span className="font-bold text-cyan-300">
+                            {cfg.series[0].latest != null ? (
+                              <AnimatedNumber value={cfg.series[0].latest} decimals={1} suffix="°" />
+                            ) : (
+                              '—'
+                            )}
+                          </span>
                         </span>
-                        <span className="text-xs">
+                        <span className="rounded-lg bg-white/[0.05] px-2.5 py-1 text-sm">
                           <span className="text-slate-500">Chiq </span>
-                          {cfg.series[1]?.latest != null ? (
-                            <AnimatedNumber value={cfg.series[1].latest} decimals={1} suffix="°" />
-                          ) : (
-                            '—'
-                          )}
+                          <span className="font-bold text-sky-300">
+                            {cfg.series[1]?.latest != null ? (
+                              <AnimatedNumber value={cfg.series[1].latest} decimals={1} suffix="°" />
+                            ) : (
+                              '—'
+                            )}
+                          </span>
                         </span>
                       </div>
                     </>
