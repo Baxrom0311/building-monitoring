@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
-  Area,
-  AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
@@ -13,17 +11,14 @@ import {
   YAxis,
 } from 'recharts'
 import {
-  Activity,
   Building2,
-  Droplet,
   Droplets,
   Flame,
-  LayoutGrid,
   Maximize2,
   Minimize2,
+  Droplet,
   RefreshCw,
   RotateCw,
-  Sparkles,
   Thermometer,
   TrendingDown,
   TrendingUp,
@@ -268,17 +263,6 @@ function LiveDot({ ok }: { ok: boolean }) {
 }
 
 export default function DisplayPage() {
-  const initialStyle = (new URLSearchParams(window.location.search).get('style') as 'v1' | 'classic') || 'v1'
-  const [displayStyle, setDisplayStyle] = useState<'v1' | 'classic'>(initialStyle)
-  const [featuredKey, setFeaturedKey] = useState<'electricity' | 'water' | 'gas' | 'soil' | 'sound' | 'heating'>('electricity')
-
-  const changeStyle = (newStyle: 'v1' | 'classic') => {
-    setDisplayStyle(newStyle)
-    const searchParams = new URLSearchParams(window.location.search)
-    searchParams.set('style', newStyle)
-    window.history.replaceState(null, '', `${window.location.pathname}?${searchParams.toString()}`)
-  }
-
   const [data, setData] = useState<DisplayData | null>(null)
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
   const [online, setOnline] = useState(true)
@@ -451,32 +435,6 @@ export default function DisplayPage() {
             </select>
           )}
 
-          {/* Style Switcher Pills (V1 vs Klasik) */}
-          <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-white/5 p-1 backdrop-blur-md">
-            <button
-              onClick={() => changeStyle('v1')}
-              className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold transition-all ${
-                displayStyle === 'v1'
-                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 shadow-sm shadow-cyan-500/30'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <Sparkles className="h-3.5 w-3.5 text-cyan-400" />
-              <span>V1: Boshqaruv Markazi</span>
-            </button>
-            <button
-              onClick={() => changeStyle('classic')}
-              className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold transition-all ${
-                displayStyle === 'classic'
-                  ? 'bg-blue-500/20 text-blue-300 border border-blue-500/50 shadow-sm shadow-blue-500/30'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <LayoutGrid className="h-3.5 w-3.5 text-blue-400" />
-              <span>Klasik Kataklar</span>
-            </button>
-          </div>
-
           {/* Status badge + harakat tugmalari */}
           <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-2.5 py-1.5 text-slate-400 backdrop-blur sm:gap-3 sm:px-3 sm:py-2">
             <LiveDot ok={online} />
@@ -520,210 +478,8 @@ export default function DisplayPage() {
         </div>
       </header>
 
-      {/* V1: Boshqaruv Markazi Mode (Hero Spotlight + Side Feed + Telemetry Ribbon) */}
-      {displayStyle === 'v1' ? (
-        <div className="relative z-10 flex min-h-0 flex-1 flex-col gap-3 p-3 sm:gap-4 sm:p-4 overflow-y-auto lg:overflow-hidden">
-          {/* Top Executive Quick Summary Ribbon */}
-          <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4 shrink-0">
-            {charts.slice(0, 4).map((c) => {
-              const CIcon = c.icon
-              const s0 = c.series[0]
-              const isSelected = c.key === featuredKey
-              return (
-                <div
-                  key={c.key}
-                  onClick={() => setFeaturedKey(c.key)}
-                  className={`cursor-pointer flex items-center justify-between rounded-2xl border p-3 backdrop-blur-xl transition-all duration-300 ${
-                    isSelected
-                      ? 'border-blue-500/60 bg-blue-500/10 shadow-lg shadow-blue-500/20 scale-[1.02]'
-                      : 'border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.06]'
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-xl border" style={{ background: `${c.color}20`, borderColor: `${c.color}40`, color: c.color }}>
-                      <CIcon className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <div className="text-[11px] font-bold text-slate-400">{c.label}</div>
-                      <div className="font-mono text-lg font-black text-white">
-                        {s0.latest != null ? <AnimatedNumber value={s0.latest} decimals={1} /> : '—'}
-                        <span className="ml-1 text-xs font-bold text-slate-400">{c.unit}</span>
-                      </div>
-                    </div>
-                  </div>
-                  <SensorStatusBadge sensorKey={c.key} value={s0.latest} size="sm" />
-                </div>
-              )
-            })}
-          </div>
-
-          {/* Main Middle Split: Left Hero Spotlight (8 cols) + Right Feed (4 cols) */}
-          {(() => {
-            const feat = charts.find((c) => c.key === featuredKey) || charts[0]
-            const FeatIcon = feat.icon
-            const fs0 = feat.series[0]
-            const featIsElec = feat.key === 'electricity'
-            const featIsWater = feat.key === 'water'
-            const featIsGas = feat.key === 'gas'
-
-            const featElecVals = featIsElec ? feat.points.map((p) => p.v0).filter((n): n is number => typeof n === 'number') : []
-            const featElecSpan = featElecVals.length ? Math.max(15, ...featElecVals.map((v) => Math.abs(v - ELEC_NOMINAL))) : 20
-            const featElecDomain: [number, number] = [-(featElecSpan + 5), featElecSpan + 5]
-            const featElecData = featIsElec
-              ? feat.points.map((p) => ({ ...p, dev: p.v0 != null ? Number((p.v0 - ELEC_NOMINAL).toFixed(2)) : null }))
-              : feat.points
-
-            const featWaterVals = featIsWater ? feat.points.map((p) => p.v0).filter((n): n is number => typeof n === 'number') : []
-            const featWaterMaxDiff = featWaterVals.length ? Math.max(0.6, ...featWaterVals.map((v) => Math.abs(v - WATER_NOMINAL))) : 0.8
-            const featWaterDomain: [number, number] = [
-              Math.max(0, Number((WATER_NOMINAL - featWaterMaxDiff - 0.3).toFixed(1))),
-              Number((WATER_NOMINAL + featWaterMaxDiff + 0.3).toFixed(1)),
-            ]
-
-            const featGasVals = featIsGas ? feat.points.map((p) => p.v0).filter((n): n is number => typeof n === 'number') : []
-            const featGasMaxDiff = featGasVals.length ? Math.max(0.08, ...featGasVals.map((v) => Math.abs(v - GAS_NOMINAL))) : 0.1
-            const featGasDomain: [number, number] = [
-              Math.max(0, Number((GAS_NOMINAL - featGasMaxDiff - 0.04).toFixed(2))),
-              Number((GAS_NOMINAL + featGasMaxDiff + 0.04).toFixed(2)),
-            ]
-
-            return (
-              <div className="grid grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-12 min-h-0 flex-1">
-                {/* Left Hero Spotlight */}
-                <div className="lg:col-span-8 flex flex-col rounded-3xl border border-white/15 bg-slate-900/80 p-4 sm:p-6 shadow-2xl backdrop-blur-2xl relative overflow-hidden min-h-[380px] sm:min-h-[440px]">
-                  {/* Header + Selector Tabs */}
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-12 w-12 items-center justify-center rounded-2xl border" style={{ background: `${feat.color}20`, borderColor: `${feat.color}40`, color: feat.color }}>
-                        <FeatIcon className="h-6 w-6" />
-                      </div>
-                      <div>
-                        <div className="text-[11px] font-extrabold uppercase tracking-widest text-slate-400">Markaziy Telemetriya</div>
-                        <div className="text-xl font-black text-white sm:text-2xl">{feat.label}</div>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-1 rounded-2xl border border-white/10 bg-white/5 p-1 backdrop-blur-md">
-                      {charts.map((c) => {
-                        const CIcon = c.icon
-                        const active = c.key === featuredKey
-                        return (
-                          <button
-                            key={c.key}
-                            onClick={() => setFeaturedKey(c.key)}
-                            className={`flex items-center gap-1 rounded-xl px-2.5 py-1 text-xs font-bold transition-all ${
-                              active ? 'bg-blue-500 text-white shadow-md shadow-blue-500/40' : 'text-slate-400 hover:text-white'
-                            }`}
-                          >
-                            <CIcon className="h-3.5 w-3.5" />
-                            <span className="hidden sm:inline">{c.label.split(' ')[0]}</span>
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Main Metric Value Row */}
-                  <div className="my-4 flex flex-wrap items-center justify-between gap-4">
-                    <div>
-                      <div className="text-xs font-semibold text-slate-400">Joriy O'lchov Qiymati</div>
-                      <div className="font-mono text-5xl font-black tabular-nums leading-none tracking-tight text-white sm:text-6xl lg:text-7xl" style={{ color: feat.color }}>
-                        {fs0.latest != null ? <AnimatedNumber value={fs0.latest} decimals={1} /> : '—'}
-                        <span className="ml-2 text-2xl font-bold text-slate-400 sm:text-3xl">{feat.unit}</span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <SensorStatusBadge sensorKey={feat.key} value={fs0.latest} size="lg" />
-                      {feat.key === 'heating' && feat.deltaT != null && (
-                        <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 backdrop-blur-md">
-                          <div className="text-[10px] font-bold text-slate-400">ΔT (Farq)</div>
-                          <div className="font-mono text-xl font-black text-emerald-400">{feat.deltaT.toFixed(1)}°C</div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Large High-Res Area Wave Chart */}
-                  <div className="relative min-h-[220px] flex-1 w-full pt-2">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={featIsElec ? featElecData : feat.points} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-                        <defs>
-                          {feat.series.map((s) => (
-                            <linearGradient key={s.index} id={`v1_hero_area_${feat.key}_${s.index}`} x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor={s.color} stopOpacity={0.45} />
-                              <stop offset="100%" stopColor={s.color} stopOpacity={0.02} />
-                            </linearGradient>
-                          ))}
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 6" stroke="rgba(255,255,255,0.06)" vertical={false} />
-                        <XAxis dataKey="label" tick={{ fontSize: 12, fill: '#64748b' }} tickLine={false} axisLine={false} />
-                        <YAxis tick={{ fontSize: 12, fill: '#64748b' }} tickLine={false} axisLine={false} width={48} domain={featIsElec ? featElecDomain : featIsWater ? featWaterDomain : featIsGas ? featGasDomain : ['auto', 'auto']} tickFormatter={(v) => `${featIsElec ? Math.round(Number(v) + ELEC_NOMINAL) : v}`} />
-                        <Tooltip contentStyle={{ background: 'rgba(15,23,42,0.95)', border: `1px solid ${feat.color}60`, borderRadius: 16, fontSize: 14, color: '#f1f5f9' }} />
-                        {feat.series.map((s) => (
-                          <Area key={s.index} type="monotone" dataKey={(featIsElec ? 'dev' : `v${s.index}`) as any} name={s.label} stroke={s.color} strokeWidth={4} fill={`url(#v1_hero_area_${feat.key}_${s.index})`} dot={false} activeDot={{ r: 7, fill: s.color, stroke: '#0f172a', strokeWidth: 3 }} />
-                        ))}
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-
-                {/* Right Side Stack: Remaining Utilities High-Density Feed */}
-                <div className="lg:col-span-4 flex flex-col gap-2.5 overflow-y-auto max-h-[600px] lg:max-h-none">
-                  {charts.filter((c) => c.key !== featuredKey).map((c) => {
-                    const CIcon = c.icon
-                    const s0 = c.series[0]
-                    return (
-                      <div
-                        key={c.key}
-                        onClick={() => setFeaturedKey(c.key)}
-                        className="group cursor-pointer flex items-center justify-between rounded-2xl border border-white/10 bg-slate-900/60 p-3.5 backdrop-blur-xl transition-all duration-300 hover:border-blue-500/40 hover:bg-white/[0.07] hover:scale-[1.01]"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border" style={{ background: `${c.color}15`, borderColor: `${c.color}35`, color: c.color }}>
-                            <CIcon className="h-5 w-5" />
-                          </div>
-                          <div>
-                            <div className="text-xs font-bold text-slate-300">{c.label}</div>
-                            <div className="font-mono text-xl font-black text-white">
-                              {s0.latest != null ? <AnimatedNumber value={s0.latest} decimals={1} /> : '—'}
-                              <span className="ml-1 text-xs font-bold text-slate-400">{c.unit}</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="flex flex-col items-end gap-1">
-                          <SensorStatusBadge sensorKey={c.key} value={s0.latest} size="sm" />
-                          <span className="text-[10px] font-bold text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity">Bosh ekranga olib o'tish →</span>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )
-          })()}
-
-          {/* Bottom Live Telemetry Ribbon */}
-          <div className="shrink-0 rounded-2xl border border-white/10 bg-white/5 px-4 py-2.5 backdrop-blur-xl flex flex-wrap items-center justify-between gap-3 text-xs text-slate-300">
-            <div className="flex items-center gap-2 font-bold text-blue-400">
-              <Activity className="h-4 w-4 animate-pulse" />
-              <span>TIZIM AMALDAGI MONITORING TIZIMI:</span>
-            </div>
-            <div className="flex flex-wrap items-center gap-4 font-mono text-[11px] sm:text-xs text-slate-300">
-              <span>⚡ 220V Normal</span>
-              <span className="text-slate-600">•</span>
-              <span>💧 2.7 Bar Norma</span>
-              <span className="text-slate-600">•</span>
-              <span>🔥 0.27 Bar Yaxshi</span>
-              <span className="text-slate-600">•</span>
-              <span>🌡️ Qozonxona ΔT 20°C</span>
-            </div>
-          </div>
-        </div>
-      ) : (
-        /* Grafiklar — Desktopda 3×2 grid, planshetda 2-kolonka scroll bilan, mobilda 1-kolonka */
-        <div className="relative z-10 grid min-h-0 flex-1 grid-cols-1 gap-3 p-3 sm:grid-cols-2 sm:gap-4 sm:p-4 lg:grid-cols-3">
+      {/* Grafiklar — Desktopda 3×2 grid, planshetda 2-kolonka scroll bilan, mobilda 1-kolonka */}
+      <div className="relative z-10 grid min-h-0 flex-1 grid-cols-1 gap-3 p-3 sm:grid-cols-2 sm:gap-4 sm:p-4 lg:grid-cols-3">
         {charts.map((cfg) => {
           const Icon = cfg.icon
           const hasData = cfg.series.some((s) => s.latest != null)
@@ -1045,7 +801,6 @@ export default function DisplayPage() {
           )
         })}
       </div>
-      )}
     </div>
   )
 }
