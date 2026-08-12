@@ -74,26 +74,20 @@ async def summary() -> dict:
             )
             or 0
         )
-        # Har bir device uchun oxirgi energy_kwh ni summalaymiz
-        r_inner = aliased(Reading)
+        # Har bir device uchun oxirgi energy_kwh ni summalaymiz. DISTINCT ON bilan
+        # har device'дан ANIQ bitta (eng oxirgi) qator olamiz — aks holda bir device'да
+        # bir xil ts'да bir necha energiya qatori (batch yoki RS-485 bridge source_id)
+        # bo'lsa hammasi qo'shilib total ikki-hisoblanardi (audit).
         latest_energy_subq = (
-            select(func.max(r_inner.ts).label("max_ts"), r_inner.device_id)
-            .join(Device, Device.id == r_inner.device_id)
-            .where(r_inner.energy_kwh.isnot(None))
-            .where(Device.is_test_device.is_(False))
-            .group_by(r_inner.device_id)
+            select(Reading.energy_kwh.label("energy_kwh"))
+            .join(Device, Device.id == Reading.device_id)
+            .where(Reading.energy_kwh.isnot(None), Device.is_test_device.is_(False))
+            .distinct(Reading.device_id)
+            .order_by(Reading.device_id, desc(Reading.ts))
             .subquery()
         )
         total_energy = (
-            await session.scalar(
-                select(func.sum(Reading.energy_kwh)).join(
-                    latest_energy_subq,
-                    and_(
-                        Reading.device_id == latest_energy_subq.c.device_id,
-                        Reading.ts == latest_energy_subq.c.max_ts,
-                    ),
-                )
-            )
+            await session.scalar(select(func.sum(latest_energy_subq.c.energy_kwh)))
         ) or 0
         buildings = await session.scalar(select(func.count()).select_from(Building)) or 0
         points = await session.scalar(select(func.count()).select_from(MeasurementPoint).where(MeasurementPoint.is_active.is_(True))) or 0

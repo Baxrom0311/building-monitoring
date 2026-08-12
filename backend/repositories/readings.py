@@ -1,7 +1,7 @@
 from sqlalchemy import and_, desc, func, select
 from sqlalchemy.orm import aliased
 
-from models.entities import Reading
+from models.entities import Device, Reading
 from repositories.base import BaseRepository
 
 
@@ -29,7 +29,12 @@ class ReadingRepository(BaseRepository[Reading]):
 
         building_id berilsa faqat shu bino; aks holda butun tizim bo'yicha.
         Displey ekranida joriy qiymatni (soatlik o'rtacha emas) ko'rsatish uchun."""
-        stmt = select(Reading)
+        # Test qurilmalarни chiqarib tashlaymiz — ular soatlik agregatsiyada
+        # filtrlanadi, lekin bu real-vaqt so'rovда ham filtrlanishi kerak, aks
+        # holda public displeyда simulyatsiya "jonli" ko'rinadi (audit).
+        stmt = select(Reading).join(Device, Device.id == Reading.device_id).where(
+            Device.is_test_device.is_(False)
+        )
         if building_id is not None:
             stmt = stmt.where(Reading.building_id == building_id)
         stmt = stmt.distinct(Reading.utility_type).order_by(Reading.utility_type, desc(Reading.ts))
@@ -40,8 +45,10 @@ class ReadingRepository(BaseRepository[Reading]):
         oxirgi o'qishlari bo'yicha O'RTACHA qiymatni hisoblab qaytaradi."""
         from core.time import now_ts
         cutoff = now_ts() - max_age_seconds
-        subq_stmt = select(Reading.device_id, func.max(Reading.ts).label("max_ts")).where(
-            and_(Reading.utility_type == "sound", Reading.ts > cutoff)
+        subq_stmt = (
+            select(Reading.device_id, func.max(Reading.ts).label("max_ts"))
+            .join(Device, Device.id == Reading.device_id)
+            .where(and_(Reading.utility_type == "sound", Reading.ts > cutoff, Device.is_test_device.is_(False)))
         )
         if building_id is not None:
             subq_stmt = subq_stmt.where(Reading.building_id == building_id)

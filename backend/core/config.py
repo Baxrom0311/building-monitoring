@@ -98,7 +98,8 @@ class Settings:
     secret_key: str = os.getenv("SECRET_KEY", "change-me-in-production")
     access_token_ttl_sec: int = int(os.getenv("ACCESS_TOKEN_TTL_SEC", "86400"))
     max_login_attempts: int = int(os.getenv("MAX_LOGIN_ATTEMPTS", "5"))
-    login_lock_sec: int = int(os.getenv("LOGIN_LOCK_SEC", "0"))  # 0 = bloklanmaydi
+    # Default 900s (15 min) — brute-force'ni cheklaydi. 0 = bloklanmaydi (audit).
+    login_lock_sec: int = int(os.getenv("LOGIN_LOCK_SEC", "900"))
     min_password_len: int = int(os.getenv("MIN_PASSWORD_LEN", "8"))
     bootstrap_admin_username: str = os.getenv("BOOTSTRAP_ADMIN_USERNAME", "admin")
     bootstrap_admin_password: str = os.getenv("BOOTSTRAP_ADMIN_PASSWORD", "")
@@ -146,12 +147,21 @@ class Settings:
         if invalid_channels:
             errors.append(f"ALERT_NOTIFICATION_CHANNELS noto'g'ri: {', '.join(invalid_channels)}")
 
+        # FAIL-CLOSED (har MUHITДА): globalga ma'lum default imzo kaliti bilan
+        # ishlamaymiz — aks holda APP_ENV=production o'rnatilmasa, har kim admin
+        # token'ni soxtalashtira oladi (audit HIGH). Uzunlik talabi faqat prod'da.
+        known_insecure = {"", "change-me", "change-me-in-production", "change-device-token", "Admin123", "Admin1234"}
+        if self.secret_key in known_insecure:
+            errors.append("SECRET_KEY default/insecure qiymatda — .env да SECRET_KEY o'rnating (har muhit uchun majburiy)")
+        if self.device_api_token in known_insecure:
+            errors.append("DEVICE_API_TOKEN default/insecure qiymatda — .env да o'rnating (har muhit uchun majburiy)")
+
         if not self.is_production:
             if errors:
                 raise RuntimeError("; ".join(errors))
             return
 
-        insecure_values = {"", "change-me", "change-me-in-production", "change-device-token", "Admin123", "Admin1234"}
+        insecure_values = known_insecure
         if self.secret_key in insecure_values or len(self.secret_key) < 32:
             errors.append("SECRET_KEY production uchun kuchli va kamida 32 belgili bo'lishi kerak")
         if self.device_api_token in insecure_values or len(self.device_api_token) < 24:
@@ -164,6 +174,11 @@ class Settings:
             errors.append("Telegram alert channel uchun TELEGRAM_BOT_TOKEN va TELEGRAM_CHAT_ID kerak")
         if "webhook" in self.alert_notification_channels and not self.alert_webhook_url:
             errors.append("Webhook alert channel uchun ALERT_WEBHOOK_URL kerak")
+        # Production'да ochiq wildcard CORS/host xavfli (audit)
+        if "*" in self.cors_origins:
+            errors.append("Production'да CORS_ORIGINS '*' bo'lmasligi kerak — aniq domenlar ko'rsating")
+        if "*" in self.trusted_hosts:
+            errors.append("Production'да TRUSTED_HOSTS '*' bo'lmasligi kerak — aniq hostlar ko'rsating")
         if errors:
             raise RuntimeError("; ".join(errors))
 

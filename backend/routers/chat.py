@@ -779,7 +779,11 @@ async def chat_endpoint(body: ChatRequest, user: dict = Depends(current_token_pa
                     return
                 except Exception as fallback_exc:
                     detail = f"{detail} | fallback: {fallback_exc}"
-            yield f"data: {_json({'type': 'FINAL_RESPONSE', 'content': f'AI xatoligi: {detail}'})}\n\n"
+            # To'liq xatoni faqat server log'ига yozamiz — mijozga umumiy xabar
+            # (ichki xato/config tafsilotlarini oshkor qilmaslik uchun, audit).
+            logging.getLogger("chat").warning("AI flow error: %s", detail)
+            _msg = "AI xizmatida vaqtincha xatolik yuz berdi. Keyinroq qayta urinib koring."
+            yield f"data: {_json({'type': 'FINAL_RESPONSE', 'content': _msg})}\n\n"
             yield "data: [DONE]\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")

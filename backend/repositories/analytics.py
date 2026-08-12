@@ -1,4 +1,4 @@
-from sqlalchemy import Integer, Numeric, and_, cast, delete, desc, func, select
+from sqlalchemy import Integer, Numeric, and_, case, cast, delete, desc, func, select
 
 from models.entities import Alert, Device, HourlyUtilityStats, Reading
 from repositories.base import BaseRepository
@@ -150,6 +150,7 @@ class AnalyticsRepository(BaseRepository[HourlyUtilityStats]):
                 func.max(Reading.level).label("max_level"),
                 func.avg(Reading.temperature_in_c).label("avg_temperature_in_c"),
                 func.avg(Reading.temperature_out_c).label("avg_temperature_out_c"),
+                func.avg(Reading.air_quality).label("avg_air_quality"),
             )
             .join(Device, Device.id == Reading.device_id)
             .where(and_(Reading.ts >= cutoff, Device.is_test_device.is_(False)))
@@ -182,6 +183,7 @@ class AnalyticsRepository(BaseRepository[HourlyUtilityStats]):
                     max_level=row["max_level"],
                     avg_temperature_in_c=row["avg_temperature_in_c"],
                     avg_temperature_out_c=row["avg_temperature_out_c"],
+                    avg_air_quality=row["avg_air_quality"],
                     created_at=ts,
                     updated_at=ts,
                 )
@@ -212,15 +214,23 @@ class AnalyticsRepository(BaseRepository[HourlyUtilityStats]):
         building_id: int | None = None,
     ) -> list[dict]:
         bucket_ts = Reading.ts - (Reading.ts % bucket_sec)
-        per_device = (
+        # Reset-aware iste'mol: max-min emas, ketma-ket MUSBAT deltalar yig'indisi.
+        # Hisoblagich reset/almashsa (energy tushsa) o'sha manfiy sakrash e'tiborsiz
+        # qoldiriladi — aks holda delta butun absolyut qiymatga sakrardi (audit).
+        _lag = func.lag(Reading.energy_kwh).over(
+            partition_by=[bucket_ts, Reading.device_id],
+            order_by=Reading.ts,
+        )
+        _delta = Reading.energy_kwh - _lag
+        _pos = case((and_(_lag.isnot(None), _delta > 0), _delta), else_=0.0)
+        deltas = (
             select(
                 bucket_ts.label("bucket_ts"),
                 Reading.building_id.label("building_id"),
                 Reading.device_id.label("device_id"),
-                (func.max(Reading.energy_kwh) - func.min(Reading.energy_kwh)).label("energy_kwh_delta"),
-                func.max(Reading.energy_kwh).label("energy_kwh_max"),
-                func.avg(Reading.power_w).label("avg_power_w"),
-                func.count().label("samples"),
+                _pos.label("pos_delta"),
+                Reading.energy_kwh.label("e"),
+                Reading.power_w.label("p"),
             )
             .where(
                 and_(
@@ -232,11 +242,23 @@ class AnalyticsRepository(BaseRepository[HourlyUtilityStats]):
                 )
             )
             .join(Device, Device.id == Reading.device_id)
-            .group_by(bucket_ts, Reading.building_id, Reading.device_id)
         )
         if building_id:
-            per_device = per_device.where(Reading.building_id == building_id)
-        per_device_subq = per_device.subquery()
+            deltas = deltas.where(Reading.building_id == building_id)
+        deltas_subq = deltas.subquery()
+        per_device_subq = (
+            select(
+                deltas_subq.c.bucket_ts,
+                deltas_subq.c.building_id,
+                deltas_subq.c.device_id,
+                func.sum(deltas_subq.c.pos_delta).label("energy_kwh_delta"),
+                func.max(deltas_subq.c.e).label("energy_kwh_max"),
+                func.avg(deltas_subq.c.p).label("avg_power_w"),
+                func.count().label("samples"),
+            )
+            .group_by(deltas_subq.c.bucket_ts, deltas_subq.c.building_id, deltas_subq.c.device_id)
+            .subquery()
+        )
         stmt = (
             select(
                 per_device_subq.c.bucket_ts,
@@ -252,13 +274,19 @@ class AnalyticsRepository(BaseRepository[HourlyUtilityStats]):
         return [dict(row) for row in (await self.session.execute(stmt)).mappings().all()]
 
     async def buildings_energy_summary_rows(self, from_ts: int) -> list[dict]:
-        per_device = (
+        # Reset-aware (max-min emas, musbat deltalar yig'indisi) — audit
+        _lag = func.lag(Reading.energy_kwh).over(
+            partition_by=[Reading.building_id, Reading.device_id],
+            order_by=Reading.ts,
+        )
+        _delta = Reading.energy_kwh - _lag
+        _pos = case((and_(_lag.isnot(None), _delta > 0), _delta), else_=0.0)
+        deltas = (
             select(
                 Reading.building_id.label("building_id"),
                 Reading.device_id.label("device_id"),
-                (func.max(Reading.energy_kwh) - func.min(Reading.energy_kwh)).label("energy_kwh_delta"),
-                func.avg(Reading.power_w).label("avg_power_w"),
-                func.count().label("readings"),
+                _pos.label("pos_delta"),
+                Reading.power_w.label("p"),
             )
             .where(
                 and_(
@@ -269,7 +297,17 @@ class AnalyticsRepository(BaseRepository[HourlyUtilityStats]):
                 )
             )
             .join(Device, Device.id == Reading.device_id)
-            .group_by(Reading.building_id, Reading.device_id)
+            .subquery()
+        )
+        per_device = (
+            select(
+                deltas.c.building_id.label("building_id"),
+                deltas.c.device_id.label("device_id"),
+                func.sum(deltas.c.pos_delta).label("energy_kwh_delta"),
+                func.avg(deltas.c.p).label("avg_power_w"),
+                func.count().label("readings"),
+            )
+            .group_by(deltas.c.building_id, deltas.c.device_id)
             .subquery()
         )
         stmt = (
