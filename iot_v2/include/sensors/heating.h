@@ -51,6 +51,13 @@ static void sensor_init() {
     // harorati uchun 0.25C aniqlik yetarli, loop() 4x kamroq bloklanadi (audit).
     g_ds_in.setResolution(10);
     g_ds_out.setResolution(10);
+    // DallasTemperature standart holatda requestTemperatures() ICHIDA
+    // konvertatsiya tugashini kutadi (waitForConversion=true) — demak ikkala
+    // shinani ketma-ket chaqirish "parallel" EMAS, balki 2x ~187ms (jami
+    // ~374ms) ketma-ket bloklaydi. O'chirib qo'yamiz va sensor_read()'da bir
+    // marta, ikkalasi uchun BIRGALIKDA kutamiz — haqiqiy parallel ~187ms.
+    g_ds_in.setWaitForConversion(false);
+    g_ds_out.setWaitForConversion(false);
     g_ds_in_ok  = g_ds_in.getDeviceCount()  > 0;
     g_ds_out_ok = g_ds_out.getDeviceCount() > 0;
 
@@ -78,10 +85,18 @@ static bool sensor_read(SensorData& d) {
     d.temperature_in_c  = NAN;
     d.temperature_out_c = NAN;
 
-    // Ikkala shina o'zgartirishini AVVAL boshlaymiz (parallel kechadi), so'ng
-    // o'qiymiz — ketma-ket kutish o'rniga umumiy vaqt ~2x qisqaradi (audit).
+    // Ikkala shina konvertatsiyasini AVVAL boshlaymiz (setWaitForConversion
+    // (false) tufayli requestTemperatures() darhol qaytadi), so'ng IKKALASI
+    // uchun BIR MARTA kutamiz — haqiqiy parallel, ~187ms jami (avval sun'iy
+    // "parallel" deb yozilgan edi, lekin aslida ketma-ket ~374ms bloklardi).
     if (g_ds_in_ok)  g_ds_in.requestTemperatures();
     if (g_ds_out_ok) g_ds_out.requestTemperatures();
+    if (g_ds_in_ok || g_ds_out_ok) {
+        uint16_t wait_ms = g_ds_in_ok ? g_ds_in.millisToWaitForConversion()
+                                       : g_ds_out.millisToWaitForConversion();
+        unsigned long t = millis();
+        while (millis() - t < wait_ms) yield();
+    }
     if (g_ds_in_ok) {
         float t = g_ds_in.getTempCByIndex(0);
         if (t != DEVICE_DISCONNECTED_C) d.temperature_in_c = t;

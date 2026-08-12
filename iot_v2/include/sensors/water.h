@@ -114,11 +114,21 @@ struct SensorData {
 /** ADC dan o'rtacha voltaj o'qish (V) */
 static float _ads_read_voltage(uint8_t ch) {
     int32_t sum = 0;
+    int count = 0;
+    unsigned long t0 = millis();
     for (int i = 0; i < ADC_OVERSAMPLE; i++) {
+        // I2C shina vaqti-vaqti bilan sekinlashsa (to'liq o'lik emas, lekin
+        // beqaror), har bir readADC_SingleEnded() Wire.setTimeOut() chegarasi
+        // (50ms) gacha cho'zilishi mumkin — 16 marta ketma-ket bitta kanal
+        // uchun sekundgacha bloklashi mumkin edi. Kamida yarmini yig'gandan
+        // keyin umumiy vaqt byudjetidan oshsa, qolganini kutmasdan hozirgi
+        // o'rtachani qaytaramiz — eng yomon holatni ~2x qisqartiradi.
+        if (i >= ADC_OVERSAMPLE / 2 && millis() - t0 > 150) break;
         sum += g_ads.readADC_SingleEnded(ch);
+        count++;
         delayMicroseconds(500);
     }
-    return ((float)sum / ADC_OVERSAMPLE) * MV_PER_BIT / 1000.0f;
+    return ((float)sum / count) * MV_PER_BIT / 1000.0f;
 }
 
 /** Voltajdan tok (mA): I = V / R × 1000 */
