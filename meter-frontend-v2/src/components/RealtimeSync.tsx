@@ -65,6 +65,7 @@ export function RealtimeSync() {
       payload: { type?: 'success' | 'error' | 'warning' | 'info'; title: string; message?: string },
       throttleMs = 4000,
     ) => {
+      if (typeof window !== 'undefined' && window.location.pathname.includes('/display')) return
       const now = Date.now()
       if ((lastToastAt.current[key] ?? 0) + throttleMs > now) return
       lastToastAt.current[key] = now

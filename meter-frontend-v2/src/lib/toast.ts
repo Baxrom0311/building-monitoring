@@ -11,6 +11,10 @@ export interface ToastPayload {
 
 // Eski API bilan moslik — endi sonner ustida yupqa qatlam
 export function notify({ type = 'info', title, message, durationMs }: ToastPayload) {
+  // Display page (/display): Bildirishnomalar (toast popuplar) umuman chiqmasin
+  if (typeof window !== 'undefined' && window.location.pathname.includes('/display')) {
+    return
+  }
   const opts = { description: message, duration: durationMs }
   switch (type) {
     case 'success':
