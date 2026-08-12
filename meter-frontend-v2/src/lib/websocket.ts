@@ -20,16 +20,20 @@ function emitStatus(status: WebSocketConnectionStatus) {
   window.dispatchEvent(new CustomEvent<WebSocketConnectionStatus>(WS_STATUS_EVENT, { detail: status }))
 }
 
-function getWebSocketURL(): string {
+function getWebSocketURL(): string | null {
   const token = getTokenFromStorage()
+  // Token yo'q bo'lsa ulanmaymiz — aks holda `?token=null` (literal "null")
+  // yuborilib, auth muvaffaqiyatsiz bo'lardi (audit). Token URL-encode qilinadi.
+  if (!token) return null
+  const t = encodeURIComponent(token)
   if (API_BASE_URL) {
     const protocol = API_BASE_URL.startsWith('https') ? 'wss' : 'ws'
     const host = new URL(API_BASE_URL).host
-    return `${protocol}://${host}/ws?token=${token}`
+    return `${protocol}://${host}/ws?token=${t}`
   }
   // same-origin fallback
   const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
-  return `${protocol}://${window.location.host}/ws?token=${token}`
+  return `${protocol}://${window.location.host}/ws?token=${t}`
 }
 
 function connect() {
@@ -42,10 +46,17 @@ function connect() {
     return
   }
 
+  const wsUrl = getWebSocketURL()
+  if (!wsUrl) {
+    // Token yo'q — ulanmaymiz (login qilinmagan)
+    emitStatus('idle')
+    return
+  }
+
   try {
     manualClose = false
     emitStatus(reconnectAttempts > 0 ? 'reconnecting' : 'connecting')
-    ws = new WebSocket(getWebSocketURL())
+    ws = new WebSocket(wsUrl)
 
     ws.onopen = () => {
       console.log('[v0] WebSocket connected')

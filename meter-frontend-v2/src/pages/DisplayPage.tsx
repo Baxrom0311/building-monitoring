@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Bar,
   BarChart,
@@ -286,7 +286,27 @@ export default function DisplayPage() {
   const [online, setOnline] = useState(true)
   const [spinning, setSpinning] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
-  const [autoRotate, setAutoRotate] = useState(false)
+  // Auto-rotate holati sahifa qayta yuklanganда saqlanadi (localStorage) — aks
+  // holda har almashишдан keyin reload state'ni false qilib rotatsiya to'xtardi (audit).
+  const [autoRotate, setAutoRotate] = useState(() => {
+    try {
+      return localStorage.getItem('display_auto_rotate') === '1'
+    } catch {
+      return false
+    }
+  })
+  const toggleAutoRotate = () =>
+    setAutoRotate((v) => {
+      const next = !v
+      try {
+        localStorage.setItem('display_auto_rotate', next ? '1' : '0')
+      } catch {
+        /* ignore */
+      }
+      return next
+    })
+  // Binolar ro'yxatini ref'да saqlaymiz — timer har 30s poll'da qayta qurilmasin.
+  const buildingsRef = useRef<{ id: number; name: string }[]>([])
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -327,11 +347,19 @@ export default function DisplayPage() {
     return () => clearInterval(id)
   }, [fetchData])
 
-  // Binolarni har 15 soniyada avtomatik almashtirib turish (Auto-rotate mode)
+  // Binolar ro'yxatini ref'га sinxronlaymiz (timer'ni qayta qurmaslik uchun)
   useEffect(() => {
-    if (!autoRotate || !data?.buildings || data.buildings.length < 2) return
+    buildingsRef.current = data?.buildings ?? []
+  }, [data])
+
+  // Binolarni har 15 soniyada avtomatik almashtirib turish (Auto-rotate mode).
+  // deps faqat [autoRotate] — binolar ref'дан o'qiladi, shuning uchun 30s poll
+  // timer'ni qayta qurmaydi (audit: nondeterministik kadans tuzatildi).
+  useEffect(() => {
+    if (!autoRotate) return
     const interval = setInterval(() => {
-      const buildings = data.buildings ?? []
+      const buildings = buildingsRef.current
+      if (buildings.length < 2) return
       const currentId = BUILDING_ID ? Number(BUILDING_ID) : null
       const currentIndex = buildings.findIndex((b) => b.id === currentId)
       const nextIndex = (currentIndex + 1) % buildings.length
@@ -341,7 +369,7 @@ export default function DisplayPage() {
       window.location.href = url.toString()
     }, 15_000)
     return () => clearInterval(interval)
-  }, [autoRotate, data])
+  }, [autoRotate])
 
   const charts = CHARTS.map((cfg) => {
     // Qozonxona uchun ikki seriya (kirish cyan, chiqish sky blue), qolganlar bitta seriya
@@ -472,7 +500,7 @@ export default function DisplayPage() {
             )}
             {data?.buildings && data.buildings.length > 1 && (
               <button
-                onClick={() => setAutoRotate(!autoRotate)}
+                onClick={toggleAutoRotate}
                 title={autoRotate ? "Avto-almashinuvni to'xtatish" : "Binolarni avto-almashtirish (15s)"}
                 className={`flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold transition-colors ${
                   autoRotate
