@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 interface KPICardProps {
   title: string
   value: string | number
+  unit?: string
   subtitle?: string
   icon?: LucideIcon
   tone?: 'default' | 'success' | 'warning' | 'destructive'
@@ -20,13 +21,13 @@ const toneClasses: Record<NonNullable<KPICardProps['tone']>, string> = {
 }
 
 const toneSpotlights: Record<NonNullable<KPICardProps['tone']>, string> = {
-  default: 'rgba(59, 130, 246, 0.12)',
+  default: 'rgba(99, 102, 241, 0.14)',
   success: 'rgba(16, 185, 129, 0.12)',
   warning: 'rgba(245, 158, 11, 0.12)',
   destructive: 'rgba(239, 68, 68, 0.12)',
 }
 
-export function KPICard({ title, value, subtitle, icon: Icon, tone = 'default' }: KPICardProps) {
+export function KPICard({ title, value, unit, subtitle, icon: Icon, tone = 'default' }: KPICardProps) {
   return (
     <SpotlightCard spotlightColor={toneSpotlights[tone]}>
       <CardContent className="flex items-center gap-4 p-5">
@@ -37,8 +38,9 @@ export function KPICard({ title, value, subtitle, icon: Icon, tone = 'default' }
         )}
         <div className="min-w-0">
           <p className="truncate text-sm font-medium text-muted-foreground">{title}</p>
-          <p className="font-mono text-2xl font-semibold tracking-tight">
+          <p className="font-mono text-2xl font-semibold tracking-tight tabular-nums">
             {typeof value === 'number' ? <AnimatedNumber value={value} /> : value}
+            {unit && <span className="ml-1 text-base font-medium text-muted-foreground">{unit}</span>}
           </p>
           {subtitle && <p className="truncate text-xs text-muted-foreground">{subtitle}</p>}
         </div>

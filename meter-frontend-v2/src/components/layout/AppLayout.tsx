@@ -17,6 +17,7 @@ import {
   LogOut,
   MessageSquare,
   Moon,
+  Presentation,
   ScrollText,
   Search,
   Settings,
@@ -109,36 +110,33 @@ function AppSidebar({ openAlerts }: { openAlerts: number }) {
       }
       const allGroups: NavGroup[] = [
         {
-          label: 'Monitoring',
+          label: 'Kuzatuv',
           items: [
             { label: 'Boshqaruv paneli', path: '/dashboard', icon: LayoutDashboard },
             { label: 'Binolar', path: '/buildings', icon: Building2 },
             { label: 'Qurilmalar', path: '/devices', icon: Cpu },
             { label: 'Test qurilmalar', path: '/devices/test', icon: FlaskConical, adminOnly: true },
             { label: 'Analitika', path: '/analytics', icon: Activity },
-            { label: 'Displey Ekran', path: '/display', icon: Gauge },
-            { label: 'Demo Stend', path: '/demo', icon: Activity },
           ],
         },
         {
-          label: 'Operatsiyalar',
+          label: 'Kundalik ishlar',
           items: [
             { label: 'Ogohlantirishlar', path: '/alerts', icon: Bell, badge: openAlerts },
             { label: 'Kommunal hisobotlar', path: '/billing', icon: FileSpreadsheet },
-            { label: 'Suv hisobotlari', path: '/billing/water', icon: Droplets },
-            { label: 'Gaz hisobotlari', path: '/billing/gas', icon: Flame },
-            { label: 'Elektr hisobotlari', path: '/billing/electricity', icon: Zap },
             { label: 'Xonadonlar', path: '/territory', icon: Home },
-            { label: 'Firmware / OTA', path: '/firmware', icon: HardDriveDownload },
-            { label: 'AI Chat', path: '/chat', icon: MessageSquare },
+            { label: 'AI yordamchi', path: '/chat', icon: MessageSquare },
           ],
         },
         {
-          label: 'Admin',
+          label: 'Boshqaruv',
           items: [
+            { label: 'Firmware / OTA', path: '/firmware', icon: HardDriveDownload },
             { label: 'Foydalanuvchilar', path: '/users', icon: Users, adminOnly: true },
             { label: 'Audit jurnali', path: '/audit', icon: ScrollText, adminOnly: true },
             { label: 'Sozlamalar', path: '/settings', icon: Settings, adminOnly: true },
+            { label: 'Displey ekran', path: '/display', icon: Gauge },
+            { label: 'Demo stend', path: '/demo', icon: Presentation },
           ],
         },
       ]
@@ -196,20 +194,23 @@ function AppSidebar({ openAlerts }: { openAlerts: number }) {
 
 function WsStatusIndicator() {
   const status = useWebSocketStatus()
-  const connected = status === 'connected'
+  const meta =
+    status === 'connected'
+      ? { label: 'Jonli', pulse: 'online' as const, tip: 'Jonli yangilanish faol' }
+      : status === 'connecting' || status === 'reconnecting'
+        ? { label: 'Ulanmoqda…', pulse: 'warning' as const, tip: 'Serverга ulanmoqda' }
+        : status === 'failed'
+          ? { label: 'Aloqa uzildi', pulse: 'offline' as const, tip: 'Jonli yangilanish uzildi' }
+          : { label: 'Kutilmoqda', pulse: 'warning' as const, tip: 'Ulanish kutilmoqda' }
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <div className="flex items-center gap-1.5 px-2 py-1 rounded-full border bg-muted/20 text-muted-foreground cursor-pointer">
-          <StatusPulse status={connected ? 'online' : 'warning'} size="sm" />
-          <span className="text-[11px] font-medium hidden sm:inline">
-            {connected ? 'Live Online' : status}
-          </span>
+        <div className="flex items-center gap-1.5 px-2 py-1 rounded-full border bg-muted/20 text-muted-foreground cursor-default">
+          <StatusPulse status={meta.pulse} size="sm" />
+          <span className="text-[11px] font-medium hidden sm:inline">{meta.label}</span>
         </div>
       </TooltipTrigger>
-      <TooltipContent>
-        {connected ? 'Jonli yangilanish (WebSocket Active)' : `Jonli yangilanish: ${status}`}
-      </TooltipContent>
+      <TooltipContent>{meta.tip}</TooltipContent>
     </Tooltip>
   )
 }
@@ -295,7 +296,7 @@ export function AppLayout() {
             </DropdownMenu>
           </div>
         </header>
-        <main className="flex-1 p-4 md:p-6 overflow-hidden">
+        <main className="flex-1 p-4 md:p-6 overflow-x-auto">
           <div className="mx-auto w-full max-w-[1600px]">
             <PageTransition>
               <Outlet />
