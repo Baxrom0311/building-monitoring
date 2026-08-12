@@ -2,11 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Bar,
   BarChart,
-  CartesianGrid,
   Cell,
   ReferenceLine,
   ResponsiveContainer,
-  Tooltip,
   XAxis,
   YAxis,
 } from 'recharts'
@@ -30,7 +28,7 @@ import { API_BASE_URL } from '@/lib/env'
 import { AnimatedNumber } from '@/components/ui/AnimatedNumber'
 import { StatusPulse } from '@/components/ui/StatusPulse'
 import { getSoilHumidityStatus } from '@/components/ui/SoilStatusBadge'
-import { SensorStatusBadge } from '@/components/ui/SensorStatus'
+import { SensorStatusBadge, getSensorStatus, getHeatingStatus } from '@/components/ui/SensorStatus'
 import type { HourlyUtilityStat } from '@/types/api'
 
 // PUBLIC kiosk sahifa — AppLayout tashqarisida, autentifikatsiyasiz.
@@ -128,44 +126,6 @@ function getGasColor(val: number | null): { color: string; status: string } {
 // Qozonxona normal ΔT (kirish-chiqish farqi)
 const HEATING_DELTA_NORMA = 20
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// OLED CYBERPUNK HUD (V3 OLED THEME STYLE)
-// ═══════════════════════════════════════════════════════════════════════════════
-const OLED_THEME = {
-  pageBg: 'from-black via-black to-slate-950',
-  headerBg: 'bg-black/90 backdrop-blur-2xl',
-  headerBorder: 'border-cyan-500/50 shadow-[0_0_35px_rgba(6,182,212,0.25)]',
-  cardBg: {
-    electricity: 'from-black via-black to-slate-950',
-    water: 'from-black via-black to-slate-950',
-    gas: 'from-black via-black to-slate-950',
-    soil: 'from-black via-black to-slate-950',
-    sound: 'from-black via-black to-slate-950',
-    heating: 'from-black via-black to-slate-950',
-    air_quality: 'from-black via-black to-slate-950',
-  },
-  cardBorder: {
-    electricity: 'border-yellow-400/70 shadow-[0_0_30px_rgba(250,204,21,0.25)] hover:border-yellow-300',
-    water: 'border-emerald-400/70 shadow-[0_0_30px_rgba(52,211,153,0.25)] hover:border-emerald-300',
-    gas: 'border-green-500/70 shadow-[0_0_30px_rgba(34,197,94,0.25)] hover:border-green-400',
-    soil: 'border-teal-400/70 shadow-[0_0_30px_rgba(45,212,191,0.25)] hover:border-teal-300',
-    sound: 'border-purple-400/70 shadow-[0_0_30px_rgba(192,132,252,0.25)] hover:border-purple-300',
-    heating: 'border-cyan-400/70 shadow-[0_0_30px_rgba(34,211,238,0.25)] hover:border-cyan-300',
-    air_quality: 'border-emerald-400/70 shadow-[0_0_30px_rgba(16,185,129,0.25)] hover:border-emerald-300',
-  },
-  cardGlow: {
-    electricity: 'rgba(250,204,21,0.35)',
-    water: 'rgba(52,211,153,0.35)',
-    gas: 'rgba(34,197,94,0.35)',
-    soil: 'rgba(45,212,191,0.35)',
-    sound: 'rgba(192,132,252,0.35)',
-    heating: 'rgba(34,211,238,0.35)',
-    air_quality: 'rgba(16,185,129,0.35)',
-  },
-  clockBg: 'border-cyan-500/40 bg-cyan-950/40 backdrop-blur-md shadow-[0_0_15px_rgba(6,182,212,0.3)]',
-  clockText: 'text-cyan-300',
-}
-
 const CHARTS = [
   {
     key: 'electricity' as const,
@@ -260,8 +220,8 @@ function LiveClock() {
     return () => clearInterval(id)
   }, [])
   return (
-    <div className={`flex flex-col items-end rounded-xl border px-2.5 py-1 sm:rounded-2xl sm:px-3.5 sm:py-1.5 ${OLED_THEME.clockBg}`}>
-      <div className={`font-mono text-base font-black tabular-nums tracking-wider sm:text-xl md:text-2xl lg:text-3xl ${OLED_THEME.clockText}`}>
+    <div className="flex flex-col items-end rounded-xl border border-white/10 bg-white/[0.03] px-2.5 py-1 sm:rounded-2xl sm:px-3.5 sm:py-1.5">
+      <div className="font-mono text-base font-semibold tabular-nums tracking-wider text-slate-100 sm:text-xl md:text-2xl lg:text-3xl">
         {time.toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
       </div>
       <div className="text-[10px] font-medium text-slate-400 sm:text-xs">
@@ -432,30 +392,15 @@ export default function DisplayPage() {
   })
 
   return (
-    <div
-      className={`relative flex min-h-screen flex-col overflow-hidden bg-gradient-to-br text-slate-100 font-sans selection:bg-cyan-500 selection:text-white ${OLED_THEME.pageBg}`}
-    >
-      {/* Orqa fondagi texnik to'r (grid background) va nur g'ubori */}
-      <div className="pointer-events-none absolute inset-0 z-0">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(6,182,212,0.15),rgba(255,255,255,0))]" />
-        <div
-          className="absolute inset-0 opacity-[0.15]"
-          style={{
-            backgroundImage:
-              'linear-gradient(rgba(148,163,184,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,0.06) 1px, transparent 1px)',
-            backgroundSize: '48px 48px',
-          }}
-        />
-      </div>
-
+    <div className="relative flex min-h-screen flex-col overflow-hidden bg-[#0a0e16] text-slate-100 font-sans selection:bg-cyan-500/40 selection:text-white">
       {/* Sarlavha — Mobile/Tablet va Desktop uchun moslashuvchan header */}
-      <header className={`relative z-20 flex shrink-0 flex-wrap items-center justify-between gap-3 border-b px-4 py-3 sm:px-6 sm:py-4 ${OLED_THEME.headerBg} ${OLED_THEME.headerBorder}`}>
+      <header className="relative z-20 flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-white/[0.06] bg-[#0d1220] px-4 py-3 sm:px-6 sm:py-4">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 shadow-lg shadow-cyan-500/40 ring-1 ring-white/10 sm:h-12 sm:w-12 sm:rounded-2xl">
-            <Building2 className="h-5 w-5 text-white sm:h-6 sm:w-6" />
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-800 ring-1 ring-white/10 sm:h-12 sm:w-12 sm:rounded-2xl">
+            <Building2 className="h-5 w-5 text-slate-200 sm:h-6 sm:w-6" />
           </div>
           <div>
-            <div className="text-base font-extrabold tracking-tight text-white sm:text-xl lg:text-2xl">
+            <div className="text-base font-semibold tracking-tight text-white sm:text-xl lg:text-2xl">
               {data?.building?.name ?? 'SmartBino'}
             </div>
             <div className="text-[11px] text-slate-400 sm:text-xs">
@@ -535,12 +480,24 @@ export default function DisplayPage() {
 
       {/* Grafiklar — Desktopda 3×2 grid, planshetda 2-kolonka scroll bilan, mobilda 1-kolonka */}
       <div className="relative z-10 grid min-h-0 flex-1 grid-cols-1 gap-3 p-3 sm:grid-cols-2 sm:gap-4 sm:p-4 lg:grid-cols-3">
-        {charts.map((cfg) => {
+        {charts.map((cfg, i) => {
           const Icon = cfg.icon
           const single = cfg.series.length === 1
           const s0 = cfg.series[0]
           const TrendIcon =
             single && s0.trend != null && s0.trend !== 0 ? (s0.trend > 0 ? TrendingUp : TrendingDown) : null
+          const decimals =
+            cfg.key === 'electricity' || cfg.key === 'soil' || cfg.key === 'sound' ? 1 : 2
+
+          // ── Yagona holat manbasi (rail + status so'zi + chegara/breathe) ──
+          const dT =
+            cfg.key === 'heating' && s0.latest != null && cfg.series[1]?.latest != null
+              ? Math.abs(s0.latest - cfg.series[1].latest)
+              : null
+          const status = cfg.key === 'heating' ? getHeatingStatus(dT) : getSensorStatus(cfg.key, s0.latest)
+          const isAlert = status.level === 'orta' || status.level === 'yomon'
+          const isDanger = status.level === 'yomon'
+          const st = status.level === 'yomon' ? '251,113,133' : status.level === 'orta' ? '251,191,36' : ''
 
           // Elektr: 220V o'rtada nol chizig'i — past qiymat pastga, yuqori qiymat tepaga o'sadi
           const isElec = cfg.key === 'electricity'
@@ -595,58 +552,54 @@ export default function DisplayPage() {
               ? soilStatus.color
               : cfg.color
 
-          const cardBgStyle = OLED_THEME.cardBg[cfg.key] || OLED_THEME.cardBg.electricity
-          const cardBorderStyle = OLED_THEME.cardBorder[cfg.key] || OLED_THEME.cardBorder.electricity
-          const cardGlowStyle = OLED_THEME.cardGlow[cfg.key] || OLED_THEME.cardGlow.electricity
+          // ── Karta chegara/opasitesi va breathe (faqat anomaliya) ──
+          const cardClasses = [
+            'group relative flex min-h-[340px] flex-col overflow-hidden rounded-2xl bg-[#111725] border transition-[opacity,border-color,box-shadow] duration-700 lg:min-h-0 pl-4 animate-card-enter',
+            isAlert ? 'opacity-100 status-breathe' : 'border-white/[0.06] opacity-[0.9]',
+          ].join(' ')
+          const cardStyle: Record<string, any> = { animationDelay: `${i * 70}ms` }
+          if (isAlert) {
+            cardStyle.borderColor = status.color
+            cardStyle['--st'] = st
+            cardStyle.animationDuration = isDanger ? '2s' : '3.2s'
+          }
+
+          // Qozonxona uchun ulkan raqam = ΔT, rangi status bilan; qolganlar valueColor
+          const heroColor = cfg.key === 'heating' ? status.color : valueColor
 
           return (
-            <div
-              key={cfg.key}
-              className={`group relative flex min-h-[340px] flex-col overflow-hidden rounded-3xl border bg-gradient-to-b backdrop-blur-2xl transition-all duration-300 hover:scale-[1.015] hover:shadow-[0_20px_50px_rgba(0,0,0,0.8)] lg:min-h-0 ${cardBgStyle} ${cardBorderStyle}`}
-            >
-              {/* Tepa aksent chizig'i */}
-              <div
-                className="absolute inset-x-0 top-0 h-1.5"
-                style={{
-                  background: `linear-gradient(90deg, transparent 5%, ${cfg.key === 'soil' && soilStatus ? soilStatus.color : cfg.color} 50%, transparent 95%)`,
-                  boxShadow: `0 2px 10px ${cfg.key === 'soil' && soilStatus ? soilStatus.color : cfg.color}`,
-                }}
-              />
-              {/* Glow */}
-              <div
-                className="pointer-events-none absolute inset-0 opacity-40 transition-opacity duration-300 group-hover:opacity-65"
-                style={{ background: `radial-gradient(circle 280px at 50% 10%, ${cardGlowStyle}, transparent 80%)` }}
+            <div key={cfg.key} className={cardClasses} style={cardStyle}>
+              {/* Anomaliya (orta/yomon) uchun yumshoq rangli to'ldiruvchi qatlam */}
+              {isAlert && (
+                <div
+                  className="pointer-events-none absolute inset-0 z-0"
+                  style={{ backgroundColor: status.bgColor }}
+                />
+              )}
+
+              {/* Chap tomondagi status rangli ustun — 5m dan asosiy signal */}
+              <span
+                className="absolute inset-y-0 left-0 z-10 w-1.5 rounded-l-2xl transition-colors duration-700"
+                style={{ background: status.color }}
               />
 
-              {/* Card sarlavhasi */}
-              <div className="relative z-10 flex shrink-0 items-center justify-between gap-3 px-4 pb-1 pt-4 sm:px-6 sm:pt-5">
+              {/* ── ZONA 1: Sarlavha satri ── */}
+              <div className="relative z-10 flex shrink-0 items-start justify-between gap-3 px-5 pb-1 pt-4">
                 <div className="flex items-center gap-3">
-                  <div
-                    className="flex h-11 w-11 items-center justify-center rounded-2xl border shadow-xl transition-all group-hover:scale-105 sm:h-14 sm:w-14"
-                    style={{
-                      background: cfg.key === 'soil' && soilStatus ? soilStatus.bgColor : `${cfg.color}18`,
-                      borderColor: `${cfg.key === 'soil' && soilStatus ? soilStatus.color : cfg.color}40`,
-                      boxShadow: `0 8px 24px ${cfg.key === 'soil' && soilStatus ? soilStatus.color : cfg.color}25`,
-                    }}
-                  >
-                    <Icon
-                      className="h-6 w-6 sm:h-7 sm:w-7"
-                      style={{ color: cfg.key === 'soil' && soilStatus ? soilStatus.color : cfg.color }}
-                    />
-                  </div>
+                  <Icon className="h-6 w-6 shrink-0 text-slate-500 sm:h-7 sm:w-7" />
                   <div>
-                    <h2 className="text-base font-bold tracking-wide text-slate-100 sm:text-xl">
+                    <h2 className="text-sm font-medium uppercase tracking-[0.12em] text-slate-400 sm:text-[15px]">
                       {cfg.label}
                     </h2>
-                    <div className="flex items-center gap-2 text-xs font-semibold text-slate-300 sm:text-sm">
+                    <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
                       <SensorStatusBadge sensorKey={cfg.key} value={s0.latest} />
                       {cfg.nominal != null && (
-                        <span className="text-[11px] text-slate-400">
+                        <span className="text-[11px] text-slate-500">
                           (norma {cfg.nominal} {cfg.unit})
                         </span>
                       )}
                       {cfg.key === 'heating' && (
-                        <span className="text-[11px] text-cyan-300/90">
+                        <span className="text-[11px] text-slate-500">
                           (norma ΔT {HEATING_DELTA_NORMA}°C)
                         </span>
                       )}
@@ -655,111 +608,124 @@ export default function DisplayPage() {
                 </div>
 
                 {cfg.isFake && (
-                  <span className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-amber-400">
+                  <span className="shrink-0 rounded-md border border-white/10 bg-transparent px-2 py-0.5 text-[10px] font-semibold text-slate-500">
                     Namunaviy
                   </span>
                 )}
               </div>
 
-              {/* Real-Vaqt Ko'rsatkichi (Katta Neon 3D Raqam) */}
-              <div className="relative z-10 flex shrink-0 items-baseline justify-between px-4 py-2 sm:px-6 sm:py-3">
+              {/* ── ZONA 2: Qahramon satr (katta raqam + status so'zi) ── */}
+              <div className="relative z-10 flex flex-1 flex-col justify-center px-5 py-1">
                 {single ? (
-                  <div className="flex items-baseline gap-2">
-                    <div className="flex items-baseline gap-2">
-                      <div
-                        className="font-mono text-4xl font-black tracking-tight sm:text-5xl lg:text-6xl"
-                        style={{
-                          color: valueColor,
-                          textShadow: `0 0 35px ${valueColor}60, 0 4px 12px rgba(0,0,0,0.9)`,
-                        }}
+                  <>
+                    <span
+                      key={s0.latest ?? 'na'}
+                      className="value-tick inline-flex items-baseline gap-2 transition-colors duration-500"
+                    >
+                      <span
+                        className="font-sans font-semibold tabular-nums leading-none tracking-[-0.02em] text-[clamp(2.75rem,6vw,5rem)]"
+                        style={{ color: heroColor }}
                       >
-                        {s0.latest != null ? (
-                          <AnimatedNumber value={s0.latest} decimals={isElec || cfg.key === 'soil' || cfg.key === 'sound' ? 1 : 2} />
-                        ) : (
-                          '—'
+                        {s0.latest != null ? <AnimatedNumber value={s0.latest} decimals={decimals} /> : '—'}
+                      </span>
+                      <span className="text-lg font-medium text-slate-500 sm:text-2xl">{cfg.unit}</span>
+                    </span>
+
+                    {/* Status so'zi + nuqta (+ trend) */}
+                    <span className="mt-1.5 inline-flex items-center gap-2">
+                      <span className="relative inline-flex h-2.5 w-2.5">
+                        {isDanger && (
+                          <span
+                            className="absolute inline-flex h-full w-full animate-ping rounded-full"
+                            style={{ background: status.color, opacity: 0.6 }}
+                          />
                         )}
-                      </div>
-                      <span className="text-lg font-bold text-slate-300 sm:text-2xl">{cfg.unit}</span>
-                    </div>
-                  </div>
+                        <span className="relative inline-flex h-2.5 w-2.5 rounded-full" style={{ background: status.color }} />
+                      </span>
+                      <span
+                        className="text-lg font-bold uppercase tracking-wide sm:text-xl"
+                        style={{ color: status.color }}
+                      >
+                        {status.label}
+                      </span>
+                      {TrendIcon && s0.trend != null && (
+                        <span className="inline-flex items-center gap-0.5 text-xs font-medium text-slate-500">
+                          <TrendIcon className="h-3.5 w-3.5" />
+                          {s0.trend > 0 ? '+' : ''}
+                          {s0.trend.toFixed(decimals)}
+                        </span>
+                      )}
+                    </span>
+                  </>
                 ) : (
-                  /* Qozonxona (Kirish & Chiqish & ΔT farqi) */
-                  <div className="flex w-full items-center justify-between gap-2">
-                    <div className="flex items-baseline gap-1.5">
-                      <span className="text-xs font-bold uppercase text-slate-400">Kirish:</span>
-                      <span className="font-mono text-2xl font-black text-cyan-400 sm:text-3xl lg:text-4xl">
-                        {cfg.series[0].latest != null ? (
-                          <AnimatedNumber value={cfg.series[0].latest} decimals={1} />
-                        ) : (
-                          '—'
-                        )}
+                  /* Qozonxona: ΔT qahramon raqam + Kirish/Chiqish kichik ko'rsatkichlar */
+                  <>
+                    <span
+                      key={dT ?? 'na'}
+                      className="value-tick inline-flex items-baseline gap-2 transition-colors duration-500"
+                    >
+                      <span
+                        className="font-sans font-semibold tabular-nums leading-none tracking-[-0.02em] text-[clamp(2.75rem,6vw,5rem)]"
+                        style={{ color: heroColor }}
+                      >
+                        {dT != null ? <AnimatedNumber value={dT} decimals={1} /> : '—'}
                       </span>
-                      <span className="text-xs font-bold text-slate-400 sm:text-sm">°C</span>
-                    </div>
+                      <span className="text-lg font-medium text-slate-500 sm:text-2xl">°C ΔT</span>
+                    </span>
 
-                    <div className="flex items-baseline gap-1.5">
-                      <span className="text-xs font-bold uppercase text-slate-400">Chiqish:</span>
-                      <span className="font-mono text-2xl font-black text-sky-300 sm:text-3xl lg:text-4xl">
-                        {cfg.series[1]?.latest != null ? (
-                          <AnimatedNumber value={cfg.series[1].latest} decimals={1} />
-                        ) : (
-                          '—'
-                        )}
+                    <span className="mt-1.5 inline-flex items-center gap-2">
+                      <span className="h-2.5 w-2.5 rounded-full" style={{ background: status.color }} />
+                      <span
+                        className="text-lg font-bold uppercase tracking-wide sm:text-xl"
+                        style={{ color: status.color }}
+                      >
+                        {status.label}
                       </span>
-                      <span className="text-xs font-bold text-slate-400 sm:text-sm">°C</span>
-                    </div>
+                    </span>
 
-                    {/* Kirish va Chiqish farqi ΔT badge */}
-                    {cfg.series[0].latest != null && cfg.series[1]?.latest != null && (
-                      <div className="hidden flex-col items-end rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-right backdrop-blur sm:flex">
-                        <span className="text-[10px] font-bold uppercase text-cyan-300">ΔT Farq</span>
-                        <span className="font-mono text-sm font-black text-cyan-200">
-                          {Math.abs(cfg.series[0].latest - cfg.series[1].latest).toFixed(1)}°C
+                    {/* Kirish / Chiqish kichik sub-figuralari */}
+                    <div className="mt-2 flex gap-5 text-slate-300">
+                      <div className="flex flex-col">
+                        <span className="text-[10px] font-medium uppercase tracking-wide text-slate-500">Kirish</span>
+                        <span className="text-base font-semibold tabular-nums sm:text-lg">
+                          {cfg.series[0].latest != null ? (
+                            <AnimatedNumber value={cfg.series[0].latest} decimals={1} suffix="°C" />
+                          ) : (
+                            '—'
+                          )}
                         </span>
                       </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Trend ko'rsatkichi */}
-                {single && TrendIcon && s0.trend != null && (
-                  <div
-                    className={`flex items-center gap-1 text-xs font-bold sm:text-sm ${
-                      s0.trend > 0 ? 'text-emerald-400' : 'text-rose-400'
-                    }`}
-                  >
-                    <TrendIcon className="h-4 w-4" />
-                    <span>
-                      {s0.trend > 0 ? '+' : ''}
-                      {s0.trend.toFixed(isElec || cfg.key === 'soil' || cfg.key === 'sound' ? 1 : 2)}
-                    </span>
-                  </div>
+                      <div className="flex flex-col">
+                        <span className="text-[10px] font-medium uppercase tracking-wide text-slate-500">Chiqish</span>
+                        <span className="text-base font-semibold tabular-nums sm:text-lg">
+                          {cfg.series[1]?.latest != null ? (
+                            <AnimatedNumber value={cfg.series[1].latest} decimals={1} suffix="°C" />
+                          ) : (
+                            '—'
+                          )}
+                        </span>
+                      </div>
+                    </div>
+                  </>
                 )}
               </div>
 
-              {/* Soatlik 24 Soatlik Grafik */}
-              <div className="relative z-10 flex min-h-[160px] flex-1 flex-col justify-end px-2 pb-3 sm:px-4 sm:pb-4">
-                <div className="mb-1.5 flex items-center justify-between px-2 text-[11px] font-bold tracking-wider text-slate-400">
+              {/* ── ZONA 4: Sparkline (o'qlar/tooltip/grid yashirin) ── */}
+              <div className="relative z-10 shrink-0 px-2 pb-3">
+                <div className="mb-1 flex items-center justify-between px-2 text-[11px] text-slate-500">
                   <span>Oxirgi 24 soatlik dinamika</span>
                   <span>{cfg.points.length} ta o'lchov</span>
                 </div>
 
-                <div className="h-32 w-full sm:h-36 lg:h-40">
+                <div className="h-24 w-full sm:h-28 lg:h-32">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart
                       data={isElec ? elecData : cfg.points}
-                      margin={{ top: 12, right: 8, left: -20, bottom: 0 }}
+                      margin={{ top: 8, right: 6, left: 6, bottom: 0 }}
                     >
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
-                      <XAxis
-                        dataKey="label"
-                        tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 600 }}
-                        axisLine={{ stroke: 'rgba(255,255,255,0.1)' }}
-                        tickLine={false}
-                        interval="preserveStartEnd"
-                        minTickGap={24}
-                      />
+                      <XAxis dataKey="label" hide />
                       <YAxis
+                        hide
                         domain={
                           isElec
                             ? elecDomain
@@ -771,51 +737,28 @@ export default function DisplayPage() {
                             ? [0, 100]
                             : ['auto', 'auto']
                         }
-                        tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 600 }}
-                        axisLine={false}
-                        tickLine={false}
-                        tickFormatter={(v) => (isElec ? `${ELEC_NOMINAL + v}` : String(v))}
-                      />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: '#0f172a',
-                          borderColor: 'rgba(255,255,255,0.15)',
-                          borderRadius: '12px',
-                          color: '#f8fafc',
-                          boxShadow: '0 20px 25px -5px rgba(0,0,0,0.5)',
-                        }}
-                        formatter={(val: any, name: any) => {
-                          if (val == null) return ['—', name]
-                          const num = Number(val)
-                          if (isElec) return [`${(ELEC_NOMINAL + num).toFixed(1)} V`, 'Kuchlanish']
-                          if (cfg.key === 'heating') {
-                            const lbl = name === 'v0' ? 'Kirish' : 'Chiqish'
-                            return [`${num.toFixed(1)} °C`, lbl]
-                          }
-                          return [`${num.toFixed(isWater || isGas ? 2 : 1)} ${cfg.unit}`, cfg.label]
-                        }}
                       />
 
-                      {/* Elektr: 220V Markaziy Norma Chizig'i (Pastga va Tepaga o'sadi) */}
-                      {isElec && <ReferenceLine y={0} stroke="#22C55E" strokeDasharray="4 4" strokeWidth={1.5} />}
-
-                      {/* Suv: 2.7 bar Norma Chizig'i */}
-                      {isWater && <ReferenceLine y={WATER_NOMINAL} stroke="#22C55E" strokeDasharray="4 4" strokeWidth={1.5} />}
-
-                      {/* Gaz: 0.27 bar Norma Chizig'i */}
-                      {isGas && <ReferenceLine y={GAS_NOMINAL} stroke="#22C55E" strokeDasharray="4 4" strokeWidth={1.5} />}
+                      {/* Norma chiziqlari (xira) */}
+                      {isElec && <ReferenceLine y={0} stroke="rgba(52,211,153,0.4)" strokeDasharray="4 4" strokeWidth={1} />}
+                      {isWater && (
+                        <ReferenceLine y={WATER_NOMINAL} stroke="rgba(52,211,153,0.4)" strokeDasharray="4 4" strokeWidth={1} />
+                      )}
+                      {isGas && (
+                        <ReferenceLine y={GAS_NOMINAL} stroke="rgba(52,211,153,0.4)" strokeDasharray="4 4" strokeWidth={1} />
+                      )}
 
                       {/* Bar rendering */}
                       {cfg.key === 'heating' ? (
                         <>
-                          <Bar dataKey="v0" name="v0" fill="#06B6D4" radius={[4, 4, 0, 0]} maxBarSize={10} />
-                          <Bar dataKey="v1" name="v1" fill="#38BDF8" radius={[4, 4, 0, 0]} maxBarSize={10} />
+                          <Bar dataKey="v0" name="v0" fill="#06B6D4" radius={[3, 3, 0, 0]} maxBarSize={8} />
+                          <Bar dataKey="v1" name="v1" fill="#38BDF8" radius={[3, 3, 0, 0]} maxBarSize={8} />
                         </>
                       ) : (
                         <Bar
                           dataKey={isElec ? 'dev' : 'v0'}
-                          radius={isElec ? [4, 4, 4, 4] : [4, 4, 0, 0]}
-                          maxBarSize={isElec ? 14 : 18}
+                          radius={isElec ? [3, 3, 3, 3] : [3, 3, 0, 0]}
+                          maxBarSize={isElec ? 8 : 10}
                         >
                           {(isElec ? elecData : cfg.points).map((entry: any, index: number) => {
                             let cellColor = cfg.color
@@ -827,10 +770,10 @@ export default function DisplayPage() {
                             } else if (isGas) {
                               cellColor = getGasColor(entry.v0).color
                             } else if (cfg.key === 'soil') {
-                              const st = getSoilHumidityStatus(entry.v0)
-                              cellColor = st ? st.color : cfg.color
+                              const ss = getSoilHumidityStatus(entry.v0)
+                              cellColor = ss ? ss.color : cfg.color
                             }
-                            return <Cell key={`cell-${index}`} fill={cellColor} opacity={0.9} />
+                            return <Cell key={`cell-${index}`} fill={cellColor} />
                           })}
                         </Bar>
                       )}

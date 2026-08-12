@@ -204,3 +204,62 @@
 .dark .hover-lift:hover {
   box-shadow: 0 12px 24px -10px rgba(0, 0, 0, 0.5), 0 4px 10px -2px rgba(0, 0, 0, 0.2);
 }
+
+/* ─── Kiosk Glance-Board (Tablo) Animations ────────────────────────────────── */
+
+@keyframes card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-card-enter {
+  animation: card-enter 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes value-tick {
+  0% {
+    opacity: 0.55;
+    transform: translateY(3px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.value-tick {
+  animation: value-tick 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes status-breathe {
+  0%,
+  100% {
+    box-shadow: inset 0 0 0 1px rgba(var(--st), 0.22);
+  }
+  50% {
+    box-shadow: inset 0 0 0 1px rgba(var(--st), 0.55), 0 0 28px rgba(var(--st), 0.14);
+  }
+}
+
+.status-breathe {
+  animation: status-breathe 3s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-card-enter,
+  .value-tick,
+  .status-breathe,
+  .animate-fade-in-up {
+    animation: none !important;
+  }
+  /* Anomaliyalar harakatsiz ham ajralib tursin — statik kontur qoldiramiz */
+  .status-breathe {
+    box-shadow: inset 0 0 0 1px rgba(var(--st), 0.5);
+  }
+}
