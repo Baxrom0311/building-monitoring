@@ -198,8 +198,10 @@ const CHARTS = [
     glow: 'rgba(16,185,129,0.5)',
     bg: 'from-emerald-500/20 via-slate-900/80 to-slate-950',
     nominal: 75 as number | null,
-    // Haqiqiy havo-sifati sensori yo'q — normal namunaviy qiymat ko'rsatamiz
-    fake: { base: 80, amp: 3 } as { base: number; amp: number } | null,
+    // Havo sifati MQ135 sensoridan REAL keladi (soil o'qishlari ichida, air_quality
+    // ustuni). Backend uni barqaror uzatadi (latest_soil_resolved) — fake kerak emas;
+    // ma'lumot bo'lmasa halol "—" ko'rsatiladi (soxta qiymat emas).
+    fake: null as { base: number; amp: number } | null,
   },
   {
     key: 'sound' as const,

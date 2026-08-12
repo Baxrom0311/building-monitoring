@@ -482,7 +482,7 @@ def _build_system_prompt(user: dict) -> str:
         "Siz FOYDALANUVCHI sifatida kirgan holda quyidagi amallarni bajara olasiz:\n"
         "- Barcha ma'lumotlarni ko'rish (qurilmalar, binolar, o'qishlar, ogohlantirishlar)\n"
         "- Statistika va tahlil ma'lumotlarini olish\n"
-        "Relay boshqarish, reboot va ogohlantirishlarni tozalash — faqat admin uchun."
+        "Reboot va ogohlantirishlarni tozalash — faqat admin uchun."
     )
 
     return (

@@ -40,6 +40,40 @@ class ReadingRepository(BaseRepository[Reading]):
         stmt = stmt.distinct(Reading.utility_type).order_by(Reading.utility_type, desc(Reading.ts))
         return list((await self.session.scalars(stmt)).all())
 
+    async def latest_soil_resolved(self, building_id: int | None = None) -> dict | None:
+        """Soil (yerto'la) uchun namlik va havo sifatini ALOHIDA hal qiladi.
+
+        Ikki xil soil qurilma bir-birini to'ldiradi: biri faqat namlik (MQ135'siz),
+        biri faqat MQ135 havo (namlik zondi o'lik = 0.0). Bitta "eng oxirgi qator"
+        olinsa, har poll'da bittasi yo'qoladi (sakraydi). Shuning uchun:
+          - namlik: eng oxirgi NULL-emas VA 0-emas qiymat (0 = o'lik zond, "yo'q" deb qaraladi)
+          - havo:   eng oxirgi NULL-emas air_quality
+        Har biri mustaqil eng yangi qatordan olinadi — natija barqaror."""
+        base = (
+            select(Reading)
+            .join(Device, Device.id == Reading.device_id)
+            .where(Device.is_test_device.is_(False), Reading.utility_type == "soil")
+        )
+        if building_id is not None:
+            base = base.where(Reading.building_id == building_id)
+
+        hum_row = await self.session.scalar(
+            base.where(Reading.humidity.isnot(None), Reading.humidity != 0)
+            .order_by(desc(Reading.ts))
+            .limit(1)
+        )
+        air_row = await self.session.scalar(
+            base.where(Reading.air_quality.isnot(None)).order_by(desc(Reading.ts)).limit(1)
+        )
+        if hum_row is None and air_row is None:
+            return None
+        ts_candidates = [r.ts for r in (hum_row, air_row) if r is not None]
+        return {
+            "value": hum_row.humidity if hum_row is not None else None,
+            "air_quality": air_row.air_quality if air_row is not None else None,
+            "ts": max(ts_candidates) if ts_candidates else None,
+        }
+
     async def latest_sound_average(self, building_id: int | None = None, max_age_seconds: int = 7200) -> dict | None:
         """Bino ichidagi barcha aktiv ovoz datchiklarining (masalan 3 ta ovoz sensori)
         oxirgi o'qishlari bo'yicha O'RTACHA qiymatni hisoblab qaytaradi."""

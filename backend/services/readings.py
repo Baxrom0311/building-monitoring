@@ -49,6 +49,20 @@ def _validate_reading(body: MeterReading) -> None:
     _validate_range("level", body.level, 0, 100)
 
 
+def _clamp_air(v: float | None) -> float | None:
+    """Havo sifati (MQ135) — 0..100 oralig'iga qisamiz.
+
+    Reject emas, clamp: chegaradan chiqqan bitta xato qiymat butun reading'ni
+    tushirmasligi kerak. Xom semantika (firmware yuborgan qiymat) saqlanadi —
+    inversiya/normalizatsiya displey qatlamida (tarixiy ma'lumot bilan mos)."""
+    if v is None:
+        return None
+    try:
+        return max(0.0, min(100.0, float(v)))
+    except (TypeError, ValueError):
+        return None
+
+
 def _effective_reading_ts(body: MeterReading, server_ts: int) -> int:
     """Firmware NTP timestamp (ISO-8601 yoki epoch) — offline buferdan kelgan
     readinglar to'g'ri vaqt bilan saqlanadi. Noto'g'ri/uzoq qiymatda server vaqti."""
@@ -81,7 +95,7 @@ async def _save_reading_internal(session: AsyncSession, body: MeterReading, ts: 
         device = Device(
             id=body.device_id,
             name=body.device_id,
-            utility_type=body.utility_type,
+            utility_type=body.utility_type or "electricity",
             registered=ts,
             created_at=ts,
         )
@@ -90,9 +104,12 @@ async def _save_reading_internal(session: AsyncSession, body: MeterReading, ts: 
         raise HTTPException(403, "Test rejim production qurilma uchun ishlatilmaydi")
 
     device.last_seen = ts
-    device.utility_type = body.utility_type or device.utility_type or "electricity"
-    # Keyingi mantiq (Reading, alert rule match) bir xil qiymat ishlatsin
-    body.utility_type = body.utility_type or device.utility_type
+    # Device.utility_type FAQAT qurilma birinchi yaratilganда o'rnatiladi (yuqorida).
+    # Mavjud qurilmada har o'qishda ustidan YOZMAYMIZ — aks holda ko'p-utility
+    # bridge (bitta ESP bir necha leaf'ni uzatadi) yorlig'i oxirgi leaf turiga
+    # qarab sakrardi ("Yerto'la namligi" <-> "Elektr"). Identifikator endi barqaror.
+    # Downstream (Reading, alert rule matching) uchun body qiymatini hal qilamiz:
+    body.utility_type = body.utility_type or device.utility_type or "electricity"
     device.software_version = body.software_version or body.fw_version or device.software_version
     device.hardware_version = body.hardware_version or device.hardware_version
     device.fw_version = body.fw_version or device.fw_version
@@ -163,8 +180,15 @@ async def _save_reading_internal(session: AsyncSession, body: MeterReading, ts: 
         temperature_c=body.temperature_c,
         temperature_in_c=body.temperature_in_c,
         temperature_out_c=body.temperature_out_c,
-        humidity=body.humidity,
-        air_quality=body.air_quality if body.air_quality is not None else body.air_pct,
+        # O'lik namlik zondi (havoda/uzilgan) aniq 0.0 qaytaradi. Agar shu qatorda
+        # havo sifati (MQ135) bo'lsa, bu MQ135-only plata — namlikni NULL saqlaymiz
+        # (0 soil o'rtachasini ifloslamasin, "latest" ni o'g'irlamasin).
+        humidity=(
+            None
+            if (body.humidity == 0 and (body.air_quality is not None or body.air_pct is not None))
+            else body.humidity
+        ),
+        air_quality=_clamp_air(body.air_quality if body.air_quality is not None else body.air_pct),
         level=body.level,
         raw_payload=json.dumps(body.model_dump(), ensure_ascii=False, default=str),
         created_at=ts,
@@ -238,6 +262,7 @@ async def save_reading_batch(body: MeterReadingBatch, test_mode: bool = False) -
             await session.rollback()
             errors.append({"index": -1, "error": "duplicate reading (race)"})
             accepted = 0
+            all_alert_broadcasts.clear()
 
     # Alert broadcastlarni session tashqarisida yuborish
     for msg in all_alert_broadcasts:

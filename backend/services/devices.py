@@ -244,7 +244,9 @@ async def update_device_status(body: DeviceStatus, test_mode: bool = False) -> d
             # qurilmalar paydo bo'ladi. Qurilma /api/readings yoki /api/register
             # orqali (haqiqiy ma'lumot bilan) yaratiladi.
             return {"ok": True, "ignored": "unknown_device"}
-        device.utility_type = body.utility_type or device.utility_type
+        # Status ping qurilma identifikatorini (utility_type) O'ZGARTIRMAYDI —
+        # ko'p-utility bridge yorlig'i sakramasligi uchun (arxitektura tuzatishi).
+        # utility_type faqat /readings yoki /register (birinchi yaratish) da o'rnatiladi.
         device.rssi = body.rssi if body.rssi is not None else device.rssi
         device.hardware_version = body.hardware_version or device.hardware_version
         device.software_version = body.software_version or device.software_version

@@ -12,7 +12,7 @@ RPATH="export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND="${BACKEND:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 PROJECT_ROOT="${PROJECT_ROOT:-$(cd "$BACKEND/.." && pwd)}"
-FRONTEND="${FRONTEND:-$PROJECT_ROOT/meter-frontend/dist}"
+FRONTEND="${FRONTEND:-$PROJECT_ROOT/meter-frontend-v2/dist}"
 ENV_FILE="${ENV_FILE:-$SCRIPT_DIR/.env.production}"
 
 if [[ ! -f "$ENV_FILE" ]]; then
@@ -39,7 +39,7 @@ rm /tmp/meter_backend.tar.gz
 
 if [[ ! -f "$FRONTEND/index.html" ]]; then
   echo "Frontend build topilmadi: $FRONTEND/index.html"
-  echo "Avval: cd $PROJECT_ROOT/meter-frontend && pnpm build"
+  echo "Avval: cd $PROJECT_ROOT/meter-frontend-v2 && pnpm build"
   exit 1
 fi
 

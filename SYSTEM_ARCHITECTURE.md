@@ -23,12 +23,11 @@ Bu hujjat butun loyihaning joriy holatini tasvirlaydi: backend, ikkita frontend,
 │ (Faqat eskilik uchun saqlangan)         │                            └─────────┬────────┘
 └─────────────────────────────────────────┘                                      ▲
                                                                                  │ REST + WebSocket
-                       ┌─────────────────────────────────────────────────────────┴───────────────────┐
-                       ▼                                                                             ▼
-              ┌─────────────────┐                                                         ┌─────────────────┐
-              │ meter-frontend  │  ss.boos.uz (v1, legacy)                                │ meter-frontend-v2│  sss.boos.uz (v2, shadcn)
-              │ React + Vite    │                                                         │ React + Vite      │
-              └─────────────────┘                                                         └─────────────────┘
+                                                                                  ▼
+                                                                       ┌───────────────────┐
+                                                                       │ meter-frontend-v2 │  ss.boos.uz (yagona production domen)
+                                                                       │ React + Vite       │
+                                                                       └───────────────────┘
 
 ┌──────────────────┐
 │ PyQt6 desktop app │  RS-485/DLMS orqali hisoblagichni to'g mezoniy test qilish,
@@ -36,7 +35,7 @@ Bu hujjat butun loyihaning joriy holatini tasvirlaydi: backend, ikkita frontend,
 └──────────────────┘
 ```
 
-Bitta backend, bitta Postgres baza — ikkala frontend ham xuddi shu API'ga ulanadi. IoT tomonda asosiy proshivka **`iot_v2`** (bino ichi RS-485 shinasidan bitta WiFi Bridge'ga ma'lumot yig'ib HTTP POST qilish). Eski `iot` (v1 LoRa mesh) faqat arxiv sifatida qoldirilgan.
+Bitta backend, bitta Postgres baza, bitta production domen (`ss.boos.uz`) — `meter-frontend-v2` shu API'ga ulanadi. IoT tomonda asosiy proshivka **`iot_v2`** (bino ichi RS-485 shinasidan bitta WiFi Bridge'ga ma'lumot yig'ib HTTP POST qilish). Eski `iot` (v1 LoRa mesh) faqat arxiv sifatida qoldirilgan.
 
 ---
 
@@ -209,9 +208,9 @@ services/ (lora_decoder va h.k.) → LoRa paketlarni dekodlash (diagnostika uchu
 
 - **Server**: DigitalOcean VPS (961MB RAM), SSH: `ssh -i ~/docean root@67.205.171.93`
 - **Backend**: systemd service `meter-api` (uvicorn), portda 8001 (localhost), nginx orqali tashqariga
-- **Domenlar**: `ss.boos.uz` (v1 frontend, static build), `sss.boos.uz` (v2 frontend, static build) — bitta backend'ga proxy
+- **Domenlar**: `ss.boos.uz` — yagona production domen, `meter-frontend-v2` static build'ini uzatadi va bitta nginx vhost orqali backend'ga proxy qiladi (`/ws` — WebSocket, `/api` — REST, `/health` — health-check location'lari). `sss.boos.uz` uchun alohida nginx sayt fayli hali serverda turibdi, lekin `sites-enabled`'da yoqilmagan — bu domen chiqarib tashlanmoqda (retire qilinmoqda), amalda faol emas
 - **Database**: mahalliy PostgreSQL (bir xil serverda)
-- **Deploy skripti**: `update.sh` — git pull → pip install → `alembic upgrade head` → ikkala frontend build → `systemctl restart meter-api`
+- **Deploy skripti**: `update.sh` — git pull → pip install → `alembic upgrade head` → `meter-frontend-v2` build → `systemctl restart meter-api`
 - **Test infratuzilmasi**: lokal Postgres (`electr_test` — testlar uchun, `electr_dev` — lokal development uchun), CI/test'lar `DROP SCHEMA public CASCADE` orqali har safar toza holatga qaytadi
 
 ---
@@ -229,4 +228,4 @@ Ko'rib chiqish uchun ro'yxat:
 
 ---
 
-*Hujjat holati: 2026-07-30 sanasidagi kod bazasi asosida yozilgan.*
+*Hujjat holati: 2026-07-30 sanasidagi kod bazasi asosida yozilgan, so'nggi domen konsolidatsiyasidan (ikkita frontend/domendan yagona `ss.boos.uz` + `meter-frontend-v2`ga o'tish) keyin yangilangan.*

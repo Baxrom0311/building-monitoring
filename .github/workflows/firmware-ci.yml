@@ -1,0 +1,61 @@
+name: Firmware CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "iot_v2/**"
+      - ".github/workflows/firmware-ci.yml"
+  pull_request:
+    paths:
+      - "iot_v2/**"
+      - ".github/workflows/firmware-ci.yml"
+
+jobs:
+  build:
+    name: Build (${{ matrix.env }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        env:
+          # Sensor bori WiFi-only production rejim (soil oilasi)
+          - soil_wifi
+          # Sensor bori WiFi + LCD rejim (sound oilasi)
+          - sound_wifi_lcd
+          # Elektr hisoblagich RS-485 DLMS (TE71/TE73) + LCD
+          - electricity
+          # Suv bosimi sensori (ADS1115)
+          - water
+          # Gaz bosimi sensori (ADS1115 + 4-20mA)
+          - gas
+          # Qozonxona isitish sensori (DS18B20 x2)
+          - heating
+          # RS-485 bino-ichi "bridge" — production arxitekturaning markazi
+          - building_bridge
+          # RS-485 bino-ichi "leaf" — bridge bilan bog'liq umumiy kod yo'li
+          - water_rs485_leaf
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: ${{ runner.os }}-platformio-${{ hashFiles('iot_v2/platformio.ini') }}
+          restore-keys: |
+            ${{ runner.os }}-platformio-
+
+      - name: Install PlatformIO
+        run: pip install -U platformio
+
+      - name: Build firmware (${{ matrix.env }})
+        working-directory: iot_v2
+        run: pio run -e ${{ matrix.env }}

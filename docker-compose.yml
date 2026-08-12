@@ -82,7 +82,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./meter-frontend/dist:/frontend:ro
+      - ./meter-frontend-v2/dist:/frontend:ro
       - firmware_store:/app/firmware
       - backup_store:/app/backups
     healthcheck:

@@ -4,11 +4,11 @@ on:
   push:
     branches: [main]
     paths:
-      - "meter-frontend/**"
+      - "meter-frontend-v2/**"
       - ".github/workflows/frontend.yml"
   pull_request:
     paths:
-      - "meter-frontend/**"
+      - "meter-frontend-v2/**"
       - ".github/workflows/frontend.yml"
 
 jobs:
@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: meter-frontend
+        working-directory: meter-frontend-v2
 
     steps:
       - name: Checkout
@@ -33,10 +33,13 @@ jobs:
         with:
           node-version: "22"
           cache: "pnpm"
-          cache-dependency-path: meter-frontend/pnpm-lock.yaml
+          cache-dependency-path: meter-frontend-v2/pnpm-lock.yaml
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm exec tsc -b
 
       - name: Build
         env:
@@ -47,7 +50,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: frontend-dist
-          path: meter-frontend/dist/
+          path: meter-frontend-v2/dist/
           retention-days: 7
 
   deploy:

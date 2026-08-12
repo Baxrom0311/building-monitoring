@@ -64,6 +64,12 @@ async def public_display(building_id: Optional[int] = None):
         sound_avg = await reading_repo.latest_sound_average(building_id=building_id)
         if sound_avg:
             latest["sound"] = sound_avg
+
+        # Soil: namlik (0-emas) va havo sifatini alohida barqaror hal qilamiz —
+        # ikki to'ldiruvchi soil qurilma orasida "latest" sakrab qolmasligi uchun.
+        soil_resolved = await reading_repo.latest_soil_resolved(building_id=building_id)
+        if soil_resolved:
+            latest["soil"] = soil_resolved
     buildings = [{"id": b.id, "name": b.name} for b in all_buildings]
 
     return {

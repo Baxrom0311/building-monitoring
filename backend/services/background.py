@@ -77,17 +77,23 @@ async def detect_offline_devices_once() -> int:
             )
         ).all()
 
-        for device in devices:
-            exists = await session.scalar(
-                select(Alert.id).where(
-                    and_(
-                        Alert.device_id == device.id,
-                        Alert.kind == "offline",
-                        Alert.cleared.is_(False),
+        device_ids = [device.id for device in devices]
+        existing_offline_device_ids = set(
+            (
+                await session.scalars(
+                    select(Alert.device_id).where(
+                        and_(
+                            Alert.device_id.in_(device_ids),
+                            Alert.kind == "offline",
+                            Alert.cleared.is_(False),
+                        )
                     )
                 )
-            )
-            if exists:
+            ).all()
+        )
+
+        for device in devices:
+            if device.id in existing_offline_device_ids:
                 continue
             message = f"{device.name or device.id} offline"
             session.add(

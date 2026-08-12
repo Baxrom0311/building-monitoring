@@ -126,6 +126,7 @@ export interface Reading {
   temperature_in_c?: number | null
   temperature_out_c?: number | null
   humidity: number | null
+  air_quality?: number | null
   level?: number | null
   raw_payload: string | null
   created_at: number | null

@@ -10,7 +10,7 @@ class Settings:
     ota_dir: Path = Path(os.getenv("OTA_DIR", "firmware"))
     backup_dir: Path = Path(os.getenv("BACKUP_DIR", "backups"))
     billing_upload_dir: Path = Path(os.getenv("BILLING_UPLOAD_DIR", "data/billing_uploads"))
-    static_dir: Path = Path(os.getenv("STATIC_DIR", "../meter-frontend/dist"))
+    static_dir: Path = Path(os.getenv("STATIC_DIR", "../meter-frontend-v2/dist"))
     backup_keep_days: int = int(os.getenv("BACKUP_KEEP_DAYS", "14"))
     audit_keep_days: int = int(os.getenv("AUDIT_KEEP_DAYS", "180"))
 

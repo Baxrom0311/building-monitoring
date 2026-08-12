@@ -1023,6 +1023,7 @@ class ReadingResponse(BaseModel):
     temperature_in_c: Optional[float] = None
     temperature_out_c: Optional[float] = None
     humidity: Optional[float] = None
+    air_quality: Optional[float] = None  # Havo sifati / MQ135 (%) — ilgari javobdan tushib qolardi
     level: Optional[float] = None
     raw_payload: Optional[str] = None
     created_at: Optional[int] = None
@@ -1083,6 +1084,7 @@ class HourlyUtilityStatResponse(BaseModel):
     avg_flow_rate: Optional[float] = None
     max_volume_m3: Optional[float] = None
     avg_humidity: Optional[float] = None
+    avg_air_quality: Optional[float] = None  # Havo sifati o'rtachasi (%) — ilgari javobdan tushib qolardi
     avg_level: Optional[float] = None
     min_level: Optional[float] = None
     max_level: Optional[float] = None

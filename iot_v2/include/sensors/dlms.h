@@ -303,12 +303,13 @@ static bool dlms_connect_reader() {
     static const uint8_t syst[8] = {'E','S','P','3','2','0','0','0'};
     uint8_t stoc[32];
     size_t stoc_len = dlms_extract_stoc(stoc, sizeof(stoc));
+    bool hls5_ok = false;
     if (stoc_len > 0) {
         uint8_t resp[17];
         if (hls5_gmac(ak, syst, 0, stoc, stoc_len, resp))
-            hls5_complete(resp);
+            hls5_ok = hls5_complete(resp);
     }
-    return true;
+    return hls5_ok;
 }
 
 static void dlms_disconnect() {

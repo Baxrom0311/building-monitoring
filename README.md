@@ -97,7 +97,7 @@ Productionda `SECRET_KEY`, `DEVICE_API_TOKEN`, admin parol va CORS/host sozlamal
 Frontend dev server:
 
 ```bash
-cd meter-frontend
+cd meter-frontend-v2
 pnpm install
 pnpm dev
 ```
@@ -111,11 +111,11 @@ VITE_API_URL=https://67.205.171.93
 Production build:
 
 ```bash
-cd meter-frontend
+cd meter-frontend-v2
 pnpm build
 ```
 
-Docker compose backend `meter-frontend/dist` papkasini static frontend sifatida serve qiladi.
+Docker compose backend `meter-frontend-v2/dist` papkasini static frontend sifatida serve qiladi.
 
 ## Backendni Alohida Ishlatish
 

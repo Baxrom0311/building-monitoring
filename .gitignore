@@ -17,11 +17,6 @@ backend/deploy/.env.production
 backend/data/billing_uploads/
 backend/firmware/*.bin
 
-# Desktop app - build artifacts
-desktop/MeterToolSetup.exe
-desktop/dist/
-desktop/build/
-desktop/*.spec
 build/
 dist/
 *.dmg
@@ -46,8 +41,5 @@ Thumbs.db
 .vscode/launch.json
 
 # Frontend build artifacts
-meter-frontend/node_modules/
-meter-frontend/dist/
-meter-frontend/.env.local
-meter-frontend/.env.production
-meter-frontend/*.tsbuildinfo
+node_modules/
+*.tsbuildinfo
