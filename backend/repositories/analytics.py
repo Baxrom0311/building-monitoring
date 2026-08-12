@@ -31,6 +31,13 @@ class AnalyticsRepository(BaseRepository[HourlyUtilityStats]):
                 rnd(func.avg(Reading.pressure_top_bar), 3).label("avg_pressure_top_bar"),
                 rnd(func.avg(Reading.flow_rate), 3).label("avg_flow_rate"),
                 rnd(func.max(Reading.volume_m3), 3).label("volume_m3"),
+                # Soil/havo/ovoz/issiqlik — ilgari bu metrikalar yo'q edi, shuning uchun
+                # /devices/{id}/stats grafigi soil/sound/heating qurilmalar uchun bo'sh chiqardi.
+                rnd(func.avg(Reading.humidity), 1).label("avg_humidity"),
+                rnd(func.avg(Reading.air_quality), 1).label("avg_air_quality"),
+                rnd(func.avg(Reading.level), 1).label("avg_level"),
+                rnd(func.avg(Reading.temperature_in_c), 1).label("avg_temperature_in_c"),
+                rnd(func.avg(Reading.temperature_out_c), 1).label("avg_temperature_out_c"),
                 func.count().label("samples"),
             )
             .where(and_(Reading.device_id == device_id, Reading.ts > cutoff))

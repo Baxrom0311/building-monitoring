@@ -104,6 +104,33 @@ static void dlms_hexdump(const char* label, const uint8_t* d, size_t n) {
     LOG_PRINTLN(n ? "" : "(bo'sh — javob yo'q)");
 }
 
+// Qabul qilingan freymning FCS(2) maydonini tekshiradi.
+// hdlc_build() bilan BIR XIL konventsiya: FCS boshlang'ich flag (0x7E)dan
+// keyingi baytdan boshlab, oxirgi FCS(2) maydonidan oldingi barcha content
+// (fmt+dest+src+ctrl+[hcs]+[info]) ustida hisoblanadi — solishtiring:
+// hdlc_build() dagi fcs16(fd,5) va fcs16(dlms_tx+1, 7+ilen) chaqiruvlari.
+// Demak: content_len = dlms_rx_len - start - 4 (boshlang'ich flag,
+// FCS(2) va yakuniy flag chegirilgan holda).
+static bool dlms_check_fcs() {
+    if (dlms_rx_len < 4) return false;
+    size_t start = 0;
+    while (start < dlms_rx_len && dlms_rx[start] != 0x7E) start++;
+    if (start >= dlms_rx_len) return false;
+    if (dlms_rx[dlms_rx_len - 1] != 0x7E) return false;
+    if (dlms_rx_len < start + 4) return false;
+    size_t content_len = dlms_rx_len - start - 4;
+    if (content_len == 0) return false;
+    uint16_t calc = fcs16(dlms_rx + start + 1, content_len);
+    uint16_t got  = (uint16_t)dlms_rx[start + 1 + content_len] |
+                     ((uint16_t)dlms_rx[start + 2 + content_len] << 8);
+    if (calc != got) {
+        LOG_PRINTF("dlms_check_fcs: FCS mos emas (hisoblangan=%04X, olingan=%04X) — freym rad etildi (shovqin?)\n",
+                    calc, got);
+        return false;
+    }
+    return true;
+}
+
 static bool dlms_txrx(uint32_t timeout_ms = 800) {
     while (Serial2.available()) Serial2.read();
     dlms_rx_len = 0;
@@ -126,7 +153,9 @@ static bool dlms_txrx(uint32_t timeout_ms = 800) {
         yield();
     }
     dlms_hexdump("RX", dlms_rx, dlms_rx_len);
-    return dlms_rx_len > 4;
+    if (dlms_rx_len <= 4) return false;
+    if (!dlms_check_fcs()) return false;
+    return true;
 }
 
 static const uint8_t* dlms_find_pdu(size_t* plen) {
@@ -189,6 +218,11 @@ static bool dlms_snrm() {
 
 static bool dlms_aarq(const uint8_t* aarq, size_t alen) {
     uint8_t info[128];
+    if (alen > sizeof(info) - 3) {
+        LOG_PRINTF("dlms_aarq: alen=%u juda katta (max %u)\n",
+                   (unsigned)alen, (unsigned)(sizeof(info) - 3));
+        return false;
+    }
     memcpy(info, DLMS_LLC, 3);
     memcpy(info+3, aarq, alen);
     uint8_t ctrl = ((dlms_send_seq&7)<<5) | 0x10 | ((dlms_recv_seq&7)<<1);

@@ -328,6 +328,7 @@ export default function DeviceDetailPage() {
       flow: number
       volume: number
       humidity: number
+      airQuality: number
       level: number
       tempIn: number
       tempOut: number
@@ -337,7 +338,7 @@ export default function DeviceDetailPage() {
       const hour = r.ts - (r.ts % 3600)
       const acc = buckets.get(hour) ?? {
         ts: hour, n: 0, power: 0, voltage: 0, pressure: 0,
-        pressureTop: 0, flow: 0, volume: 0, humidity: 0, level: 0,
+        pressureTop: 0, flow: 0, volume: 0, humidity: 0, airQuality: 0, level: 0,
         tempIn: 0, tempOut: 0,
       }
       acc.n += 1
@@ -348,6 +349,7 @@ export default function DeviceDetailPage() {
       acc.flow += r.flow_rate ?? 0
       acc.volume = Math.max(acc.volume, r.volume_m3 ?? 0)
       acc.humidity += r.humidity ?? 0
+      acc.airQuality += r.air_quality ?? 0
       acc.level += r.level ?? 0
       acc.tempIn += r.temperature_in_c ?? 0
       acc.tempOut += r.temperature_out_c ?? 0
@@ -364,6 +366,7 @@ export default function DeviceDetailPage() {
         flow: Number((b.flow / b.n).toFixed(2)),
         volume: b.volume,
         humidity: Number((b.humidity / b.n).toFixed(1)),
+        airQuality: Number((b.airQuality / b.n).toFixed(1)),
         level: Number((b.level / b.n).toFixed(1)),
         tempIn: Number((b.tempIn / b.n).toFixed(1)),
         tempOut: Number((b.tempOut / b.n).toFixed(1)),
@@ -418,6 +421,8 @@ export default function DeviceDetailPage() {
       items.push({ key: 'temperature_c', title: 'Harorat', value: `${r.temperature_c} °C`, icon: Thermometer })
     if (r.humidity !== null && r.humidity !== undefined)
       items.push({ key: 'humidity', title: 'Namlik', value: `${r.humidity.toFixed(1)} %`, icon: Sprout, tone: 'success' })
+    if (r.air_quality !== null && r.air_quality !== undefined)
+      items.push({ key: 'air_quality', title: 'Havo sifati', value: `${r.air_quality.toFixed(1)} %`, icon: Wind, tone: 'success' })
     if (r.level !== null && r.level !== undefined)
       items.push({ key: 'level', title: 'Ovoz darajasi', value: `${r.level.toFixed(1)} %`, icon: Volume2 })
     return items
@@ -721,7 +726,12 @@ export default function DeviceDetailPage() {
                                     : []),
                                 ]
                               : device.utility_type === 'soil'
-                                ? [{ key: 'humidity', name: 'Namlik (%)', color: '#22C55E' }]
+                                ? [
+                                    { key: 'humidity', name: 'Namlik (%)', color: '#22C55E' },
+                                    ...(chartData.some((d) => d.airQuality > 0)
+                                      ? [{ key: 'airQuality', name: 'Havo sifati (%)', color: '#10B981' }]
+                                      : []),
+                                  ]
                                 : device.utility_type === 'heating'
                                   ? [
                                       { key: 'tempIn', name: 'Kirish (°C)', color: '#F97316' },
@@ -839,7 +849,10 @@ export default function DeviceDetailPage() {
                                   </span>
                                 )}
                                 {ut === 'soil' && (
-                                  <span>Namlik: {r.humidity !== null && r.humidity !== undefined ? `${r.humidity.toFixed(1)}%` : '—'}</span>
+                                  <span>
+                                    Namlik: {r.humidity !== null && r.humidity !== undefined ? `${r.humidity.toFixed(1)}%` : '—'}
+                                    {r.air_quality !== null && r.air_quality !== undefined ? ` · Havo: ${r.air_quality.toFixed(1)}%` : ''}
+                                  </span>
                                 )}
                                 {ut === 'electricity' && (
                                   <span>

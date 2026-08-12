@@ -110,6 +110,11 @@ static uint16_t rs485_recv_frame(uint8_t* buf, uint16_t maxLen, uint32_t timeout
         if (Serial1.available()) {
             buf[got++] = Serial1.read();
         } else if (millis() - t1 >= timeout_ms) {
+            // Timeout: HEADER-kutish yo'lidagi kabi, kech kelayotgan
+            // qoldiq baytlarni tozalaymiz — aks holda keyingi chaqiruv ularni
+            // yangi freym header'i deb noto'g'ri talqin qilib, aslida
+            // yaroqli bo'lgan retry javobini buzishi mumkin.
+            while (Serial1.available()) Serial1.read();
             return 0;  // to'liq freym yetib kelmadi — kollizion/uzilish
         } else {
             yield();

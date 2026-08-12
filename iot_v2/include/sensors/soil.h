@@ -46,6 +46,10 @@
     #define PIN_MQ135  35        // GPIO35 = ADC1_CH7
   #endif
   #define MQ135_SAMPLES  16
+  // Uzilgan/qisqa tutashgan MQ135 rels kuchlanishiga (0 yoki 4095) yopishib
+  // qoladi — bu holatni haqiqiy o'lchovdan ajratish uchun ADC rels chetidan
+  // shuncha birlik ichidagi qiymat nosozlik deb hisoblanadi.
+  #define MQ135_FAULT_MARGIN  20   // ADC birligi (0..4095 oralig'idan)
 #endif
 
 // ─── SensorData ───────────────────────────────────────────────────────────────
@@ -149,10 +153,20 @@ static bool sensor_read(SensorData& d) {
         delayMicroseconds(500);
     }
     d.air_raw = (int)(asum / MQ135_SAMPLES);
-    d.air_v   = d.air_raw * 3.3f / 4095.0f;
-    d.air_pct = constrain(d.air_raw / 4095.0f * 100.0f, 0.0f, 100.0f);  // nisbiy (yuqori=yomonroq)
-    LOG_PRINTF("MQ135: raw=%d  %.2fV  havo=%.0f%% (yuqori=yomonroq)\n",
-               d.air_raw, d.air_v, d.air_pct);
+
+    // ── Nosozlik (uzilgan/qisqa tutashgan MQ135) tekshiruvi ─────────────────
+    // raw qiymat ADC rels chetiga (0 yoki 4095) yopishib qolgan bo'lsa, bu
+    // haqiqiy havo sifati emas — datchik ulanmagan yoki qisqa tutashgan.
+    if (d.air_raw <= MQ135_FAULT_MARGIN || d.air_raw >= 4095 - MQ135_FAULT_MARGIN) {
+        d.air_v   = NAN;
+        d.air_pct = NAN;
+        LOG_PRINTF("MQ135: XATO datchik (uzilgan/qisqa tutashgan?) raw=%d\n", d.air_raw);
+    } else {
+        d.air_v   = d.air_raw * 3.3f / 4095.0f;
+        d.air_pct = constrain(d.air_raw / 4095.0f * 100.0f, 0.0f, 100.0f);  // nisbiy (yuqori=yomonroq)
+        LOG_PRINTF("MQ135: raw=%d  %.2fV  havo=%.0f%% (yuqori=yomonroq)\n",
+                   d.air_raw, d.air_v, d.air_pct);
+    }
 #endif
     return true;
 }
@@ -185,10 +199,8 @@ static String sensor_build_json(const char* device_id,
     if (g_cfg.test_mode) doc["is_test_device"] = true;
     if (d.valid) doc["humidity"] = serialized(String(d.humidity, 1));
 #ifdef HAVE_MQ135
-    if (d.valid) {
-        doc["air_raw"] = d.air_raw;
-        doc["air_pct"] = serialized(String(d.air_pct, 0));
-    }
+    doc["air_raw"] = d.air_raw;
+    if (!isnan(d.air_pct)) doc["air_pct"] = serialized(String(d.air_pct, 0));
 #endif
     String out;
     serializeJson(doc, out);

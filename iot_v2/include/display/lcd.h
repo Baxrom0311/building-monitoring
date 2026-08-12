@@ -35,6 +35,12 @@ static unsigned long g_lcd_last_refresh = 0;
 static char g_lcd_row_cache[LCD_ROWS][LCD_COLS + 1] = {{0}};
 static bool g_lcd_row_has_content[LCD_ROWS] = {false};
 
+// PCF8574 I2C orqali javob berayotganini tekshirish
+static bool _lcd_i2c_alive() {
+    Wire.beginTransmission(LCD_ADDR);
+    return Wire.endTransmission() == 0;
+}
+
 static void _lcd_hard_reinit() {
     g_lcd.init();
     g_lcd.backlight();
@@ -51,16 +57,15 @@ static void lcd_init() {
     g_lcd.init();
     g_lcd.backlight();
     g_lcd.clear();
-    g_lcd_ok = true;
     g_lcd_last_refresh = millis();
-    LOG_PRINTF("  LCD 16x2 I2C (0x%02X, SDA=%d, SCL=%d): OK\n",
-               LCD_ADDR, LCD_SDA, LCD_SCL);
-}
-
-// PCF8574 I2C orqali javob berayotganini tekshirish
-static bool _lcd_i2c_alive() {
-    Wire.beginTransmission(LCD_ADDR);
-    return Wire.endTransmission() == 0;
+    g_lcd_ok = _lcd_i2c_alive();
+    if (g_lcd_ok) {
+        LOG_PRINTF("  LCD 16x2 I2C (0x%02X, SDA=%d, SCL=%d): OK\n",
+                   LCD_ADDR, LCD_SDA, LCD_SCL);
+    } else {
+        LOG_PRINTF("  LCD 16x2 I2C (0x%02X, SDA=%d, SCL=%d): FAIL (no ACK)\n",
+                   LCD_ADDR, LCD_SDA, LCD_SCL);
+    }
 }
 
 // FAQAT I2C haqiqatan javob bermay qolganda qayta init qilamiz. Muntazam

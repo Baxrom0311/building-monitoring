@@ -30,7 +30,10 @@
 #ifndef RS485_BRIDGE_INTER_LEAF_GAP_MS
   #define RS485_BRIDGE_INTER_LEAF_GAP_MS  50UL    // Shina tanaffusi (MAX485 DE uzilishi va kabel sig'imi uchun 100% xavfsiz 50ms)
 #endif
-#define RS485_BRIDGE_REPLY_MS       250UL   // Adresli POLL'dan keyin bitta leaf javobini kutish
+#define RS485_BRIDGE_REPLY_MS       350UL   // Adresli POLL'dan keyin bitta leaf javobini kutish
+                                            // (rs485_recv_frame() ichki timeout'i 300ms — DISCOVER
+                                            // oynasidagi kabi ~50ms zaxira bilan, aks holda ichki
+                                            // chaqiruv har doim tashqi oynadan oshib ketardi)
 #define RS485_BRIDGE_RETRY          1       // Adresli POLL javob kelmasa qayta so'rash soni
 #define RS485_BRIDGE_MAX_LEAVES     16      // Ro'yxatdagi maksimal leaf soni
 #define RS485_BRIDGE_MISS_WARN      30      // Shuncha ketma-ket miss'dan keyin "javob bermayapti" deb log qilinadi
@@ -61,7 +64,11 @@ static int rs485_roster_find(const char* id) {
 static void rs485_roster_add(const char* id) {
     if (strlen(id) != RS485_LEAF_ID_LEN) return;      // faqat to'g'ri MAC uzunligi
     if (rs485_roster_find(id) >= 0) return;           // allaqachon bor
-    if (rs485_roster_n >= RS485_BRIDGE_MAX_LEAVES) return;
+    if (rs485_roster_n >= RS485_BRIDGE_MAX_LEAVES) {
+        LOG_PRINTF("RS485 bridge: ro'yxat TO'LIQ (%d/%d) — leaf %s rad etildi\n",
+                   rs485_roster_n, RS485_BRIDGE_MAX_LEAVES, id);
+        return;
+    }
     strncpy(rs485_roster[rs485_roster_n], id, RS485_LEAF_ID_LEN + 1);
     rs485_miss[rs485_roster_n] = 0;
     rs485_roster_n++;
@@ -258,6 +265,10 @@ static void rs485_bridge_poll_cycle() {
     // faqat bittasi gapiradi, to'qnashuv bo'lmaydi.
     int ok = 0;
     for (int i = 0; i < rs485_roster_n; ) {
+        // Butun shina o'lik bo'lsa (masalan simlanish nosozligi) bu sikl
+        // uzoq davom etishi mumkin — har leaf qadamida watchdog'ni
+        // oziqlantiramiz, faqat sikl boshi/oxirida emas.
+        wdt_feed();
         if (rs485_bridge_poll_one(rs485_roster[i])) {
             if (rs485_miss[i] >= RS485_BRIDGE_MISS_WARN)
                 LOG_PRINTF("RS485 bridge: leaf %s qayta javob berdi (tiklandi)\n", rs485_roster[i]);

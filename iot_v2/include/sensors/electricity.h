@@ -29,13 +29,52 @@
 
 static LiquidCrystal_I2C* g_elec_lcd = nullptr;
 static bool g_elec_lcd_ok = false;
+static uint8_t g_elec_lcd_addr = 0;
+
+// Oxirgi yozilgan qatorlar — majburiy qayta init'dan keyin darhol qayta chizish
+// (display/lcd.h'dagi self-healing naqshiga o'xshab)
+static char g_elec_lcd_row_cache[ELEC_LCD_ROWS][ELEC_LCD_COLS + 1] = {{0}};
+static bool g_elec_lcd_row_has_content[ELEC_LCD_ROWS] = {false};
+
+// PCF8574 I2C orqali javob berayotganini tekshirish (display/lcd.h'dagi naqsh)
+static bool _elec_lcd_i2c_alive() {
+    if (!g_elec_lcd_addr) return false;
+    Wire.beginTransmission(g_elec_lcd_addr);
+    return Wire.endTransmission() == 0;
+}
+
+// WiFi TX oqim sakrashi PCF8574 backpack'ni reset qilib qo'yishi mumkin —
+// shu holatdan tiklanish uchun qayta init qilib, oxirgi matnni qayta chizamiz.
+static void _elec_lcd_hard_reinit() {
+    if (!g_elec_lcd) return;
+    g_elec_lcd->init();
+    g_elec_lcd->backlight();
+    for (uint8_t r = 0; r < ELEC_LCD_ROWS; r++) {
+        if (!g_elec_lcd_row_has_content[r]) continue;
+        g_elec_lcd->setCursor(0, r);
+        g_elec_lcd->print(g_elec_lcd_row_cache[r]);
+    }
+}
 
 static void elec_lcd_row(uint8_t row, const char* text) {
     if (!g_elec_lcd_ok || !g_elec_lcd) return;
+    // Yozishdan oldin avtobus qotib/backpack reset bo'lganini tekshiramiz —
+    // kerak bo'lsa yozishdan oldin qayta init qilamiz.
+    if (!_elec_lcd_i2c_alive()) _elec_lcd_hard_reinit();
+
     char buf[ELEC_LCD_COLS + 1];
     snprintf(buf, sizeof(buf), "%-*s", ELEC_LCD_COLS, text);
+
+    if (row < ELEC_LCD_ROWS) {
+        memcpy(g_elec_lcd_row_cache[row], buf, ELEC_LCD_COLS + 1);
+        g_elec_lcd_row_has_content[row] = true;
+    }
+
     g_elec_lcd->setCursor(0, row);
     g_elec_lcd->print(buf);
+
+    // Yozish paytida glitch bo'lsa — darhol qayta init + qayta chizish
+    if (!_elec_lcd_i2c_alive()) _elec_lcd_hard_reinit();
 }
 
 static void lcd_show_status(const char* line2) {
@@ -107,6 +146,7 @@ static void lcd_show_electricity(const SensorData&) {}
 static void elec_lcd_init() {
     if (g_elec_lcd_ok) return;   // allaqachon init qilingan
     Wire.begin(ELEC_LCD_SDA, ELEC_LCD_SCL);
+    Wire.setTimeOut(50);  // ms — SDA/SCL qotib qolsa ham cheksiz osilib qolmasin
     unsigned long t = millis(); while (millis() - t < 50) yield();
     uint8_t lcd_addr = 0;
     for (uint8_t a : {0x27u, 0x3Fu, 0x20u, 0x38u}) {
@@ -114,6 +154,7 @@ static void elec_lcd_init() {
         if (Wire.endTransmission() == 0) { lcd_addr = a; break; }
     }
     if (lcd_addr) {
+        g_elec_lcd_addr = lcd_addr;
         g_elec_lcd = new LiquidCrystal_I2C(lcd_addr, ELEC_LCD_COLS, ELEC_LCD_ROWS);
         g_elec_lcd->init();
         g_elec_lcd->backlight();
@@ -250,6 +291,10 @@ static bool sensor_read(SensorData& d) {
     if (!isnan(d.current_l1) && (d.current_l1 < 0.0f || d.current_l1 > 200.0f))  d.current_l1 = NAN;
     if (!isnan(d.current_l2) && (d.current_l2 < 0.0f || d.current_l2 > 200.0f))  d.current_l2 = NAN;
     if (!isnan(d.current_l3) && (d.current_l3 < 0.0f || d.current_l3 > 200.0f))  d.current_l3 = NAN;
+    if (!isnan(d.power_w) && (d.power_w < -50000.0f || d.power_w > 50000.0f))    d.power_w = NAN;
+    if (!isnan(d.frequency) && (d.frequency < 45.0f || d.frequency > 65.0f))     d.frequency = NAN;
+    if (!isnan(d.pf) && (d.pf < -1.0f || d.pf > 1.0f))                          d.pf = NAN;
+    if (!isnan(d.energy_kwh) && (isinf(d.energy_kwh) || d.energy_kwh < 0.0f))    d.energy_kwh = NAN;
 
     d.valid = (!isnan(d.voltage_l1) || !isnan(d.power_w));
     if (d.valid) lcd_show_electricity(d);
