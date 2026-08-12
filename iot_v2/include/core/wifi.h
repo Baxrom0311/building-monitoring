@@ -30,6 +30,16 @@
   #define WIFI_PORTAL_TIMEOUT_S    120
 #endif
 
+// TX quvvatini standart maksimal (~19.5dBm) dan pasaytiramiz — WiFi TX
+// paytidagi oqim sakrashi past-marja quvvat manbalarida brownout'ni
+// yolg'on ishga tushirishi mumkin (hujjatlashtirilgan xavf). BOD chegarasini
+// o'zgartirish o'rniga sababni (oqim sakrashi) kamaytiramiz — bino ichi
+// masofalar uchun 17dBm doim yetarli bo'ladi. Kerak bo'lsa build flag bilan
+// qayta belgilash mumkin.
+#ifndef WIFI_TX_POWER
+  #define WIFI_TX_POWER WIFI_POWER_17dBm
+#endif
+
 static unsigned long _wifi_reconnect_ms = 0;
 
 // NVS da saqlangan WiFi SSID bormi (birinchi yoqishni aniqlash uchun)
@@ -45,6 +55,7 @@ static bool wifi_has_saved_creds() {
 static bool wifi_connect_boot(const char* def_ssid, const char* def_pass) {
     WiFi.mode(WIFI_STA);
     WiFi.setSleep(false);
+    WiFi.setTxPower(WIFI_TX_POWER);
 
     bool has_def = (def_ssid && def_ssid[0]);
     bool saved = wifi_has_saved_creds();
@@ -97,6 +108,7 @@ static void wifi_pause() {
 
 static bool wifi_resume() {
     esp_wifi_start();
+    WiFi.setTxPower(WIFI_TX_POWER);  // esp_wifi_start() standart quvvatga qaytarishi mumkin
     WiFi.reconnect();
     unsigned long t = millis();
     while (WiFi.status() != WL_CONNECTED && millis() - t < 3000) yield();
