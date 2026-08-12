@@ -62,20 +62,20 @@ static bool sensor_read(SensorData& d) {
 
     // Mikrofon ADC peak-to-peak o'lchovi (0-4095)
     // Tinch xona baseline = ~20-50 ADC counts
-    // Gapirish / muloqot = ~120-400 ADC counts
-    // Baland shovqin / baqirish = 500+ ADC counts
+    // Gapirish / muloqot = ~300-900 ADC counts
+    // Baland shovqin / baqirish = 2400+ ADC counts
     
-    float signal = max(0.0f, (float)amp - 20.0f);
+    float signal = max(0.0f, (float)amp - 40.0f);
     
-    // Minimal norma = 7.5% (hech qachon 0 bo'lmaydi)
-    // Har bir 5 ADC signal oshishi = +1% ovoz darajasi
-    float target_level = constrain(7.5f + (signal / 5.0f), 7.5f, 100.0f);
+    // Tinch xona norma = 7.0%
+    // 2400 ADC P2P = 100% full scale
+    float target_level = constrain(7.0f + (signal / 2400.0f) * 100.0f, 7.0f, 100.0f);
 
-    // EMA silliqlashtirish: o'sish 0.45 (tez sezish), tushish 0.15
-    float alpha = (target_level > s_level_smooth) ? 0.45f : 0.15f;
+    // EMA silliqlashtirish: o'sish 0.40 (tez sezish), tushish 0.12
+    float alpha = (target_level > s_level_smooth) ? 0.40f : 0.12f;
     s_level_smooth += (target_level - s_level_smooth) * alpha;
 
-    if (s_level_smooth < 7.0f) s_level_smooth = 7.5f;
+    if (s_level_smooth < 7.0f) s_level_smooth = 7.0f;
 
     LOG_PRINTF("Ovoz ADC GPIO%d: amp=%d signal=%.1f level=%.1f%%\n", PIN_SOUND_ADC, amp, signal, s_level_smooth);
 
