@@ -27,7 +27,7 @@
 // Bridge/collector uchun 0 qilinadi (build flag bilan) — WiFi bo'lmasa baribir
 // ishlay olmaydi, shuning uchun AP doim ochiq tursin.
 #ifndef WIFI_PORTAL_TIMEOUT_S
-  #define WIFI_PORTAL_TIMEOUT_S    120
+  #define WIFI_PORTAL_TIMEOUT_S    600
 #endif
 
 // TX quvvatini standart maksimal (~19.5dBm) dan pasaytiramiz — WiFi TX
@@ -147,6 +147,15 @@ static void wifi_portal(const char* ap_name, const char* ap_pass,
     wm.addParameter(&p_mode);
     wm.setConnectTimeout(20);
     wm.setConfigPortalTimeout(WIFI_PORTAL_TIMEOUT_S);
+    // ESLATMA: kutubxona (tzapu/WiFiManager@2.0.17) portal ochilganda STA
+    // radiosini standart ravishda o'chiradi (_disableSTAConn=true, xususiy
+    // maydon — bu versiyada buni o'chirish uchun public setter yo'q). Bu FAQAT
+    // haqiqiy birinchi yoqish / BOOT-reset holatida ishlaydigan portalga
+    // tegishli — sozlangan qurilma router vaqtincha o'chganda portalga
+    // umuman kirmaydi (yuqoridagi main.cpp'dagi ajratish, audit FIX A),
+    // fonda wifi_loop() 15s'da qayta ulanadi. Bu holat texnik xodim jismonan
+    // portalni to'ldirayotgan paytga to'g'ri keladi, shuning uchun fonda STA
+    // urinishi shart emas.
     wm.setSaveConfigCallback([&]() {
         cfg_save(p_srv.getValue(), p_tok.getValue(),
                  p_mode.getValue(), p_prov.getValue());

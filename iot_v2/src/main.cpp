@@ -844,16 +844,31 @@ void setup() {
         if (!wifi_ok) {
             if (!wifi_configured) {
                 // Haqiqiy birinchi yoqish — sozlash portali kerak (mo'ljallangan UX).
+                // Kutubxona (WiFiManager) portal ochiq turganda STA radiosini
+                // o'chiradi — fonda ulanib bo'lmaydi. Shuning uchun SIKL qilamiz:
+                // portal (WIFI_PORTAL_TIMEOUT_S) -> hali ulanmagan bo'lsa bitta
+                // aniq ulanish urinishi -> baribir bo'lmasa portal yana ochiladi.
+                // Shu tarzda router qachon tiklansa ham, qurilma ko'pi bilan
+                // bitta portal davri ichida o'zi tuzaladi — BOOT tugmasiz,
+                // abadiy portalda "qolib qolmasdan".
+                for (;;) {
 #if defined(HAVE_LCD) && defined(SENSOR_ELECTRICITY)
-                // Elektr/bridge LCD (elec_lcd_row) — foydalanuvchi AP nomini ko'rsin
-                elec_lcd_row(0, "WiFi Sozlash:");
-                elec_lcd_row(1, WIFI_AP_NAME);
+                    // Elektr/bridge LCD (elec_lcd_row) — foydalanuvchi AP nomini ko'rsin
+                    elec_lcd_row(0, "WiFi Sozlash:");
+                    elec_lcd_row(1, WIFI_AP_NAME);
 #elif defined(HAVE_LCD)
-                lcd_row(0, "WiFi AP Portal");
-                lcd_row(1, WIFI_AP_NAME);
+                    lcd_row(0, "WiFi AP Portal");
+                    lcd_row(1, WIFI_AP_NAME);
 #endif
-                LOG_PRINTF("WiFi: sozlanmagan qurilma — AP '%s' Sozlash Portali ochilmoqda...\n", WIFI_AP_NAME);
-                wifi_portal(WIFI_AP_NAME, WIFI_AP_PASS, device_id, g_cfg.meter_serial);
+                    LOG_PRINTF("WiFi: sozlanmagan qurilma — AP '%s' Sozlash Portali ochilmoqda...\n", WIFI_AP_NAME);
+                    wifi_portal(WIFI_AP_NAME, WIFI_AP_PASS, device_id, g_cfg.meter_serial);
+                    if (WiFi.status() == WL_CONNECTED) break;
+
+                    LOG_PRINTLN("WiFi: portal yopildi, hali ulanmagan — bitta ulanish urinishi...");
+                    if (wifi_connect_boot(DEFAULT_WIFI_SSID, DEFAULT_WIFI_PASS)) break;
+
+                    LOG_PRINTLN("WiFi: urinish muvaffaqiyatsiz — portal yana ochiladi");
+                }
             } else {
                 // Sozlamalar BOR, lekin boot vaqtida ulanib bo'lmadi (router
                 // vaqtincha o'chiq/qayta yuklanmoqda). Portal OCHILMAYDI —
