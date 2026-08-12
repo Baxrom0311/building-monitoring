@@ -2,8 +2,7 @@
 /**
  * sound.h — Ovoz darajasi sensori (mikrofon ADC)
  *
- * Parametrlar (platformio.ini):
- *   -DPIN_SOUND_ADC=34      → Mikrofon AOUT GPIO
+ * GPIO 34 (ADC1_CH6) — ESP32 analog kiritish pini
  */
 
 #include <Arduino.h>
@@ -19,7 +18,7 @@ struct SensorData {
 };
 
 // ─── Ichki holat ──────────────────────────────────────────────────────────────
-static float s_level_smooth = 7.0f; // Boshlang'ich holat ~7% (tinch xona)
+static float s_level_smooth = 7.5f; // Boshlang'ich holat ~7.5% (tinch xona)
 
 // ADC amplituda: 80ms audio sample oyna ichida peak-to-peak o'lchash (hi - lo)
 static int _sound_amplitude() {
@@ -31,7 +30,7 @@ static int _sound_amplitude() {
         if (v > hi) hi = v;
         delayMicroseconds(40);
     }
-    if (hi < lo) return 0;
+    if (hi <= lo) return 0;
     return hi - lo;
 }
 
@@ -40,10 +39,12 @@ static int _sound_amplitude() {
 static void sensor_init() {
     analogReadResolution(12);
     analogSetAttenuation(ADC_11db);
+    analogSetPinAttenuation(PIN_SOUND_ADC, ADC_11db);
     pinMode(PIN_SOUND_ADC, INPUT);
+
     for (int i = 0; i < 10; i++) analogRead(PIN_SOUND_ADC);
-    s_level_smooth = 7.0f;
-    LOG_PRINTF("Ovoz sensori tayyor kalibrovka (GPIO%d)\n", PIN_SOUND_ADC);
+    s_level_smooth = 7.5f;
+    LOG_PRINTF("Ovoz sensori tayyor (GPIO%d, ADC_11db 0-3.3V)\n", PIN_SOUND_ADC);
 }
 
 static bool sensor_connect() { return true; }
@@ -59,20 +60,24 @@ static bool sensor_read(SensorData& d) {
 
     int amp = _sound_amplitude();
 
-    // Mikrofon elektr peak-to-peak o'lchov (0-4095 ADC)
-    // Tinch xona baseline = ~30-40 ADC counts
-    // Oddiy ovoz/gapirish = ~150-350 ADC counts
-    // Baland shovqin/baqirish = 600+ ADC counts
+    // Mikrofon ADC peak-to-peak o'lchovi (0-4095)
+    // Tinch xona baseline = ~20-50 ADC counts
+    // Gapirish / muloqot = ~120-400 ADC counts
+    // Baland shovqin / baqirish = 500+ ADC counts
     
-    float signal = max(0.0f, (float)amp - 30.0f);
+    float signal = max(0.0f, (float)amp - 20.0f);
     
-    // Tinch xona norma = ~7%
-    // Har bir 6 ADC signal oshishi = +1% ovoz darajasi
-    float target_level = constrain(7.0f + (signal / 6.0f), 7.0f, 100.0f);
+    // Minimal norma = 7.5% (hech qachon 0 bo'lmaydi)
+    // Har bir 5 ADC signal oshishi = +1% ovoz darajasi
+    float target_level = constrain(7.5f + (signal / 5.0f), 7.5f, 100.0f);
 
-    // EMA silliqlashtirish: o'sish 0.40 (tez sezish), tushish 0.12 (sekin tushish)
-    float alpha = (target_level > s_level_smooth) ? 0.40f : 0.12f;
+    // EMA silliqlashtirish: o'sish 0.45 (tez sezish), tushish 0.15
+    float alpha = (target_level > s_level_smooth) ? 0.45f : 0.15f;
     s_level_smooth += (target_level - s_level_smooth) * alpha;
+
+    if (s_level_smooth < 7.0f) s_level_smooth = 7.5f;
+
+    LOG_PRINTF("Ovoz ADC GPIO%d: amp=%d signal=%.1f level=%.1f%%\n", PIN_SOUND_ADC, amp, signal, s_level_smooth);
 
     d = {s_level_smooth, true};
     return true;
