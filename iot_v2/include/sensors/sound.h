@@ -1,8 +1,8 @@
 #pragma once
 /**
- * sound.h — Ovoz darajasi sensori (mikrofon ADC)
+ * sound.h — Ovoz darajasi sensori (mikrofon ADC / Digital hybrid)
  *
- * Signal filtrlash: USB va elektr shovqinlaridan xoli Mean Absolute Deviation (MAD)
+ * AO (Analog) va DO (Digital) turlarini avtomatik aniqlaydigan universal datchik drayveri.
  */
 
 #include <Arduino.h>
@@ -20,30 +20,6 @@ struct SensorData {
 // ─── Ichki holat ──────────────────────────────────────────────────────────────
 static float s_level_smooth = 7.0f; // Boshlang'ich holat ~7% (tinch xona)
 
-// ADC raqamli audio signal energiyasi (Mean Absolute Deviation - MAD)
-// USB va elektr apparat shovqinlarini filtrlash uchun Mean Deviation ishlatiladi.
-static float _sound_average_deviation() {
-    long sum = 0;
-    int count = 0;
-    static int samples[200];
-    
-    unsigned long start = millis();
-    while (millis() - start < 60 && count < 200) {
-        int v = analogRead(PIN_SOUND_ADC);
-        samples[count++] = v;
-        sum += v;
-        delayMicroseconds(100);
-    }
-    if (count == 0) return 0.0f;
-    
-    float mean = (float)sum / (float)count;
-    float dev_sum = 0.0f;
-    for (int i = 0; i < count; i++) {
-        dev_sum += fabs((float)samples[i] - mean);
-    }
-    return dev_sum / (float)count;
-}
-
 // ═══════════════════════════════════════════════════════════════════════════════
 
 static void sensor_init() {
@@ -54,7 +30,7 @@ static void sensor_init() {
 
     for (int i = 0; i < 10; i++) analogRead(PIN_SOUND_ADC);
     s_level_smooth = 7.0f;
-    LOG_PRINTF("Ovoz sensori MAD filtr tayyor (GPIO%d, ADC_11db)\n", PIN_SOUND_ADC);
+    LOG_PRINTF("Ovoz sensori gibrid drayver tayyor (GPIO%d, ADC_11db)\n", PIN_SOUND_ADC);
 }
 
 static bool sensor_connect() { return true; }
@@ -68,25 +44,60 @@ static bool sensor_read(SensorData& d) {
         return true;
     }
 
-    float dev = _sound_average_deviation();
+    // 60ms namunalar oynasi (150 ta sample)
+    int count = 0;
+    int lo = 4095, hi = 0;
+    long sum = 0;
+    int digital_pulses = 0;
+    bool last_state = false;
+    int sat_count = 0;
 
-    // Tinch xona MAD baseline = ~5-12 ADC counts
-    // Odatiy muloqot / gapirish = ~60-180 ADC counts
-    // Baland shovqin / baqirish = 300+ ADC counts
-    
-    float sound_energy = max(0.0f, dev - 10.0f);
-    
-    // Tinch xona norma = 7.0%
-    // 330.0 MAD deviation = 100% full scale
-    float target_level = constrain(7.0f + (sound_energy / 3.3f), 7.0f, 100.0f);
+    unsigned long start = millis();
+    while (millis() - start < 60 && count < 150) {
+        int v = analogRead(PIN_SOUND_ADC);
+        if (v < lo) lo = v;
+        if (v > hi) hi = v;
+        sum += v;
+        count++;
+
+        bool cur_state = (v > 2000);
+        if (cur_state != last_state) {
+            digital_pulses++;
+            last_state = cur_state;
+        }
+
+        if (v < 200 || v > 3900) sat_count++;
+
+        delayMicroseconds(120);
+    }
+
+    if (count == 0) {
+        d = {7.0f, true};
+        return true;
+    }
+
+    float mean = (float)sum / (float)count;
+    float target_level = 7.0f;
+
+    // A) Agar modul DO (Digital Output) piniga ulangan bo'lsa yoki to'yingan bo'lsa (sat_count > 60)
+    if (sat_count > (count / 2)) {
+        // Ritmik impulslar bo'yicha hisoblash
+        float pulse_energy = max(0.0f, (float)digital_pulses - 2.0f);
+        target_level = constrain(7.0f + (pulse_energy * 2.2f), 7.0f, 100.0f);
+        LOG_PRINTF("Ovoz DO (Digital): pulses=%d level=%.1f%%\n", digital_pulses, target_level);
+    } else {
+        // B) Aniq AO (Analog Output) rejimi
+        float p2p = (float)(hi - lo);
+        float signal = max(0.0f, p2p - 40.0f);
+        target_level = constrain(7.0f + (signal / 15.0f), 7.0f, 100.0f);
+        LOG_PRINTF("Ovoz AO (Analog): hi=%d lo=%d p2p=%.0f level=%.1f%%\n", hi, lo, p2p, target_level);
+    }
 
     // EMA silliqlashtirish: o'sish 0.35 (tez sezish), tushish 0.12
     float alpha = (target_level > s_level_smooth) ? 0.35f : 0.12f;
     s_level_smooth += (target_level - s_level_smooth) * alpha;
 
     if (s_level_smooth < 7.0f) s_level_smooth = 7.0f;
-
-    LOG_PRINTF("Ovoz ADC GPIO%d: dev=%.1f energy=%.1f level=%.1f%%\n", PIN_SOUND_ADC, dev, sound_energy, s_level_smooth);
 
     d = {s_level_smooth, true};
     return true;
