@@ -133,7 +133,7 @@ src/main.cpp      → barcha rejimlar bitta faylda, #ifdef bilan ajratilgan
 | Tuproq namligi | `soil`, `soil_debug`, `soil_wifi`, `soil_wifi_lcd`, `soil_outdoor`, `soil_basement` | `soil_lora`, `soil_lora_lcd`, `soil_lora_debug`, `soil_lora_serial_test` | Kapasitiv ADC |
 | Ovoz | `sound`, `sound_wifi`, `sound_wifi_lcd`, `sound_debug` | `sound_lora` | Mikrofon ADC |
 | LoRa Gateway | — | `lora_gateway`, `lora_gateway_lcd`, `lora_gateway_elec_lcd`, `lora_gateway_debug` | Barcha node turlaridan qabul qiladi |
-| Test/diagnostika | `ads1115_test`, `ex518_test` | — | `ex518_test` — yangi EX518 hisoblagichi uchun test (hozircha ishlamayapti, quyida) |
+| Test/diagnostika | `ads1115_test` | — | — |
 
 ### 3.3 LoRa Mesh v2 protokoli
 
@@ -159,17 +159,6 @@ Paket turlari: elektr (51 bayt), suv (26 bayt), gaz (24 bayt), tuproq (16 bayt),
 **OBIS kodlari**: kuchlanish (VL1/VL2/VL3), tok (IL1/IL2/IL3), quvvat, chastota, energiya, PF — standart DLMS OBIS convention (`1.0.C.D.E.255`).
 
 **Olib tashlangan**: `dlms_connect_manager()` (LOW auth, parol `"00000000"`) — kod bazasida hech qayerdan chaqirilmagan o'lik funksiya edi.
-
-### 3.5 EX518 — hal qilinmagan muammo (yangi hisoblagich, TE73 o'rniga)
-
-TE73 o'rniga test uchun **EX518** (ishlab chiqaruvchi: "Elektron Xisoblagich" MChJ, O'zbekiston-Xitoy QK) berilgan. Ishlab chiqaruvchining rasmiy sayti RS-485 uchun **DLMS HDLC** protokolini tasdiqlaydi (TE71/TE73 bilan bir xil oila), lekin:
-
-- Barcha diagnostika (protokol, tezlik, HDLC manzil — seriya raqamidan hisoblangan variantlar ham) sinaldi — **hech qanday javob yo'q**
-- Jismoniy ulanish tasdiqlangan: hisoblagich quvvatda, A/B simlari to'g'ri ulangan (continuity test o'tdi), konverter TX signal chiqarayotgani tasdiqlangan (LED)
-- RX LED hech qachon yonmaydi — hisoblagich hech qachon javob bermaydi
-- **Ehtimoliy sabab**: RS-485 porti menyudan faollashtirilmagan, YOKI hisoblagichda o'rnatilgan PLC moduli RS-485'ni "band qilib" qo'ygan (ishlab chiqaruvchi spec'ida "Communication module: PLC" standart deb ko'rsatilgan)
-- **Keyingi qadam**: ishlab chiqaruvchiga to'g'ridan-to'g'ri murojaat (seriya raqami: `124200532257`)
-- Test kodi: `iot/src/main.cpp` da `#ifdef EX518_TEST` bloki, `ex518_test` environment — mavjud `electricity_*` rejimlarga tegmaydi, alohida
 
 ---
 
@@ -221,10 +210,9 @@ Ko'rib chiqish uchun ro'yxat:
 
 1. **Y2038 muammosi** — barcha `ts` ustunlari `Integer` (32-bit), 2038-yilda to'lib qoladi. Tuzatish katta migratsiya talab qiladi (`BigInteger`ga o'tish).
 2. **v1/v2 sahifa nomutanosibligi** — Billing/Territory faqat v2'da, Demo faqat v1'da.
-3. **EX518 hisoblagichi hali ishlamayapti** — RS-485 aloqasi o'rnatilmagan, ishlab chiqaruvchi bilan bog'lanish kerak.
-4. **Passiv `relay_on` ustuni** — `Reading` jadvalida hali ham mavjud (DB'da), lekin IoT hech qachon to'ldirmaydi (real rele control funksiyasi olib tashlangandan keyin ham qoldirilgan — atayin, tarixiy ma'lumot uchun).
-5. ~~`ip` ustuni~~ — 2026-08-02 da butunlay olib tashlandi (model, schema, qidiruv, hujjatlar, DB migration).
-6. Gaz sensori: bosim (analog, 4-20mA) + oqim (flow, impuls hisoblagich GPIO26) mavjud, lekin harorat kanali suv sensori bilan bir xil holatda — `temperature_c` doim `NAN` (jismoniy sensor ulanmagan, kod tayyor lekin ishlatilmayapti).
+3. **Passiv `relay_on` ustuni** — `Reading` jadvalida hali ham mavjud (DB'da), lekin IoT hech qachon to'ldirmaydi (real rele control funksiyasi olib tashlangandan keyin ham qoldirilgan — atayin, tarixiy ma'lumot uchun).
+4. ~~`ip` ustuni~~ — 2026-08-02 da butunlay olib tashlandi (model, schema, qidiruv, hujjatlar, DB migration).
+5. Gaz sensori: bosim (analog, 4-20mA) + oqim (flow, impuls hisoblagich GPIO26) mavjud, lekin harorat kanali suv sensori bilan bir xil holatda — `temperature_c` doim `NAN` (jismoniy sensor ulanmagan, kod tayyor lekin ishlatilmayapti).
 
 ---
 

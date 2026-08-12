@@ -14,129 +14,6 @@
 
 #define FW_VERSION "4.2.0"
 
-// EX518 XOM IEC62056-21 (Mode C) TEST — WiFi/LoRa YO'Q, faqat RS-485 + Serial
-// log. EX518 pasporti (rasmiy PDF) faqat IEC62056-21 standartini tilga oladi —
-// DLMS/COSEM (HDLC/AARQ) EMAS, shuning uchun TE71/TE73 dlms.h bu yerda
-// ishlatilmaydi. RS-485 sim: A=klemma30, B=klemma31 (28/29 — impuls chiqishi,
-// RS-485 EMAS!). Mavjud electricity.h/main.cpp rejimlariga umuman tegmaydi.
-#ifdef EX518_TEST
-
-#include <Arduino.h>
-#include <string.h>
-#include "core/watchdog.h"
-
-#define PIN_RX   16
-#define PIN_TX   17
-#define PIN_DE    4
-
-static const uint32_t BAUD_TABLE[] = {300, 600, 1200, 2400, 4800, 9600, 19200};
-
-static void de_tx() { digitalWrite(PIN_DE, HIGH); delayMicroseconds(50); }
-static void de_rx() { Serial2.flush(); delayMicroseconds(50); digitalWrite(PIN_DE, LOW); }
-
-static void print_hex_ascii(const char* label, const uint8_t* buf, size_t len) {
-    Serial.printf("%s (%d bayt): ", label, (int)len);
-    for (size_t i = 0; i < len; i++) Serial.printf("%02X ", buf[i]);
-    Serial.print(" | \"");
-    for (size_t i = 0; i < len; i++) {
-        char c = (char)buf[i];
-        Serial.print((c >= 32 && c < 127) ? c : '.');
-    }
-    Serial.println("\"");
-}
-
-// Idle-timeout: har baytda taymer qayta boshlanadi — sekin oqib kelayotgan
-// javobni kesib qo'ymaslik uchun.
-static size_t read_with_timeout(uint8_t* buf, size_t max, unsigned long timeout_ms) {
-    size_t n = 0;
-    unsigned long last = millis();
-    while (millis() - last < timeout_ms && n < max) {
-        wdt_feed();
-        if (Serial2.available()) {
-            buf[n++] = (uint8_t)Serial2.read();
-            last = millis();
-        }
-        yield();
-    }
-    return n;
-}
-
-void setup() {
-    Serial.begin(115200);
-    unsigned long t0 = millis(); while (millis() - t0 < 300) yield();
-    pinMode(PIN_DE, OUTPUT);
-    digitalWrite(PIN_DE, LOW);
-    Serial.println();
-    Serial.println("=== EX518 IEC62056-21 Mode C TEST (WiFi/LoRa YO'Q) ===");
-    Serial.printf("RS-485: RX=%d TX=%d DE=%d (A=klemma30 B=klemma31)\n",
-                   (int)PIN_RX, (int)PIN_TX, (int)PIN_DE);
-    wdt_init();
-}
-
-void loop() {
-    wdt_feed();
-    Serial.println("\n--- Wake-up so'rovi: 300 baud, 7E1 ---");
-    Serial2.end();
-    unsigned long t = millis(); while (millis() - t < 50) yield();
-    Serial2.begin(300, SERIAL_7E1, PIN_RX, PIN_TX);
-    t = millis(); while (millis() - t < 50) yield();
-
-    const char req[] = "/?!\r\n";
-    de_tx();
-    Serial2.write((const uint8_t*)req, strlen(req));
-    Serial2.flush();
-    de_rx();
-    print_hex_ascii("TX", (const uint8_t*)req, strlen(req));
-
-    uint8_t rx[128];
-    size_t n = read_with_timeout(rx, sizeof(rx), 2000);
-    if (n == 0) {
-        Serial.println("XATO: identifikatsiya javobi kelmadi (2s kutildi)");
-    } else {
-        print_hex_ascii("RX (ID)", rx, n);
-        if (n >= 6 && rx[0] == '/') {
-            char baud_char = (char)rx[4];
-            int idx = baud_char - '0';
-            uint32_t new_baud = (idx >= 0 && idx < 7) ? BAUD_TABLE[idx] : 300;
-            Serial.printf("Identifikatsiya: ishlab chiqaruvchi=%c%c%c baud_kod=%c -> %lu baud\n",
-                          (char)rx[1], (char)rx[2], (char)rx[3], baud_char, (unsigned long)new_baud);
-
-            char ack[8];
-            int ack_len = snprintf(ack, sizeof(ack), "\x06""0%c0\r\n", baud_char);
-
-            t = millis(); while (millis() - t < 300) yield();  // spec: 200-1500ms
-
-            de_tx();
-            Serial2.write((const uint8_t*)ack, ack_len);
-            Serial2.flush();
-            de_rx();
-            print_hex_ascii("TX (ACK)", (const uint8_t*)ack, ack_len);
-
-            t = millis(); while (millis() - t < 300) yield();
-            Serial2.end();
-            t = millis(); while (millis() - t < 50) yield();
-            Serial2.begin(new_baud, SERIAL_7E1, PIN_RX, PIN_TX);
-
-            size_t n2 = read_with_timeout(rx, sizeof(rx), 3000);
-            if (n2 == 0) {
-                Serial.println("XATO: ma'lumot bloki kelmadi (yangi baud'da)");
-            } else {
-                print_hex_ascii("RX (DATA)", rx, n2);
-                Serial.println("--- ASCII matn ---");
-                for (size_t i = 0; i < n2; i++) {
-                    char c = (char)rx[i];
-                    Serial.print(c == '\r' ? '\n' : ((c >= 32 && c < 127) ? c : '.'));
-                }
-                Serial.println();
-            }
-        } else {
-            Serial.println("XATO: kutilmagan identifikatsiya formati");
-        }
-    }
-
-    t = millis(); while (millis() - t < 5000) { wdt_feed(); yield(); }
-}
-
 // ADS1115 INDUSTRIAL PRESSURE MONITOR
 // Apparat:
 //   ESP32 + ADS1115 (I2C 0x48, SDA=21, SCL=22)
@@ -147,7 +24,7 @@ void loop() {
 // Kanallar:
 //   A0 = Suv bosimi (HY-131, 0–0.6 MPa)
 //   A1 = (kelajak) Gaz bosimi (0–16 mbar)
-#elif defined(ADS1115_TEST)
+#ifdef ADS1115_TEST
 
 #include <Arduino.h>
 #include <Wire.h>
