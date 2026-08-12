@@ -18,10 +18,10 @@
   #define SOUND_SAMPLES   300
 #endif
 #ifndef SOUND_FIGHT_REF
-  #define SOUND_FIGHT_REF 1200.0f  // Tayyor kalibrovka: 1200 ADC peak-to-peak = 100% shovqin
+  #define SOUND_FIGHT_REF 2400.0f  // Tayyor kalibrovka: 2400 ADC P2P = 100% shovqin
 #endif
 #ifndef DEFAULT_SOUND_NOISE_FLOOR
-  #define DEFAULT_SOUND_NOISE_FLOOR 80.0f // Tayyor kalibrovka: tinch xona noise floor
+  #define DEFAULT_SOUND_NOISE_FLOOR 120.0f
 #endif
 
 struct SensorData {
@@ -31,7 +31,7 @@ struct SensorData {
 
 // ─── Ichki holat ──────────────────────────────────────────────────────────────
 static float s_noise_floor  = DEFAULT_SOUND_NOISE_FLOOR;
-static float s_level_smooth = 0.0f;
+static float s_level_smooth = 7.0f; // Boshlang'ich holat ~7% (tinch xona)
 
 // ADC amplituda: 100ms audio sample oyna ichida peak-to-peak o'lchash (barcha chastotalarni qamrab oladi)
 static int _sound_amplitude() {
@@ -55,11 +55,12 @@ static void sensor_init() {
     pinMode(PIN_SOUND_ADC, INPUT);
     for (int i = 0; i < 10; i++) analogRead(PIN_SOUND_ADC);
 
-    // Oldindan tayyor kalibrovka noise floor bilan boshlash
-    int sample_amp = _sound_amplitude();
-    s_noise_floor = (sample_amp > 10) ? (float)sample_amp : DEFAULT_SOUND_NOISE_FLOOR;
-    if (s_noise_floor < 30.0f) s_noise_floor = 30.0f;
-    s_level_smooth = 0.0f;
+    // Xonadagi foniy shovqinni o'rtacha 5 ta o'qishda aniqlash
+    long sum = 0;
+    for (int i = 0; i < 5; i++) sum += _sound_amplitude();
+    float avg = (float)sum / 5.0f;
+    s_noise_floor = (avg > 20.0f) ? avg : DEFAULT_SOUND_NOISE_FLOOR;
+    s_level_smooth = 7.0f;
 
     LOG_PRINTF("Ovoz sensori tayyor kalibrovka (GPIO%d) noise=%.0f ref=%.0f\n", PIN_SOUND_ADC, s_noise_floor, SOUND_FIGHT_REF);
 }
@@ -77,19 +78,24 @@ static bool sensor_read(SensorData& d) {
 
     int amp = _sound_amplitude();
 
-    // Avtomatik noise floor moslashuvi (asta-sekin)
-    if ((float)amp < s_noise_floor * 1.5f && (float)amp > 10.0f) {
-        s_noise_floor = s_noise_floor * 0.96f + (float)amp * 0.04f;
+    // Avtomatik noise floor moslashuvi (asta-sekin tinch vaqtda)
+    if ((float)amp < s_noise_floor * 1.4f && (float)amp > 10.0f) {
+        s_noise_floor = s_noise_floor * 0.97f + (float)amp * 0.03f;
     }
 
     float real = max(0.0f, (float)amp - s_noise_floor);
-    float target_level = constrain((real / SOUND_FIGHT_REF) * 100.0f, 0.0f, 100.0f);
+    
+    // Tinch holatda ~7% (6-8% oralig'ida), ovoz chiqqanda balandlashadi
+    float target_level;
+    if (real < 15.0f) {
+        target_level = 7.0f; // Tinch xona norma
+    } else {
+        target_level = constrain(7.0f + (real / SOUND_FIGHT_REF) * 100.0f, 7.0f, 100.0f);
+    }
 
     // EMA silliqlashtirish: o'sish 0.35, tushish 0.10
     float alpha = (target_level > s_level_smooth) ? 0.35f : 0.10f;
     s_level_smooth += (target_level - s_level_smooth) * alpha;
-
-    if (s_level_smooth < 0.5f) s_level_smooth = 0.0f;
 
     d = {s_level_smooth, true};
     return true;
