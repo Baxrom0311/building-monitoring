@@ -4,8 +4,6 @@
  *
  * Parametrlar (platformio.ini):
  *   -DPIN_SOUND_ADC=34      → Mikrofon AOUT GPIO
- *   -DSOUND_SAMPLES=64      → ADC namunalar soni
- *   -DSOUND_FIGHT_REF=2500  → 100% amplituda chegarasi
  */
 
 #include <Arduino.h>
@@ -14,15 +12,6 @@
 #ifndef PIN_SOUND_ADC
   #define PIN_SOUND_ADC   34
 #endif
-#ifndef SOUND_SAMPLES
-  #define SOUND_SAMPLES   300
-#endif
-#ifndef SOUND_FIGHT_REF
-  #define SOUND_FIGHT_REF 2400.0f  // Tayyor kalibrovka: 2400 ADC P2P = 100% shovqin
-#endif
-#ifndef DEFAULT_SOUND_NOISE_FLOOR
-  #define DEFAULT_SOUND_NOISE_FLOOR 120.0f
-#endif
 
 struct SensorData {
     float level;   // 0–100 %
@@ -30,18 +19,17 @@ struct SensorData {
 };
 
 // ─── Ichki holat ──────────────────────────────────────────────────────────────
-static float s_noise_floor  = DEFAULT_SOUND_NOISE_FLOOR;
 static float s_level_smooth = 7.0f; // Boshlang'ich holat ~7% (tinch xona)
 
-// ADC amplituda: 100ms audio sample oyna ichida peak-to-peak o'lchash (barcha chastotalarni qamrab oladi)
+// ADC amplituda: 80ms audio sample oyna ichida peak-to-peak o'lchash (hi - lo)
 static int _sound_amplitude() {
     int lo = 4095, hi = 0;
     unsigned long start = millis();
-    while (millis() - start < 100) {
+    while (millis() - start < 80) {
         int v = analogRead(PIN_SOUND_ADC);
         if (v < lo) lo = v;
         if (v > hi) hi = v;
-        delayMicroseconds(50);
+        delayMicroseconds(40);
     }
     if (hi < lo) return 0;
     return hi - lo;
@@ -54,15 +42,8 @@ static void sensor_init() {
     analogSetAttenuation(ADC_11db);
     pinMode(PIN_SOUND_ADC, INPUT);
     for (int i = 0; i < 10; i++) analogRead(PIN_SOUND_ADC);
-
-    // Xonadagi foniy shovqinni o'rtacha 5 ta o'qishda aniqlash
-    long sum = 0;
-    for (int i = 0; i < 5; i++) sum += _sound_amplitude();
-    float avg = (float)sum / 5.0f;
-    s_noise_floor = (avg > 20.0f) ? avg : DEFAULT_SOUND_NOISE_FLOOR;
     s_level_smooth = 7.0f;
-
-    LOG_PRINTF("Ovoz sensori tayyor kalibrovka (GPIO%d) noise=%.0f ref=%.0f\n", PIN_SOUND_ADC, s_noise_floor, SOUND_FIGHT_REF);
+    LOG_PRINTF("Ovoz sensori tayyor kalibrovka (GPIO%d)\n", PIN_SOUND_ADC);
 }
 
 static bool sensor_connect() { return true; }
@@ -78,23 +59,19 @@ static bool sensor_read(SensorData& d) {
 
     int amp = _sound_amplitude();
 
-    // Avtomatik noise floor moslashuvi (asta-sekin tinch vaqtda)
-    if ((float)amp < s_noise_floor * 1.4f && (float)amp > 10.0f) {
-        s_noise_floor = s_noise_floor * 0.97f + (float)amp * 0.03f;
-    }
-
-    float real = max(0.0f, (float)amp - s_noise_floor);
+    // Mikrofon elektr peak-to-peak o'lchov (0-4095 ADC)
+    // Tinch xona baseline = ~30-40 ADC counts
+    // Oddiy ovoz/gapirish = ~150-350 ADC counts
+    // Baland shovqin/baqirish = 600+ ADC counts
     
-    // Tinch holatda ~7% (6-8% oralig'ida), ovoz chiqqanda balandlashadi
-    float target_level;
-    if (real < 15.0f) {
-        target_level = 7.0f; // Tinch xona norma
-    } else {
-        target_level = constrain(7.0f + (real / SOUND_FIGHT_REF) * 100.0f, 7.0f, 100.0f);
-    }
+    float signal = max(0.0f, (float)amp - 30.0f);
+    
+    // Tinch xona norma = ~7%
+    // Har bir 6 ADC signal oshishi = +1% ovoz darajasi
+    float target_level = constrain(7.0f + (signal / 6.0f), 7.0f, 100.0f);
 
-    // EMA silliqlashtirish: o'sish 0.35, tushish 0.10
-    float alpha = (target_level > s_level_smooth) ? 0.35f : 0.10f;
+    // EMA silliqlashtirish: o'sish 0.40 (tez sezish), tushish 0.12 (sekin tushish)
+    float alpha = (target_level > s_level_smooth) ? 0.40f : 0.12f;
     s_level_smooth += (target_level - s_level_smooth) * alpha;
 
     d = {s_level_smooth, true};
