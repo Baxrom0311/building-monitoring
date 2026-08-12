@@ -27,6 +27,7 @@ RESTORE_TABLE_ORDER = [
     "firmware_install_events",
     "ota_batches",
     "ota_batch_devices",
+    "sensors",
     "readings",
     "hourly_utility_stats",
     "alerts",

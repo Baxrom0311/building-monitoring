@@ -19,6 +19,7 @@ from models.entities import (
     MeasurementPoint,
     OTABatchDevice,
     Reading,
+    Sensor,
     WorkerLock,
 )
 from services.websocket import ws_manager
@@ -162,6 +163,7 @@ async def cleanup_expired_test_devices_once() -> dict:
         await session.execute(delete(Alert).where(Alert.device_id.in_(device_ids)))
         await session.execute(delete(Command).where(Command.device_id.in_(device_ids)))
         await session.execute(delete(Reading).where(Reading.device_id.in_(device_ids)))
+        await session.execute(delete(Sensor).where(Sensor.transport_device_id.in_(device_ids)))
         result = await session.execute(
             delete(Device)
             .where(
