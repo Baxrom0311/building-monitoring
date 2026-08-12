@@ -222,12 +222,15 @@ static bool sensor_read(SensorData& d) {
     }
 
     // ── Bosim o'qish (ADS1115, 4-20mA) ──────────────────────────────────────
+    // XATO bo'lsa (tok <3.6mA=uzilgan yoki >21mA=qisqa tutashuv) NAN yuboramiz —
+    // build_json uni tushirib qoldiradi. Aks holda 0.000 bar haqiqiy 0 bar bilan
+    // adashtiriladi va uzilgan datchik "sog'lom" ko'rinadi (audit topilmasi).
     _update_channel(g_ch_bottom);
-    d.pressure_bottom_bar = g_ch_bottom.error ? 0.0f : g_ch_bottom.ema_bar;
+    d.pressure_bottom_bar = g_ch_bottom.error ? NAN : g_ch_bottom.ema_bar;
 
 #ifdef HAVE_PRESSURE_TOP
     _update_channel(g_ch_top);
-    d.pressure_top_bar = g_ch_top.error ? 0.0f : g_ch_top.ema_bar;
+    d.pressure_top_bar = g_ch_top.error ? NAN : g_ch_top.ema_bar;
 #else
     d.pressure_top_bar = 0.0f;
 #endif

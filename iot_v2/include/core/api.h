@@ -121,7 +121,9 @@ static void app_poll_commands(const char* device_id, const char* fw_version = nu
         snprintf(ack, sizeof(ack), "/api/commands/%d/ack", id);
 
         if (strcmp(action, "reboot") == 0) {
-            http_post(ack, "{}");
+            http_post(ack, "{\"ok\":true,\"reboot\":true}");
+            delay(200);        // ACK yuborilib bo'lsin
+            ESP.restart();     // BUG tuzatildi: avval faqat ACK edi, qurilma qayta yuklanmasdi
         } else if (strcmp(action, "set_volume") == 0) {
             // params kelmasa 0.0 bilan hisoblagichni nolga tushirib yubormaslik
             if (cmd["params"]["volume"].is<float>() || cmd["params"]["volume"].is<int>()) {

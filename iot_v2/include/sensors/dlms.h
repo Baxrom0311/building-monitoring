@@ -354,6 +354,7 @@ static bool dlms_get_scaled(const uint8_t obis[6], float* out) {
     hdlc_build(DLMS_SERVER_ADDR, dlms_client, dlms_next_ctrl(), info, 16);
 
     int8_t scaler = 0;
+    bool   scaler_ok = false;   // scaler haqiqatan o'qildimi?
     if (dlms_txrx(3000)) {
         size_t plen; const uint8_t* resp = dlms_find_pdu(&plen);
         // scaler_unit structure: 02 02 <0F scaler> <16 unit>
@@ -361,9 +362,17 @@ static bool dlms_get_scaled(const uint8_t obis[6], float* out) {
         //  resp[6]==0x16 which is the UNIT tag, not the scaler tag, so this
         //  branch never matched and scaler silently stayed 0)
         if (resp && plen >= 10 && resp[0]==0xC4 && resp[3]==0x00 &&
-            resp[4]==0x02 && resp[5]==0x02 && resp[6]==0x0F)
+            resp[4]==0x02 && resp[5]==0x02 && resp[6]==0x0F) {
             scaler = (int8_t)resp[7];
+            scaler_ok = true;
+        }
     }
+
+    // Scaler o'qilmasa (timeout/buzuq javob) — masshtabsiz RAW yubormaymiz!
+    // Aks holda 220V "2200" bo'lib range-validation (>500→NaN) uni jimgina
+    // tashlaydi, yoki mos oraliqda bo'lsa noto'g'ri kattalik yuboriladi (audit).
+    // false qaytaramiz — chaqiruvchi keyingi siklda qayta uriniladi.
+    if (!scaler_ok) return false;
 
     if (scaler == 0) { *out = raw; }
     else if (scaler > 0) {

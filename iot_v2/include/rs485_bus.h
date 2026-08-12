@@ -71,7 +71,13 @@ static uint16_t rs485_recv_frame(uint8_t* buf, uint16_t maxLen, uint32_t timeout
     uint32_t t0 = millis();
     while (Serial1.available() < 2) {
         wdt_feed();
-        if (millis() - t0 >= timeout_ms) return 0;
+        if (millis() - t0 >= timeout_ms) {
+            // Timeout: 1 ta yolg'iz bayt qolgan bo'lsa tozalaymiz — aks holda
+            // keyingi chaqiruvда u len_lo sifatida o'qilib, freym hizalanишни
+            // buzadi (audit: discover'да stray-byte desync).
+            while (Serial1.available()) Serial1.read();
+            return 0;
+        }
         yield();
     }
     uint16_t len = (uint16_t)Serial1.read();

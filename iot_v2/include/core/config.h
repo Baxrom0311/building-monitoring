@@ -43,9 +43,22 @@ static bool _nvs_put_ulong(const char* key, uint32_t val) {
     return true;
 }
 
-// NVS sog'lig'ini tekshirish (startup da)
+// NVS "app" namespace'ini birinchi yuklashда YARATADI. Aks holda keyingi
+// read-only begin("app", true) "nvs_open failed: NOT_FOUND" xatosini beradi
+// (namespace hali mavjud emas). Bir marta read-write ochib yopamiz — yaratiladi.
+static void nvs_init() {
+    if (g_prefs.begin("app", false)) {   // read-write → yo'q bo'lsa yaratadi
+        g_prefs.end();
+    }
+}
+
+// NVS sog'lig'ini tekshirish (startup da). nvs_init() dan KEYIN chaqiriladi,
+// shuning uchun namespace mavjud va read-only ochilish xatosi bermaydi.
 static void nvs_health_check() {
-    g_prefs.begin("app", true);  // read-only
+    if (!g_prefs.begin("app", true)) {   // read-only
+        LOG_PRINTLN("NVS: namespace hali bo'sh (birinchi yuklash)");
+        return;
+    }
     size_t free_entries = g_prefs.freeEntries();
     g_prefs.end();
     LOG_PRINTF("NVS: %d ta bo'sh yozuv\n", (int)free_entries);
@@ -76,14 +89,20 @@ static void cfg_load() {
     g_cfg.read_interval_ms = 30000UL;
 #endif
 
-    g_prefs.begin("app", true);
-    g_prefs.getString("srv", g_cfg.server_url,          CFG_SERVER_LEN);
-    g_prefs.getString("tok", g_cfg.device_token,        CFG_TOKEN_LEN);
-    g_prefs.getString("prv", g_cfg.provisioning_token,  CFG_TOKEN_LEN);
-    g_prefs.getString("msr", g_cfg.meter_serial,        CFG_SERIAL_LEN);
-    g_cfg.test_mode = g_prefs.getBool("test", g_cfg.test_mode);
-    g_cfg.read_interval_ms = g_prefs.getULong("rint", g_cfg.read_interval_ms);
-    g_prefs.end();
+    // Namespace mavjudligini kafolatlaymiz (yo'q bo'lsa yaratadi) — read-only
+    // ochilish xatosini oldini oladi.
+    nvs_init();
+    if (g_prefs.begin("app", true)) {
+        // isKey() bilan tekshiramiz — yo'q kalit uchun ESP-IDF "nvs_get len fail"
+        // xatolarini log'ga chiqarmaydi (default qiymat baribir saqlanadi).
+        if (g_prefs.isKey("srv"))  g_prefs.getString("srv", g_cfg.server_url,         CFG_SERVER_LEN);
+        if (g_prefs.isKey("tok"))  g_prefs.getString("tok", g_cfg.device_token,       CFG_TOKEN_LEN);
+        if (g_prefs.isKey("prv"))  g_prefs.getString("prv", g_cfg.provisioning_token, CFG_TOKEN_LEN);
+        if (g_prefs.isKey("msr"))  g_prefs.getString("msr", g_cfg.meter_serial,       CFG_SERIAL_LEN);
+        if (g_prefs.isKey("test")) g_cfg.test_mode = g_prefs.getBool("test", g_cfg.test_mode);
+        if (g_prefs.isKey("rint")) g_cfg.read_interval_ms = g_prefs.getULong("rint", g_cfg.read_interval_ms);
+        g_prefs.end();
+    }
 
     if (strncmp(g_cfg.server_url, "http", 4) != 0) {
         char tmp[CFG_SERVER_LEN];

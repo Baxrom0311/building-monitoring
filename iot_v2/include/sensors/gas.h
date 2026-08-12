@@ -233,8 +233,10 @@ static bool sensor_read(SensorData& d) {
     }
 
     // ── Bosim o'qish (ADS1115, 4-20mA) ──────────────────────────────────────
+    // XATO bo'lsa NAN — build_json tushirib qoldiradi (uzilgan datchik 0 bar
+    // bo'lib "sog'lom" ko'rinmasin; audit topilmasi).
     _update_channel(g_ch_pressure);
-    d.pressure_bar = g_ch_pressure.error ? 0.0f : g_ch_pressure.ema_bar;
+    d.pressure_bar = g_ch_pressure.error ? NAN : g_ch_pressure.ema_bar;
 
     // ── Impuls — oqim tezligi (m3/h) ─────────────────────────────────────────
     unsigned long current_pulses = g_gas_pulse_count;

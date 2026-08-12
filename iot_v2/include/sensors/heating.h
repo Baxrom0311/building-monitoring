@@ -47,6 +47,10 @@ struct SensorData {
 static void sensor_init() {
     g_ds_in.begin();
     g_ds_out.begin();
+    // 10-bit rezolyutsiya (~187ms/o'qish) — 12-bit (~750ms) o'rniga. Qozonxona
+    // harorati uchun 0.25C aniqlik yetarli, loop() 4x kamroq bloklanadi (audit).
+    g_ds_in.setResolution(10);
+    g_ds_out.setResolution(10);
     g_ds_in_ok  = g_ds_in.getDeviceCount()  > 0;
     g_ds_out_ok = g_ds_out.getDeviceCount() > 0;
 
@@ -74,13 +78,15 @@ static bool sensor_read(SensorData& d) {
     d.temperature_in_c  = NAN;
     d.temperature_out_c = NAN;
 
+    // Ikkala shina o'zgartirishini AVVAL boshlaymiz (parallel kechadi), so'ng
+    // o'qiymiz — ketma-ket kutish o'rniga umumiy vaqt ~2x qisqaradi (audit).
+    if (g_ds_in_ok)  g_ds_in.requestTemperatures();
+    if (g_ds_out_ok) g_ds_out.requestTemperatures();
     if (g_ds_in_ok) {
-        g_ds_in.requestTemperatures();
         float t = g_ds_in.getTempCByIndex(0);
         if (t != DEVICE_DISCONNECTED_C) d.temperature_in_c = t;
     }
     if (g_ds_out_ok) {
-        g_ds_out.requestTemperatures();
         float t = g_ds_out.getTempCByIndex(0);
         if (t != DEVICE_DISCONNECTED_C) d.temperature_out_c = t;
     }
