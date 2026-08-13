@@ -54,12 +54,23 @@ static void _lcd_hard_reinit() {
 
 static void lcd_init() {
     Wire.begin(LCD_SDA, LCD_SCL);
-    g_lcd.init();
-    g_lcd.backlight();
-    g_lcd.clear();
-    g_lcd_last_refresh = millis();
-    g_lcd_ok = _lcd_i2c_alive();
+    // LCD backpack (PCF8574) ta'minoti ESP32'dan kech barqarorlashishi mumkin
+    // (kondensator zaryadlanishi, I2C shinasi hali tayyor emas) — bitta
+    // darhol tekshiruv muvaffaqiyatsiz bo'lsa, g_lcd_ok butun boot davomida
+    // false qolib ketardi (lcd_row()/lcd_refresh_if_needed() bundan keyin
+    // hech qachon qayta urinib ko'rmaydi — ekran "o'chirilgan" bo'lib qolar
+    // edi, garchi LCD jismonan butunlay sog' bo'lsa ham). Bir necha marta
+    // qisqa kutish bilan qayta tekshiramiz.
+    for (int i = 0; i < 5; i++) {
+        g_lcd_ok = _lcd_i2c_alive();
+        if (g_lcd_ok) break;
+        unsigned long t = millis(); while (millis() - t < 100) yield();
+    }
     if (g_lcd_ok) {
+        g_lcd.init();
+        g_lcd.backlight();
+        g_lcd.clear();
+        g_lcd_last_refresh = millis();
         LOG_PRINTF("  LCD 16x2 I2C (0x%02X, SDA=%d, SCL=%d): OK\n",
                    LCD_ADDR, LCD_SDA, LCD_SCL);
     } else {

@@ -147,11 +147,18 @@ static void elec_lcd_init() {
     if (g_elec_lcd_ok) return;   // allaqachon init qilingan
     Wire.begin(ELEC_LCD_SDA, ELEC_LCD_SCL);
     Wire.setTimeOut(50);  // ms — SDA/SCL qotib qolsa ham cheksiz osilib qolmasin
-    unsigned long t = millis(); while (millis() - t < 50) yield();
     uint8_t lcd_addr = 0;
-    for (uint8_t a : {0x27u, 0x3Fu, 0x20u, 0x38u}) {
-        Wire.beginTransmission(a);
-        if (Wire.endTransmission() == 0) { lcd_addr = a; break; }
+    // LCD backpack ta'minoti ESP32'dan kech barqarorlashishi mumkin — bir
+    // marta skanerlash muvaffaqiyatsiz bo'lsa, g_elec_lcd_ok butun boot
+    // davomida false qolib, ekran "o'chirilgan" bo'lib qolar edi (LCD
+    // jismonan sog' bo'lsa ham). Bir necha marta qisqa kutish bilan qayta
+    // skanerlaymiz.
+    for (int attempt = 0; attempt < 5 && !lcd_addr; attempt++) {
+        unsigned long t = millis(); while (millis() - t < 100) yield();
+        for (uint8_t a : {0x27u, 0x3Fu, 0x20u, 0x38u}) {
+            Wire.beginTransmission(a);
+            if (Wire.endTransmission() == 0) { lcd_addr = a; break; }
+        }
     }
     if (lcd_addr) {
         g_elec_lcd_addr = lcd_addr;
