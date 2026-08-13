@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Ban, Pencil, Plus, Search, ToggleLeft, ToggleRight, Users } from 'lucide-react'
+import { PageHeader } from '@/components/PageHeader'
 import { useAuth } from '@/contexts/AuthContext'
 import { useUsersList, qk } from '@/hooks/queries'
 import apiClient from '@/lib/api'
@@ -223,24 +224,19 @@ export default function UsersPage() {
 
   return (
     <div className="space-y-6">
-      {/* ── Intro row ── */}
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-2">
-          <Users className="h-4 w-4 text-muted-foreground" />
-          <div>
-            <h1 className="text-2xl font-semibold">Foydalanuvchilar</h1>
-            {total > 0 && !isLoading && (
-              <p className="text-sm text-muted-foreground">Jami {total} ta foydalanuvchi</p>
-            )}
-          </div>
-        </div>
-        {isAdmin && (
-          <Button onClick={() => { setCreateError(null); setIsCreateOpen(true) }}>
-            <Plus className="h-4 w-4" />
-            Yangi foydalanuvchi
-          </Button>
-        )}
-      </div>
+      <PageHeader
+        title="Foydalanuvchilar"
+        icon={Users}
+        subtitle={total > 0 && !isLoading ? `Jami ${total} ta foydalanuvchi` : undefined}
+        actions={
+          isAdmin ? (
+            <Button onClick={() => { setCreateError(null); setIsCreateOpen(true) }}>
+              <Plus className="h-4 w-4" />
+              Yangi foydalanuvchi
+            </Button>
+          ) : undefined
+        }
+      />
 
       {/* ── Filter toolbar ── */}
       <Card>

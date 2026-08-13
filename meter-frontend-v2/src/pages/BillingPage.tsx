@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Download, FileSpreadsheet, Loader2, Search, UploadCloud } from 'lucide-react'
+import { PageHeader } from '@/components/PageHeader'
 import { useAuth } from '@/contexts/AuthContext'
 import apiClient from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/errors'
@@ -346,19 +347,15 @@ export default function BillingPage() {
 
   return (
     <div className="space-y-6">
-      {/* Sarlavha */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">
-            {fixedUtility ? `${UTILITY_LABELS[fixedUtility]} hisobotlari` : 'Kommunal hisobotlar'}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            {fixedUtility
-              ? `${UTILITY_LABELS[fixedUtility]} idorasi Excel hisobotlari — domlar kesimida sarflar tahlili.`
-              : "Suv, gaz va elektr idoralari Excel hisobotlari — domlar kesimida sarflar tahlili."}
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        icon={FileSpreadsheet}
+        title={fixedUtility ? `${UTILITY_LABELS[fixedUtility]} hisobotlari` : 'Kommunal hisobotlar'}
+        subtitle={
+          fixedUtility
+            ? `${UTILITY_LABELS[fixedUtility]} idorasi Excel hisobotlari — domlar kesimida sarflar tahlili.`
+            : 'Suv, gaz va elektr idoralari Excel hisobotlari — domlar kesimida sarflar tahlili.'
+        }
+      />
 
       {/* Filtrlar */}
       <Card>
