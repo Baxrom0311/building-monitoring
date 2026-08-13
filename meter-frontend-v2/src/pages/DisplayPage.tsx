@@ -121,10 +121,13 @@ function voltageColor(v: number | null): string {
   return '#FB7185'
 }
 
+// Chegaralar SensorStatus.tsx dagi getWaterStatus() bilan BIR XIL bo'lishi
+// shart (ikkalasi ham WATER_NOMINAL=2.25 dan boshlanadi) — aks holda bitta
+// qiymat kartada ikki xil holat (rang va matn) sifatida ko'rsatiladi.
 function getWaterColor(val: number | null): { color: string; status: string } {
   if (val == null) return { color: '#94a3b8', status: 'Nomalum' }
-  if (val >= 2.3 && val <= 3.2) return { color: '#22C55E', status: 'Normal' }
-  if (val >= 1.5 && val < 2.3) return { color: '#FBBF24', status: 'Past bosim' }
+  if (val >= WATER_NOMINAL && val <= 3.2) return { color: '#22C55E', status: 'Normal' }
+  if (val >= 1.5 && val < WATER_NOMINAL) return { color: '#FBBF24', status: 'Past bosim' }
   if (val >= 0.8 && val < 1.5) return { color: '#F97316', status: 'Juda past' }
   return { color: '#FB7185', status: 'Xavfli' }
 }
@@ -218,7 +221,7 @@ const CHARTS = [
   {
     key: 'heating' as const,
     dataKey: 'avg_temperature_in_c' as keyof HourlyUtilityStat,
-    label: 'Qozonxona harorati',
+    label: 'Issiqlik',
     unit: '°C',
     icon: Thermometer,
     color: '#06B6D4',

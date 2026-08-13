@@ -23,11 +23,14 @@ export function getElectricityStatus(voltage: number | null): SensorStatusInfo {
 }
 
 // ── Suv bosimi (bar) ────────────────────────────────────────────────────────
+// Me'yor 2.25 bar (DisplayPage.tsx WATER_NOMINAL bilan bir xil — shu chegaralar
+// getWaterColor() bilan mos bo'lishi shart, aks holda bir xil qiymat ikki xil
+// holat (masalan "Normal" va "Past bosim") ko'rsatishi mumkin).
 export function getWaterStatus(pressure: number | null): SensorStatusInfo {
   if (pressure == null) return unknownStatus()
-  if (pressure >= 2.5 && pressure <= 4.0) return { level: 'alo', label: 'Normal', color: '#34D399', bgColor: 'rgba(52,211,153,0.15)', borderColor: 'rgba(52,211,153,0.4)' }
-  if (pressure >= 2.0 && pressure < 2.5) return { level: 'norma', label: 'Past bosim', color: '#22D3EE', bgColor: 'rgba(34,211,238,0.15)', borderColor: 'rgba(34,211,238,0.4)' }
-  if (pressure >= 1.0 && pressure < 2.0) return { level: 'orta', label: 'Juda past', color: '#FBBF24', bgColor: 'rgba(251,191,36,0.15)', borderColor: 'rgba(251,191,36,0.4)' }
+  if (pressure >= 2.25 && pressure <= 3.2) return { level: 'alo', label: 'Normal', color: '#34D399', bgColor: 'rgba(52,211,153,0.15)', borderColor: 'rgba(52,211,153,0.4)' }
+  if (pressure >= 1.5 && pressure < 2.25) return { level: 'norma', label: 'Past bosim', color: '#22D3EE', bgColor: 'rgba(34,211,238,0.15)', borderColor: 'rgba(34,211,238,0.4)' }
+  if (pressure >= 0.8 && pressure < 1.5) return { level: 'orta', label: 'Juda past', color: '#FBBF24', bgColor: 'rgba(251,191,36,0.15)', borderColor: 'rgba(251,191,36,0.4)' }
   return { level: 'yomon', label: 'Xavfli!', color: '#FB7185', bgColor: 'rgba(251,113,133,0.2)', borderColor: 'rgba(251,113,133,0.5)' }
 }
 
