@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { formatDistanceToNow } from 'date-fns'
-import { Check, Plus, Search, ShieldAlert, Trash2 } from 'lucide-react'
+import { Bell, Check, Plus, Search, ShieldAlert, Trash2 } from 'lucide-react'
+import { PageHeader } from '@/components/PageHeader'
 import { useAlertsList, useAlertRules, useBuildings, qk } from '@/hooks/queries'
 import { useAuth } from '@/contexts/AuthContext'
 import { translations } from '@/i18n/translations'
@@ -296,28 +297,30 @@ export default function AlertsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Sarlavha */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold">Ogohlantirishlar</h1>
-        <div className="flex items-center gap-2">
-          {activeTab === 'history' && isAdmin && (
-            <Button
-              variant="destructive"
-              disabled={clearing || alertsTotal === 0}
-              onClick={() => setConfirmAction({ type: 'clear-all' })}
-            >
-              <Trash2 className="h-4 w-4" />
-              Barchasini tozalash
-            </Button>
-          )}
-          {activeTab === 'rules' && isAdmin && (
-            <Button onClick={() => setIsRuleDialogOpen(true)}>
-              <Plus className="h-4 w-4" />
-              Yangi qoida qo'shish
-            </Button>
-          )}
-        </div>
-      </div>
+      <PageHeader
+        title="Ogohlantirishlar"
+        icon={Bell}
+        actions={
+          <>
+            {activeTab === 'history' && isAdmin && (
+              <Button
+                variant="destructive"
+                disabled={clearing || alertsTotal === 0}
+                onClick={() => setConfirmAction({ type: 'clear-all' })}
+              >
+                <Trash2 className="h-4 w-4" />
+                Barchasini tozalash
+              </Button>
+            )}
+            {activeTab === 'rules' && isAdmin && (
+              <Button onClick={() => setIsRuleDialogOpen(true)}>
+                <Plus className="h-4 w-4" />
+                Yangi qoida qo'shish
+              </Button>
+            )}
+          </>
+        }
+      />
 
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'history' | 'rules')}>
         <TabsList>

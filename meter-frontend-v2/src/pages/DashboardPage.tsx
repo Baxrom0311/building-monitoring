@@ -9,6 +9,7 @@ import {
   Droplets,
   Flame,
   Home,
+  LayoutDashboard,
   Sprout,
   TrendingUp,
   Volume2,
@@ -20,6 +21,7 @@ import {
 import { useAlerts, useDevices, useHourlyStats, useSummary } from '@/hooks/queries'
 import type { HourlyUtilityStat } from '@/types/api'
 import { KPICard } from '@/components/KPICard'
+import { PageHeader } from '@/components/PageHeader'
 import { AnimatedNumber } from '@/components/ui/AnimatedNumber'
 import { StatusPulse } from '@/components/ui/StatusPulse'
 import { MetricBarChart } from '@/components/charts/MetricBarChart'
@@ -313,29 +315,28 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6">
       {/* Sahifa kirish qatori */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Boshqaruv paneli</h1>
-          <p className="text-sm text-muted-foreground">
-            {new Date().toLocaleDateString('uz-UZ', {
-              weekday: 'long',
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric',
-            })}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Badge variant="outline" className="gap-1.5 py-1 px-2.5">
-            <StatusPulse status={onlinePercent > 0} size="sm" />
-            <AnimatedNumber value={onlinePercent} suffix="% online" />
-          </Badge>
-          <Badge variant="outline" className="gap-1.5 py-1 px-2.5">
-            <StatusPulse status={summary?.alerts_active ? 'warning' : 'offline'} size="sm" />
-            <AnimatedNumber value={summary?.alerts_active || 0} suffix=" alert" />
-          </Badge>
-        </div>
-      </div>
+      <PageHeader
+        title="Boshqaruv paneli"
+        icon={LayoutDashboard}
+        subtitle={new Date().toLocaleDateString('uz-UZ', {
+          weekday: 'long',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        })}
+        actions={
+          <>
+            <Badge variant="outline" className="gap-1.5 py-1 px-2.5">
+              <StatusPulse status={onlinePercent > 0} size="sm" />
+              <AnimatedNumber value={onlinePercent} suffix="% onlayn" />
+            </Badge>
+            <Badge variant="outline" className="gap-1.5 py-1 px-2.5">
+              <StatusPulse status={summary?.alerts_active ? 'warning' : 'offline'} size="sm" />
+              <AnimatedNumber value={summary?.alerts_active || 0} suffix=" ogohlantirish" />
+            </Badge>
+          </>
+        }
+      />
 
       {/* KPI kartalar */}
       {summaryLoading ? (

@@ -16,6 +16,7 @@ import {
   Settings2,
   Table2,
 } from 'lucide-react'
+import { PageHeader } from '@/components/PageHeader'
 import { useBuildings, qk } from '@/hooks/queries'
 import { useAuth } from '@/contexts/AuthContext'
 import { useTheme } from '@/contexts/ThemeContext'
@@ -368,25 +369,25 @@ export default function BuildingsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Sarlavha */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-semibold">Binolar</h1>
-          {buildings && <Badge variant="secondary">{buildings.length}</Badge>}
-        </div>
-        {isAdmin && (
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={handleImportExternal} disabled={importing}>
-              <Download className="h-4 w-4" />
-              {importing ? 'Import...' : 'Import'}
-            </Button>
-            <Button onClick={() => setIsCreateOpen(true)}>
-              <Plus className="h-4 w-4" />
-              Yangi bino qo'shish
-            </Button>
-          </div>
-        )}
-      </div>
+      <PageHeader
+        title="Binolar"
+        icon={Building2}
+        subtitle={buildings ? `Jami ${buildings.length} ta bino` : undefined}
+        actions={
+          isAdmin ? (
+            <>
+              <Button variant="outline" onClick={handleImportExternal} disabled={importing}>
+                <Download className="h-4 w-4" />
+                {importing ? 'Import...' : 'Import'}
+              </Button>
+              <Button onClick={() => setIsCreateOpen(true)}>
+                <Plus className="h-4 w-4" />
+                Yangi bino qo'shish
+              </Button>
+            </>
+          ) : undefined
+        }
+      />
 
       {/* Filtr paneli */}
       <Card>

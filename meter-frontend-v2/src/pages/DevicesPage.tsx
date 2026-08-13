@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Columns3, Download, Eye, Link2, Plus, Search } from 'lucide-react'
+import { Columns3, Cpu, Download, Eye, Link2, Plus, Search } from 'lucide-react'
 import { useDevicesList, useBuildings, qk } from '@/hooks/queries'
 import { useAuth } from '@/contexts/AuthContext'
 import apiClient from '@/lib/api'
@@ -14,7 +14,8 @@ import type { Device } from '@/types/api'
 import { EmptyBlock, ErrorBlock, TableSkeleton } from '@/components/StateBlock'
 import { BuildingCombobox } from '@/components/BuildingCombobox'
 import { Pagination } from '@/components/Pagination'
-import { StatusPulse } from '@/components/ui/StatusPulse'
+import { PageHeader } from '@/components/PageHeader'
+import { OnlineStatusBadge } from '@/components/StatusBadge'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -78,20 +79,7 @@ type StatusFilter = 'all' | 'online' | 'offline'
 type SortBy = 'name' | 'type' | 'status' | 'last_seen'
 
 function OnlineBadge({ online }: { online: boolean | null }) {
-  return (
-    <Badge
-      variant="outline"
-      className={cn(
-        'gap-1.5 py-0.5 px-2 font-medium',
-        online
-          ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-500'
-          : 'border-muted bg-muted/30 text-muted-foreground',
-      )}
-    >
-      <StatusPulse status={Boolean(online)} size="sm" />
-      <span>{online ? 'Online' : 'Offline'}</span>
-    </Badge>
-  )
+  return <OnlineStatusBadge online={Boolean(online)} />
 }
 
 export default function DevicesPage() {
@@ -228,23 +216,19 @@ export default function DevicesPage() {
 
   return (
     <div className="space-y-6">
-      {/* ── Sahifa sarlavhasi ── */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Qurilmalar</h1>
-          {total > 0 && !isLoading && (
-            <p className="text-sm text-muted-foreground">
-              Jami <span className="font-medium text-foreground">{total}</span> ta qurilma
-            </p>
-          )}
-        </div>
-        {isAdmin && (
-          <Button onClick={() => { setAddError(null); setIsAddOpen(true) }}>
-            <Plus className="h-4 w-4" />
-            Qurilma qo'shish
-          </Button>
-        )}
-      </div>
+      <PageHeader
+        title="Qurilmalar"
+        icon={Cpu}
+        subtitle={total > 0 && !isLoading ? `Jami ${total} ta qurilma` : undefined}
+        actions={
+          isAdmin ? (
+            <Button onClick={() => { setAddError(null); setIsAddOpen(true) }}>
+              <Plus className="h-4 w-4" />
+              Qurilma qo'shish
+            </Button>
+          ) : undefined
+        }
+      />
 
       {/* ── Filtrlar ── */}
       <Card>

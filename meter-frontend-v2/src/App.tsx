@@ -36,7 +36,13 @@ const queryClient = new QueryClient({
   queryCache: new QueryCache({
     onError: (error) => {
       const status = getApiErrorStatus(error)
-      if (status === 401 || status === 403 || (status && status >= 500)) return
+      // 401/403 — auth qatlami redirect qiladi, toast shart emas
+      if (status === 401 || status === 403) return
+      // 5xx — operator KO'RISHI kerak (ilgari jim yashirilib, Dashboard nol ko'rsatardi)
+      if (status && status >= 500) {
+        notify({ type: 'error', title: 'Server xatosi', message: 'Server javob bermayapti. Birozdan soʻng qayta urinib koʻring.' })
+        return
+      }
       notify({ type: 'error', title: 'Maʼlumotlarni yuklashda xatolik', message: getApiErrorMessage(error) })
     },
   }),
