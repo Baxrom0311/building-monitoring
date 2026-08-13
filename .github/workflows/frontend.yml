@@ -70,8 +70,17 @@ jobs:
 
       - name: Rsync dist to server
         run: |
-          rsync -az --delete \
-            --rsync-path=/usr/bin/rsync \
-            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
-            dist/ \
-            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/root/meter_backend/frontend/
+          RSYNC="rsync -az --delete --rsync-path=/usr/bin/rsync -e \"ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no\""
+          # backend/frontend — kept for anything reading STATIC_DIR as a fallback
+          eval $RSYNC dist/ ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/root/meter_backend/frontend/
+          # /var/www/sss.boos.uz — the ACTUAL nginx docroot for ss.boos.uz (see
+          # deploy/nginx/ss.boos.uz.conf's `root` directive). This is the path
+          # that must be current for the live site to actually update — the
+          # backend/frontend rsync above does NOT get served by nginx at all.
+          eval $RSYNC dist/ ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/var/www/sss.boos.uz/
+
+      - name: Fix ownership on live docroot
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
+            "chown -R www-data:www-data /var/www/sss.boos.uz"
