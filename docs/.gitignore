@@ -1,0 +1,4 @@
+build/
+.venv/
+figures/
+__pycache__/
