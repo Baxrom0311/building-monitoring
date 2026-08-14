@@ -59,6 +59,8 @@ async def public_display(building_id: Optional[int] = None):
                     "value_out": r.temperature_out_c,
                     "ts": r.ts,
                 }
+            elif r.utility_type == "air_quality":
+                latest["air_quality"] = {"value": r.air_quality, "ts": r.ts}
 
         # Agar binoda 1 ta dan ko'p ovoz datchigi (masalan 3 ta ovoz sensori) bo'lsa, ularning o'rtachasini olish
         sound_avg = await reading_repo.latest_sound_average(building_id=building_id)
@@ -86,6 +88,9 @@ async def public_display(building_id: Optional[int] = None):
         heating_avg = await reading_repo.latest_heating_average(building_id=building_id)
         if heating_avg:
             latest["heating"] = heating_avg
+        air_quality_avg = await reading_repo.latest_air_quality_average(building_id=building_id)
+        if air_quality_avg:
+            latest["air_quality"] = air_quality_avg
     buildings = [{"id": b.id, "name": b.name} for b in all_buildings]
 
     return {
@@ -98,6 +103,7 @@ async def public_display(building_id: Optional[int] = None):
         "soil": await stats("soil"),
         "sound": await stats("sound"),
         "heating": await stats("heating"),
+        "air_quality": await stats("air_quality"),
     }
 
 

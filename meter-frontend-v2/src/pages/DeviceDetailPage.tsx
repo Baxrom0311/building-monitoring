@@ -84,6 +84,7 @@ const UTILITY_LABELS: Record<string, string> = {
   gas: 'Gaz',
   soil: "Yerto'la namligi",
   air: 'Havo sifati',
+  air_quality: 'Havo sifati',
   sound: 'Ovoz',
   heating: 'Issiqlik',
 }
@@ -94,6 +95,7 @@ const UTILITY_ICONS: Record<string, LucideIcon> = {
   gas: Flame,
   soil: Sprout,
   air: Wind,
+  air_quality: Wind,
   sound: Volume2,
   heating: Thermometer,
 }
@@ -112,6 +114,7 @@ function formatSensorValue(s: DeviceSensor): string {
     case 'soil':
       return r.humidity != null ? `${r.humidity.toFixed(1)} %` : '—'
     case 'air':
+    case 'air_quality':
       return r.air_quality != null ? `${r.air_quality.toFixed(1)} %` : '—'
     case 'sound':
       return r.level != null ? `${r.level.toFixed(1)} %` : '—'
@@ -752,7 +755,9 @@ export default function DeviceDetailPage() {
                                           ? [{ key: 'airQuality', name: 'Havo sifati (%)', color: '#10B981' }]
                                           : []),
                                       ]
-                                    : [{ key: 'power', name: 'Power (W)', color: '#EAB308' }]
+                                    : device.utility_type === 'air_quality'
+                                      ? [{ key: 'airQuality', name: 'Havo sifati (%)', color: '#10B981' }]
+                                      : [{ key: 'power', name: 'Power (W)', color: '#EAB308' }]
                       }
                 />
               </CardContent>
@@ -836,6 +841,10 @@ export default function DeviceDetailPage() {
                           <TableHead>Chiqish (°C)</TableHead>
                           <TableHead>Farq ΔT (°C)</TableHead>
                         </>
+                      ) : activeJournalUtility === 'air_quality' ? (
+                        <>
+                          <TableHead>Havo sifati (%)</TableHead>
+                        </>
                       ) : (
                         <>
                           <TableHead>Bosim (bar)</TableHead>
@@ -895,6 +904,11 @@ export default function DeviceDetailPage() {
                                     {r.volume_m3 != null ? ` · Hajm: ${r.volume_m3} m³` : ''}
                                   </span>
                                 )}
+                                {ut === 'air_quality' && (
+                                  <span>
+                                    Havo: {r.air_quality !== null && r.air_quality !== undefined ? `${r.air_quality.toFixed(1)}%` : '—'}
+                                  </span>
+                                )}
                               </TableCell>
                             </>
                           ) : activeJournalUtility === 'electricity' ? (
@@ -941,6 +955,12 @@ export default function DeviceDetailPage() {
                                 {r.temperature_in_c != null && r.temperature_out_c != null
                                   ? `${Math.abs(r.temperature_in_c - r.temperature_out_c).toFixed(1)}`
                                   : '—'}
+                              </TableCell>
+                            </>
+                          ) : activeJournalUtility === 'air_quality' ? (
+                            <>
+                              <TableCell className="font-mono">
+                                {r.air_quality !== null && r.air_quality !== undefined ? `${r.air_quality.toFixed(1)}%` : '—'}
                               </TableCell>
                             </>
                           ) : (

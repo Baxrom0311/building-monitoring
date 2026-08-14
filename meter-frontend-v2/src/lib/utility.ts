@@ -8,6 +8,7 @@ export type UtilityType =
   | 'gas'
   | 'soil'
   | 'air'
+  | 'air_quality'
   | 'sound'
   | 'heating'
 
@@ -17,6 +18,7 @@ export const UTILITY_COLORS: Record<string, string> = {
   gas: '#F97316', // to'q sariq
   soil: '#22C55E', // yashil
   air: '#10B981', // zumrad
+  air_quality: '#10B981', // zumrad
   sound: '#A855F7', // binafsha
   heating: '#F43F5E', // qizil-pushti
 }
@@ -27,6 +29,7 @@ export const UTILITY_LABELS: Record<string, string> = {
   gas: 'Gaz',
   soil: "Yerto'la namligi",
   air: 'Havo sifati',
+  air_quality: 'Havo sifati',
   sound: 'Ovoz',
   heating: 'Issiqlik',
 }
@@ -37,6 +40,7 @@ export const UTILITY_UNITS: Record<string, string> = {
   gas: 'bar',
   soil: '%',
   air: '%',
+  air_quality: '%',
   sound: '%',
   heating: '°C',
 }

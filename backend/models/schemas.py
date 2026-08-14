@@ -12,6 +12,7 @@ class UtilityType(StrEnum):
     sound = "sound"
     heating = "heating"
     gateway = "gateway"
+    air_quality = "air_quality"
 
 
 class MeasurementRole(StrEnum):

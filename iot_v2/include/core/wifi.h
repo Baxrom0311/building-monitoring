@@ -4,8 +4,8 @@
  *
  * Falsafa: portal sozlanmagan qurilmada (yoki BOOT tugma bilan) DARHOL ochiladi.
  * Router vaqtincha o'chiq bo'lsa qurilma qisqa muddat (< WIFI_STALE_RECONFIG_MS,
- * 10 daqiqa) portalga kirmaydi — ≤16s urinib, ishga tushadi va fonda har 15s
- * qayta ulanadi. Lekin saqlangan creds shuncha vaqt (10 daqiqa) ishlamasa
+ * 3 daqiqa) portalga kirmaydi — ≤16s urinib, ishga tushadi va fonda har 15s
+ * qayta ulanadi. Lekin saqlangan creds shuncha vaqt (3 daqiqa) ishlamasa
  * (masalan tarmoq eskirgan/o'zgargan), wifi_loop() portalni AVTOMATIK qayta
  * ochadi — BOOT tugmasiz ham, cheksiz sikl bilan (portal -> 1 urinish ->
  * hali bo'lmasa yana portal...).
@@ -35,7 +35,7 @@
 // va chaqiruvchi (main.cpp) portalni qayta ochadi — keyin yana shu muddat
 // kutib, hali ham bo'lmasa yana ochiladi (cheksiz sikl, foydalanuvchi so'ragan).
 #ifndef WIFI_STALE_RECONFIG_MS
-  #define WIFI_STALE_RECONFIG_MS (10UL * 60 * 1000)   // 10 daqiqa
+  #define WIFI_STALE_RECONFIG_MS (3UL * 60 * 1000)   // 3 daqiqa
 #endif
 // Sozlash portali qancha ochiq turadi (soniya). 0 = doim ochiq (sozlanmaguncha).
 // Bridge/collector uchun 0 qilinadi (build flag bilan) — WiFi bo'lmasa baribir
@@ -181,7 +181,7 @@ static void wifi_portal(const char* ap_name, const char* ap_pass,
     // faqat QISQA (< WIFI_STALE_RECONFIG_MS) router uzilishlarida muammo
     // emas — sozlangan qurilma bunday holda portalga umuman kirmaydi
     // (yuqoridagi main.cpp'dagi ajratish, audit FIX A), fonda wifi_loop()
-    // 15s'da qayta ulanadi. Faqat uzoq (10 daqiqa+) uzilishda portal
+    // 15s'da qayta ulanadi. Faqat uzoq (3 daqiqa+) uzilishda portal
     // ochiladi — bu holat texnik xodim jismonan portalni to'ldirayotgan
     // paytga to'g'ri keladi, shuning uchun fonda STA urinishi shart emas.
     wm.setSaveConfigCallback([&]() {

@@ -233,6 +233,9 @@ class AnalyticsRepository(BaseRepository[HourlyUtilityStats]):
             ("avg_temperature_in_c", Reading.temperature_in_c, 1),
             ("avg_temperature_out_c", Reading.temperature_out_c, 1),
         ],
+        "air_quality": [
+            ("avg_air_quality", Reading.air_quality, 1),
+        ],
     }
 
     async def bucketed_utility_stats(

@@ -186,6 +186,17 @@ class ReadingRepository(BaseRepository[Reading]):
             building_id, max_age_seconds, round_digits=1,
         )
 
+    async def latest_air_quality_average(self, building_id: int | None = None, max_age_seconds: int = 7200) -> dict | None:
+        """Bino ichidagi barcha aktiv havo sifati (MQ135) datchiklarining oxirgi
+        o'qishlari bo'yicha O'RTACHA qiymatni hisoblab qaytaradi.
+
+        utility_type="air_quality" qatorlari server tomonida soil/sound
+        payload'laridan ajratilib (split) yoziladi (services/readings.py) —
+        bu yerda ular mustaqil kommunal tur sifatida o'rtachalanadi."""
+        return await self._latest_average(
+            "air_quality", {"value": Reading.air_quality}, building_id, max_age_seconds, round_digits=1,
+        )
+
     async def latest_utility_average(
         self, utility_type: str, building_id: int | None = None, max_age_seconds: int = 7200
     ) -> dict | None:
@@ -205,6 +216,8 @@ class ReadingRepository(BaseRepository[Reading]):
             return await self.latest_sound_average(building_id, max_age_seconds)
         if utility_type == "soil":
             return await self.latest_soil_resolved(building_id)
+        if utility_type == "air_quality":
+            return await self.latest_air_quality_average(building_id, max_age_seconds)
         return None
 
     async def exists_external_id(self, device_id: str, reading_id: str) -> bool:

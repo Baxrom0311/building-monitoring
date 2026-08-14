@@ -213,6 +213,9 @@ async def _save_reading_internal(session: AsyncSession, body: MeterReading, ts: 
     # Birinchi-darajali Sensor'ni hal qilamiz (dual-write) — best-effort, reading'ni bloklamaydi.
     sensor_id = await _resolve_sensor_id(session, body, device, ts)
 
+    resolved_air_quality = _clamp_air(body.air_quality if body.air_quality is not None else body.air_pct)
+    effective_ts = _effective_reading_ts(body, ts)
+
     reading = Reading(
         device_id=body.device_id,
         reading_id=body.reading_id,
@@ -224,7 +227,7 @@ async def _save_reading_internal(session: AsyncSession, body: MeterReading, ts: 
         source_id=body.source_id,
         sensor_type=body.sensor_type,
         meter_serial=body.meter_serial,
-        ts=_effective_reading_ts(body, ts),
+        ts=effective_ts,
         voltage_l1=body.voltage_l1,
         voltage_l2=body.voltage_l2,
         voltage_l3=body.voltage_l3,
@@ -257,12 +260,38 @@ async def _save_reading_internal(session: AsyncSession, body: MeterReading, ts: 
             if (body.humidity == 0 and (body.air_quality is not None or body.air_pct is not None))
             else body.humidity
         ),
-        air_quality=_clamp_air(body.air_quality if body.air_quality is not None else body.air_pct),
+        air_quality=resolved_air_quality,
         level=body.level,
         raw_payload=json.dumps(body.model_dump(), ensure_ascii=False, default=str),
         created_at=ts,
     )
     ReadingRepository(session).add(reading)
+
+    # Havo sifati (MQ135) allaqachon dalada ishlayotgan qurilmalarda soil/sound
+    # qatoriga "piggyback" qilib yuboriladi (firmware qayta prošivka qilinmaydi).
+    # Server tomonda buni ALOHIDA utility_type="air_quality" qatori sifatida ham
+    # yozib qo'yamiz — shu bilan havo sifati boshqa kommunal turlar kabi (suv,
+    # gaz, elektr...) mustaqil so'ralishi/ko'rsatilishi mumkin. Asl qator
+    # (soil/sound) o'zining air_quality ustunini ham saqlab qoladi — orqaga
+    # moslik (soil_resolved()/sound_average()) buzilmasin.
+    if resolved_air_quality is not None and body.utility_type != "air_quality":
+        air_reading = Reading(
+            device_id=body.device_id,
+            reading_id=None,
+            sequence_no=body.sequence_no,
+            sensor_id=sensor_id,
+            building_id=None if device.is_test_device else body.building_id,
+            point_id=None if device.is_test_device else body.point_id,
+            utility_type="air_quality",
+            source_id=body.source_id,
+            sensor_type=body.sensor_type,
+            meter_serial=body.meter_serial,
+            ts=effective_ts,
+            air_quality=resolved_air_quality,
+            created_at=ts,
+        )
+        ReadingRepository(session).add(air_reading)
+
     if device.is_test_device:
         return []
     return await alert_service.check_alerts(session, body)

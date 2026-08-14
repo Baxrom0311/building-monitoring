@@ -201,9 +201,10 @@ const CHARTS = [
     glow: 'rgba(16,185,129,0.5)',
     bg: 'from-emerald-500/20 via-slate-900/80 to-slate-950',
     nominal: 75 as number | null,
-    // Havo sifati MQ135 sensoridan REAL keladi (soil o'qishlari ichida, air_quality
-    // ustuni). Backend uni barqaror uzatadi (latest_soil_resolved) — fake kerak emas;
-    // ma'lumot bo'lmasa halol "—" ko'rsatiladi (soxta qiymat emas).
+    // Havo sifati MQ135 sensoridan REAL keladi — endi backend'da o'zining
+    // alohida utility_type="air_quality" qatorlari bor (latest_air_quality_average),
+    // soil/sound'ga yopishtirilgan eski qatorlar faqat zaxira sifatida ishlatiladi.
+    // fake kerak emas; ma'lumot bo'lmasa halol "—" ko'rsatiladi (soxta qiymat emas).
     fake: null as { base: number; amp: number } | null,
   },
   {
@@ -393,11 +394,14 @@ export default function DisplayPage() {
         : [{ key: cfg.dataKey, label: cfg.label, color: cfg.color }]
 
     let rawRows = data ? (data[cfg.key as keyof DisplayData] as HourlyUtilityStat[] | undefined) ?? [] : []
-    if (cfg.key === 'air_quality' && data && rawRows.length === 0) {
-      // Havo sifati soil (MQ135) yoki sound (ovoz+MQ135 kombinatsiya) qurilmasidan
-      // kelishi mumkin — qaysi birida haqiqiy air_quality qatorlari bo'lsa, o'sha ishlatiladi.
+    if (cfg.key === 'air_quality' && data) {
+      // Reading.air_quality XOM (firmwaredan kelgan) semantikada saqlanadi —
+      // inversiya (yuqori=yaxshi foizga aylantirish) har doim displey qatlamida
+      // qilinishi kerak, manba qaysi bo'lishidan qat'i nazar (dedicated
+      // air_quality qatorlari yoki soil/sound'ga "yopishtirilgan" eski qatorlar).
+      const dedicated = data.air_quality ?? []
       const soilHasAir = (data.soil ?? []).some((r) => r.avg_air_quality != null)
-      const airSource = soilHasAir ? data.soil ?? [] : data.sound ?? []
+      const airSource = dedicated.length > 0 ? dedicated : soilHasAir ? data.soil ?? [] : data.sound ?? []
       rawRows = airSource.map((r) => ({
         ...r,
         avg_air_quality: r.avg_air_quality != null ? Math.max(0, Number((100 - r.avg_air_quality).toFixed(1))) : null,
@@ -426,16 +430,16 @@ export default function DisplayPage() {
     })
 
     // Real-vaqt qiymati bilan almashtirish — kattasi joriy o'qishni ko'rsatadi
-    const rawLatest =
-      data?.latest?.[cfg.key] ??
-      (cfg.key === 'air_quality'
-        ? data?.latest?.soil?.air_quality != null
-          ? data?.latest?.soil
-          : data?.latest?.sound
-        : undefined)
+    const rawLatest = data?.latest?.[cfg.key]
     if (cfg.key === 'air_quality') {
-      if (rawLatest?.air_quality != null) {
-        series[0].latest = Math.max(0, Number((100 - rawLatest.air_quality).toFixed(1)))
+      // Reading.air_quality XOM semantikada saqlanadi — manba qaysi bo'lishidan
+      // qat'i nazar (dedicated air_quality yozuvi yoki soil/sound'ga
+      // "yopishtirilgan" eski yozuv) inversiya shu yerda bir marta qilinadi.
+      const airLatest =
+        rawLatest?.value != null ? rawLatest : data?.latest?.soil?.air_quality != null ? data?.latest?.soil : data?.latest?.sound
+      const airRaw = rawLatest?.value != null ? rawLatest.value : airLatest?.air_quality
+      if (airRaw != null) {
+        series[0].latest = Math.max(0, Number((100 - airRaw).toFixed(1)))
       }
     } else if (rawLatest?.value != null) {
       series[0].latest = rawLatest.value
