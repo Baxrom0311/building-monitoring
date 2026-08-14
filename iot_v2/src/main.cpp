@@ -984,8 +984,14 @@ void loop() {
     }
     prev_wifi_ok = wifi_now;
 
-    // WiFi: non-blocking qayta ulanish
-    wifi_loop();
+    // WiFi: non-blocking qayta ulanish. true qaytarsa — saqlangan creds
+    // WIFI_STALE_RECONFIG_MS dan beri ishlamayapti (eskirgan/noto'g'ri
+    // bo'lishi mumkin) — sozlash portalini qayta ochamiz (bloklaydi, lekin
+    // WiFi baribir yo'q edi, ma'lumot yubora olmasdi).
+    if (wifi_loop()) {
+        LOG_PRINTLN("WiFi: uzoq vaqt ulanolmadi — sozlash portali qayta ochilmoqda...");
+        wifi_portal(WIFI_AP_NAME, WIFI_AP_PASS, device_id, g_cfg.meter_serial);
+    }
 
 #ifdef RS485_BRIDGE
     // Bino ichidagi RS-485 leaf sensorlarni so'rash — o'zining vaqt

@@ -2,9 +2,13 @@
 /**
  * core/wifi.h — WiFi boshqaruvi (non-blocking)
  *
- * Falsafa: portal FAQAT sozlanmagan qurilmada (yoki BOOT tugma bilan) ochiladi.
- * Router vaqtincha o'chiq bo'lsa qurilma 3 daqiqa portalda QOTIB TURMAYDI —
- * ≤16s urinib, ishga tushadi va fonda har 15s qayta ulanadi.
+ * Falsafa: portal sozlanmagan qurilmada (yoki BOOT tugma bilan) DARHOL ochiladi.
+ * Router vaqtincha o'chiq bo'lsa qurilma qisqa muddat (< WIFI_STALE_RECONFIG_MS,
+ * 10 daqiqa) portalga kirmaydi — ≤16s urinib, ishga tushadi va fonda har 15s
+ * qayta ulanadi. Lekin saqlangan creds shuncha vaqt (10 daqiqa) ishlamasa
+ * (masalan tarmoq eskirgan/o'zgargan), wifi_loop() portalni AVTOMATIK qayta
+ * ochadi — BOOT tugmasiz ham, cheksiz sikl bilan (portal -> 1 urinish ->
+ * hali bo'lmasa yana portal...).
  *
  * wifi_has_saved_creds() — NVS da saqlangan SSID bormi
  * wifi_connect_boot()    — Setup: tez, portalsiz ulanish (≤16s)
@@ -23,6 +27,16 @@
 
 #define WIFI_RECONNECT_MS     15000UL
 #define WIFI_BOOT_TIMEOUT_MS   8000UL
+// Saqlangan WiFi ma'lumotlari ESKIRGAN bo'lishi mumkin (tarmoq o'zgargan,
+// router almashtirilgan) — bunday holda wifi_loop() abadiy o'sha (endi
+// noto'g'ri) SSID'ga qayta ulanishga urinaverib, qurilmani portalsiz
+// abadiy oflayn holda qoldirar edi (faqat BOOT tugmasi bilan tuzatilardi).
+// Shuning uchun uzluksiz shuncha vaqt ulanolmasa, wifi_loop() true qaytaradi
+// va chaqiruvchi (main.cpp) portalni qayta ochadi — keyin yana shu muddat
+// kutib, hali ham bo'lmasa yana ochiladi (cheksiz sikl, foydalanuvchi so'ragan).
+#ifndef WIFI_STALE_RECONFIG_MS
+  #define WIFI_STALE_RECONFIG_MS (10UL * 60 * 1000)   // 10 daqiqa
+#endif
 // Sozlash portali qancha ochiq turadi (soniya). 0 = doim ochiq (sozlanmaguncha).
 // Bridge/collector uchun 0 qilinadi (build flag bilan) — WiFi bo'lmasa baribir
 // ishlay olmaydi, shuning uchun AP doim ochiq tursin.
@@ -41,6 +55,7 @@
 #endif
 
 static unsigned long _wifi_reconnect_ms = 0;
+static unsigned long _wifi_disconnected_since = 0;
 
 // NVS da saqlangan WiFi SSID bormi (birinchi yoqishni aniqlash uchun)
 static bool wifi_has_saved_creds() {
@@ -90,14 +105,27 @@ static bool wifi_connect_boot(const char* def_ssid, const char* def_pass) {
     return false;
 }
 
-// Non-blocking — faqat reconnect buyrug'i, blokirovka yo'q
-static void wifi_loop() {
-    if (WiFi.status() == WL_CONNECTED) return;
+// Non-blocking — faqat reconnect buyrug'i, blokirovka yo'q. true qaytarsa —
+// WIFI_STALE_RECONFIG_MS dan beri uzluksiz ulanolmadi, chaqiruvchi (main.cpp)
+// sozlash portalini ochishi kerak (saqlangan creds eskirgan bo'lishi mumkin).
+static bool wifi_loop() {
+    if (WiFi.status() == WL_CONNECTED) {
+        _wifi_disconnected_since = 0;
+        return false;
+    }
     unsigned long now = millis();
-    if (now - _wifi_reconnect_ms < WIFI_RECONNECT_MS) return;
+    if (_wifi_disconnected_since == 0) _wifi_disconnected_since = now;
+    if (now - _wifi_disconnected_since >= WIFI_STALE_RECONFIG_MS) {
+        // Keyingi siklga hisoblagichni qayta boshlaymiz — portal yopilib
+        // hali ham ulanolmasa, yana shuncha kutib, yana ochiladi (sikl).
+        _wifi_disconnected_since = now;
+        return true;
+    }
+    if (now - _wifi_reconnect_ms < WIFI_RECONNECT_MS) return false;
     _wifi_reconnect_ms = now;
     WiFi.reconnect();
     LOG_PRINTLN("WiFi: qayta ulanish...");
+    return false;
 }
 
 static void wifi_pause() {
@@ -149,13 +177,13 @@ static void wifi_portal(const char* ap_name, const char* ap_pass,
     wm.setConfigPortalTimeout(WIFI_PORTAL_TIMEOUT_S);
     // ESLATMA: kutubxona (tzapu/WiFiManager@2.0.17) portal ochilganda STA
     // radiosini standart ravishda o'chiradi (_disableSTAConn=true, xususiy
-    // maydon — bu versiyada buni o'chirish uchun public setter yo'q). Bu FAQAT
-    // haqiqiy birinchi yoqish / BOOT-reset holatida ishlaydigan portalga
-    // tegishli — sozlangan qurilma router vaqtincha o'chganda portalga
-    // umuman kirmaydi (yuqoridagi main.cpp'dagi ajratish, audit FIX A),
-    // fonda wifi_loop() 15s'da qayta ulanadi. Bu holat texnik xodim jismonan
-    // portalni to'ldirayotgan paytga to'g'ri keladi, shuning uchun fonda STA
-    // urinishi shart emas.
+    // maydon — bu versiyada buni o'chirish uchun public setter yo'q). Bu
+    // faqat QISQA (< WIFI_STALE_RECONFIG_MS) router uzilishlarida muammo
+    // emas — sozlangan qurilma bunday holda portalga umuman kirmaydi
+    // (yuqoridagi main.cpp'dagi ajratish, audit FIX A), fonda wifi_loop()
+    // 15s'da qayta ulanadi. Faqat uzoq (10 daqiqa+) uzilishda portal
+    // ochiladi — bu holat texnik xodim jismonan portalni to'ldirayotgan
+    // paytga to'g'ri keladi, shuning uchun fonda STA urinishi shart emas.
     wm.setSaveConfigCallback([&]() {
         cfg_save(p_srv.getValue(), p_tok.getValue(),
                  p_mode.getValue(), p_prov.getValue());
