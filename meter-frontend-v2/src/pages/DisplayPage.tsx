@@ -419,7 +419,13 @@ export default function DisplayPage() {
       // bittasining zaxira manbasi faqat O'ZINING eski (soil/sound'ga
       // yopishtirilgan) qatorlari, ikkinchisiniki emas (aralashtirmaslik uchun).
       const dedicated = (cfg.key === 'air_quality_soil' ? data.air_quality_soil : data.air_quality_sound) ?? []
-      const legacyFallback = (cfg.key === 'air_quality_soil' ? data.soil : data.sound) ?? []
+      // Eski (soil/sound'ga yopishtirilgan) massivda KO'PCHILIK qator umuman
+      // MQ135'siz (faqat namlik/ovoz) — shularni chetlab o'tmasak "N ta o'lchov"
+      // yolg'on katta chiqadi, holbuki ulardan faqat bir nechtasida haqiqiy
+      // havo qiymati bor (audit: 97 ovoz qatoridan atigi 2 tasida air_quality).
+      const legacyFallback = ((cfg.key === 'air_quality_soil' ? data.soil : data.sound) ?? []).filter(
+        (r) => r.avg_air_quality != null
+      )
       const airSource = dedicated.length > 0 ? dedicated : legacyFallback
       rawRows = airSource.map((r) => ({
         ...r,
@@ -782,11 +788,6 @@ export default function DisplayPage() {
                       <h2 className="truncate text-xl font-bold tracking-tight text-slate-100 sm:text-2xl">
                         {cfg.label}
                       </h2>
-                      {cfg.isFake && (
-                        <span className="shrink-0 rounded-md border border-amber-400/30 bg-amber-400/10 px-1.5 py-0.5 text-[10px] font-bold text-amber-300">
-                          Namunaviy
-                        </span>
-                      )}
                     </div>
                     <div className="mt-2 flex flex-wrap items-center gap-2">
                       <SensorStatusBadge
