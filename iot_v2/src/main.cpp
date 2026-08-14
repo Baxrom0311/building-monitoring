@@ -831,66 +831,45 @@ void setup() {
   #define DEFAULT_WIFI_PASS ""
 #endif
     {
-        // "Sozlangan" — NVS'da (esp_wifi o'zining ichki NVS'i) saqlangan SSID
-        // bormi (wifi.h: wifi_has_saved_creds()). Bu haqiqiy birinchi yoqish /
-        // BOOT tugma bilan WiFi reset (yuqorida — wm.resetSettings() aynan shu
-        // NVS'ni tozalaydi) holatlarini ANIQ ajratadi build-flag orqali berilgan
-        // DEFAULT_WIFI_SSID'dan (masalan building_bridge/sound_wifi) — chunki
-        // muvaffaqiyatli WiFi.begin(def_ssid,...) o'zi ham shu NVS'ga yoziladi,
-        // shuning uchun "saqlangan" keyingi bootlarda avtomatik true bo'ladi.
-        // Faqat HALI HECH QACHON saqlanmagan bo'lsa (haqiqiy birinchi
-        // yoqish/BOOT-reset) portal ochiladi — router vaqtincha o'chiq bo'lgani
-        // uchun portalда ABADIY QOTIB QOLMASLIK kerak (audit FIX A).
-        bool wifi_configured = wifi_has_saved_creds();
+        // Ilgari: saqlangan creds bo'lsa-yu boot vaqtida ulanolmasa, portal
+        // OCHILMASDI (faqat fonda sukut urinish) — "router vaqtincha
+        // o'chgandir" degan taxmin bilan. Aniq so'ralgan o'zgarish: ulanolmasa
+        // — saqlangan creds bor-yo'qligidan qat'i nazar — portal DARHOL
+        // ochilsin. Shuning uchun endi ikkala holat ham bir xil sikl orqali
+        // ishlaydi: portal (WIFI_PORTAL_TIMEOUT_S) -> hali ulanmagan bo'lsa
+        // bitta aniq ulanish urinishi -> baribir bo'lmasa portal yana ochiladi.
         bool wifi_ok = wifi_connect_boot(DEFAULT_WIFI_SSID, DEFAULT_WIFI_PASS);
         if (!wifi_ok) {
-            if (!wifi_configured) {
-                // Haqiqiy birinchi yoqish — sozlash portali kerak (mo'ljallangan UX).
-                // Kutubxona (WiFiManager) portal ochiq turganda STA radiosini
-                // o'chiradi — fonda ulanib bo'lmaydi. Shuning uchun SIKL qilamiz:
-                // portal (WIFI_PORTAL_TIMEOUT_S) -> hali ulanmagan bo'lsa bitta
-                // aniq ulanish urinishi -> baribir bo'lmasa portal yana ochiladi.
-                // Shu tarzda router qachon tiklansa ham, qurilma ko'pi bilan
-                // bitta portal davri ichida o'zi tuzaladi — BOOT tugmasiz,
-                // abadiy portalda "qolib qolmasdan".
-                for (;;) {
+            for (;;) {
 #if defined(HAVE_LCD) && defined(SENSOR_ELECTRICITY)
-                    // Elektr/bridge LCD (elec_lcd_row) — foydalanuvchi AP nomini ko'rsin
-                    elec_lcd_row(0, "WiFi Sozlash:");
-                    elec_lcd_row(1, WIFI_AP_NAME);
+                // Elektr/bridge LCD (elec_lcd_row) — foydalanuvchi AP nomini ko'rsin
+                elec_lcd_row(0, "WiFi Sozlash:");
+                elec_lcd_row(1, WIFI_AP_NAME);
 #elif defined(HAVE_LCD)
-                    lcd_row(0, "WiFi AP Portal");
-                    lcd_row(1, WIFI_AP_NAME);
+                lcd_row(0, "WiFi AP Portal");
+                lcd_row(1, WIFI_AP_NAME);
 #endif
-                    LOG_PRINTF("WiFi: sozlanmagan qurilma — AP '%s' Sozlash Portali ochilmoqda...\n", WIFI_AP_NAME);
-                    wifi_portal(WIFI_AP_NAME, WIFI_AP_PASS, device_id, g_cfg.meter_serial);
-                    if (WiFi.status() == WL_CONNECTED) break;
+                LOG_PRINTF("WiFi: ulanolmadi — AP '%s' Sozlash Portali darhol ochilmoqda...\n", WIFI_AP_NAME);
+                wifi_portal(WIFI_AP_NAME, WIFI_AP_PASS, device_id, g_cfg.meter_serial);
+                if (WiFi.status() == WL_CONNECTED) break;
 
-                    LOG_PRINTLN("WiFi: portal yopildi, hali ulanmagan — bitta ulanish urinishi...");
-                    if (wifi_connect_boot(DEFAULT_WIFI_SSID, DEFAULT_WIFI_PASS)) break;
+                LOG_PRINTLN("WiFi: portal yopildi, hali ulanmagan — bitta ulanish urinishi...");
+                if (wifi_connect_boot(DEFAULT_WIFI_SSID, DEFAULT_WIFI_PASS)) break;
 
-                    // ESP32/arduino-esp32'da AP<->STA rejimini qayta-qayta
-                    // almashtirish sekin-asta heap'ni siqadi (hujjatlashtirilgan
-                    // platforma darajasidagi muammo, bu loyihaga xos emas).
-                    // WiFi kunlab/haftalab topilmasa, bu to'planib borishi
-                    // mumkin — heap juda kamaysa, defragmentatsiya qilishning
-                    // yagona ishonchli yo'li toza qayta yuklanish.
-                    if (ESP.getFreeHeap() < MIN_HEAP_BYTES) {
-                        LOG_PRINTF("WiFi: heap juda kam qoldi (%u bayt) — xavfsizlik uchun qayta yuklanmoqda\n",
-                                   (unsigned)ESP.getFreeHeap());
-                        unsigned long t = millis(); while (millis() - t < 200) yield();
-                        ESP.restart();
-                    }
-
-                    LOG_PRINTLN("WiFi: urinish muvaffaqiyatsiz — portal yana ochiladi");
+                // ESP32/arduino-esp32'da AP<->STA rejimini qayta-qayta
+                // almashtirish sekin-asta heap'ni siqadi (hujjatlashtirilgan
+                // platforma darajasidagi muammo, bu loyihaga xos emas).
+                // WiFi kunlab/haftalab topilmasa, bu to'planib borishi
+                // mumkin — heap juda kamaysa, defragmentatsiya qilishning
+                // yagona ishonchli yo'li toza qayta yuklanish.
+                if (ESP.getFreeHeap() < MIN_HEAP_BYTES) {
+                    LOG_PRINTF("WiFi: heap juda kam qoldi (%u bayt) — xavfsizlik uchun qayta yuklanmoqda\n",
+                               (unsigned)ESP.getFreeHeap());
+                    unsigned long t = millis(); while (millis() - t < 200) yield();
+                    ESP.restart();
                 }
-            } else {
-                // Sozlamalar BOR, lekin boot vaqtida ulanib bo'lmadi (router
-                // vaqtincha o'chiq/qayta yuklanmoqda). Portal OCHILMAYDI —
-                // watchdog o'z vaqtida ishga tushishi uchun setup() davom
-                // etadi, wifi_loop() esa fonda qayta ulanishga urinadi.
-                LOG_PRINTLN("WiFi: saqlangan sozlamalar bor, lekin boot vaqtida ulanib bo'lmadi — "
-                             "portal OCHILMAYDI, fonda qayta urinadi (router qayta yuklanayotgan bo'lishi mumkin)");
+
+                LOG_PRINTLN("WiFi: urinish muvaffaqiyatsiz — portal yana ochiladi");
             }
         }
     }
