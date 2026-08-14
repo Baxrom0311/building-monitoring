@@ -15,16 +15,33 @@ static char _disp_row1[LCD_COLS + 1] = "";
 
 static void disp_init() {
     lcd_init();
+#ifdef HAVE_MQ135
+    lcd_row(0, "Ovoz + Havo");
+#else
     lcd_row(0, "Ovoz Sensori");
+#endif
     lcd_row(1, "Yuklanmoqda...");
 }
 
 static void disp_show_reading(const SensorData& d) {
     char buf[LCD_COLS + 1];
+#ifdef HAVE_MQ135
+    // MQ135 birga ulangan bo'lsa 0-qatorga ikkalasi ham sig'ishi kerak (16 belgi) —
+    // shuning uchun qisqartirilgan "S:.. H:..%" format ishlatiladi.
+    if (d.valid) {
+        if (!isnan(d.air_pct))
+            snprintf(buf, sizeof(buf), "S:%4.1f H:%3.0f%%", d.level, d.air_pct);
+        else
+            snprintf(buf, sizeof(buf), "S:%4.1f H:  --", d.level);
+    } else {
+        snprintf(buf, sizeof(buf), "S:  -- H:  --");
+    }
+#else
     if (d.valid)
         snprintf(buf, sizeof(buf), "Ovoz: %5.1f %%", d.level);
     else
         snprintf(buf, sizeof(buf), "Ovoz:    -- %%");
+#endif
 
     if (strcmp(buf, _disp_row0) != 0) {
         lcd_row(0, buf);

@@ -394,7 +394,11 @@ export default function DisplayPage() {
 
     let rawRows = data ? (data[cfg.key as keyof DisplayData] as HourlyUtilityStat[] | undefined) ?? [] : []
     if (cfg.key === 'air_quality' && data && rawRows.length === 0) {
-      rawRows = (data.soil ?? []).map((r) => ({
+      // Havo sifati soil (MQ135) yoki sound (ovoz+MQ135 kombinatsiya) qurilmasidan
+      // kelishi mumkin — qaysi birida haqiqiy air_quality qatorlari bo'lsa, o'sha ishlatiladi.
+      const soilHasAir = (data.soil ?? []).some((r) => r.avg_air_quality != null)
+      const airSource = soilHasAir ? data.soil ?? [] : data.sound ?? []
+      rawRows = airSource.map((r) => ({
         ...r,
         avg_air_quality: r.avg_air_quality != null ? Math.max(0, Number((100 - r.avg_air_quality).toFixed(1))) : null,
       }))
@@ -422,7 +426,13 @@ export default function DisplayPage() {
     })
 
     // Real-vaqt qiymati bilan almashtirish — kattasi joriy o'qishni ko'rsatadi
-    const rawLatest = data?.latest?.[cfg.key] ?? (cfg.key === 'air_quality' ? data?.latest?.soil : undefined)
+    const rawLatest =
+      data?.latest?.[cfg.key] ??
+      (cfg.key === 'air_quality'
+        ? data?.latest?.soil?.air_quality != null
+          ? data?.latest?.soil
+          : data?.latest?.sound
+        : undefined)
     if (cfg.key === 'air_quality') {
       if (rawLatest?.air_quality != null) {
         series[0].latest = Math.max(0, Number((100 - rawLatest.air_quality).toFixed(1)))

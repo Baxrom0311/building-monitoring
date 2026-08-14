@@ -12,8 +12,27 @@
   #define PIN_SOUND_ADC   34
 #endif
 
+// ─── MQ135 havo sifati sensori (ixtiyoriy, -DHAVE_MQ135) ─────────────────────
+// Analog AOUT → GPIO[PIN_MQ135]. Yuqori qiymat = havo ifloslangan (gaz/tutun).
+// soil.h dagi bilan bir xil naqsh — bitta ESP32'da ovoz VA havo sifati birga.
+#ifdef HAVE_MQ135
+  #ifndef PIN_MQ135
+    #define PIN_MQ135  35        // GPIO35 = ADC1_CH7 (PIN_SOUND_ADC=34 bilan ziddiyatsiz)
+  #endif
+  #define MQ135_SAMPLES  16
+  // Uzilgan/qisqa tutashgan MQ135 rels kuchlanishiga (0 yoki 4095) yopishib
+  // qoladi — bu holatni haqiqiy o'lchovdan ajratish uchun ADC rels chetidan
+  // shuncha birlik ichidagi qiymat nosozlik deb hisoblanadi.
+  #define MQ135_FAULT_MARGIN  20   // ADC birligi (0..4095 oralig'idan)
+#endif
+
 struct SensorData {
     float level;   // 0–100 %
+#ifdef HAVE_MQ135
+    int   air_raw;   // MQ135 xom ADC (0–4095)
+    float air_v;     // MQ135 kuchlanishi (V)
+    float air_pct;   // Nisbiy havo ifloslanishi % (yuqori = yomonroq)
+#endif
     bool  valid;
 };
 
@@ -82,6 +101,12 @@ static void sensor_init() {
         s_mic_fault = true;
         LOG_PRINTF("XATO: Ovoz sensori (GPIO%d) kalibrovka vaqtida toza namuna bermadi — mikrofon uzilgan yoki nosoz\n", PIN_SOUND_ADC);
     }
+
+#ifdef HAVE_MQ135
+    pinMode(PIN_MQ135, INPUT);
+    for (int i = 0; i < 5; i++) { analogRead(PIN_MQ135); }
+    LOG_PRINTF("MQ135 havo sifati sensori tayyor (GPIO%d)\n", PIN_MQ135);
+#endif
 }
 
 static bool sensor_connect() { return true; }
@@ -91,7 +116,11 @@ static bool sensor_read(SensorData& d) {
         static float sim = 25.0f;
         sim += random(-20, 21) * 0.5f;
         sim = constrain(sim, 0.0f, 95.0f);
-        d = {sim, true};
+        d.level = sim;
+        d.valid = true;
+#ifdef HAVE_MQ135
+        d.air_raw = 1200; d.air_v = 0.97f; d.air_pct = 29.0f;
+#endif
         return true;
     }
 
@@ -103,7 +132,8 @@ static bool sensor_read(SensorData& d) {
             LOG_PRINTF("Ovoz sensori qayta kalibrovka qilindi (GPIO%d, quiet_baseline=%.0f)\n", PIN_SOUND_ADC, s_quiet_p2p);
         } else {
             LOG_PRINTF("Ovoz sensori xato: mikrofon hali ham toza namuna bermayapti (GPIO%d)\n", PIN_SOUND_ADC);
-            d = {0.0f, false};
+            d.level = 0.0f;
+            d.valid = false;
             return false;
         }
     }
@@ -123,7 +153,8 @@ static bool sensor_read(SensorData& d) {
 
     if (valid_count == 0) {
         LOG_PRINTF("Ovoz sensori xato: bu siklda barcha 8 ramka filtrlab tashlandi (GPIO%d)\n", PIN_SOUND_ADC);
-        d = {0.0f, false};
+        d.level = 0.0f;
+        d.valid = false;
         return false;
     }
 
@@ -150,7 +181,29 @@ static bool sensor_read(SensorData& d) {
     LOG_PRINTF("Ovoz ADC GPIO%d: avg_p2p=%.1f baseline=%.1f level=%.1f%%\n",
                PIN_SOUND_ADC, avg_p2p, s_quiet_p2p, s_level_smooth);
 
-    d = {s_level_smooth, true};
+    d.level = s_level_smooth;
+    d.valid = true;
+
+#ifdef HAVE_MQ135
+    long asum = 0;
+    for (int i = 0; i < MQ135_SAMPLES; i++) {
+        asum += analogRead(PIN_MQ135);
+        delayMicroseconds(500);
+    }
+    d.air_raw = (int)(asum / MQ135_SAMPLES);
+
+    // ── Nosozlik (uzilgan/qisqa tutashgan MQ135) tekshiruvi ─────────────────
+    if (d.air_raw <= MQ135_FAULT_MARGIN || d.air_raw >= 4095 - MQ135_FAULT_MARGIN) {
+        d.air_v   = NAN;
+        d.air_pct = NAN;
+        LOG_PRINTF("MQ135: XATO datchik (uzilgan/qisqa tutashgan?) raw=%d\n", d.air_raw);
+    } else {
+        d.air_v   = d.air_raw * 3.3f / 4095.0f;
+        d.air_pct = constrain(d.air_raw / 4095.0f * 100.0f, 0.0f, 100.0f);  // nisbiy (yuqori=yomonroq)
+        LOG_PRINTF("MQ135: raw=%d  %.2fV  havo=%.0f%% (yuqori=yomonroq)\n",
+                   d.air_raw, d.air_v, d.air_pct);
+    }
+#endif
     return true;
 }
 
@@ -160,7 +213,11 @@ void sensor_set_volume(float) {}
 // app_register() WiFi/core-api.h talab qiladi — RS-485 leaf'da yo'q, faqat
 // oddiy WiFi rejimida kerak.
 static bool sensor_do_register(const char* device_id, const char* fw_version) {
+#ifdef HAVE_MQ135
+    return app_register(device_id, "sound", "microphone", "", fw_version, 0, "sound_air");
+#else
     return app_register(device_id, "sound", "microphone", "", fw_version, 0);
+#endif
 }
 #endif
 
@@ -175,6 +232,16 @@ static String sensor_build_json(const char* device_id,
     doc["fw_version"]   = fw_ver;
     if (g_cfg.test_mode) doc["is_test_device"] = true;
     if (d.valid) doc["level"] = serialized(String(d.level, 1));
+#ifdef HAVE_MQ135
+    // d.air_raw/air_pct faqat d.valid==true bo'lganda to'ldiriladi (sensor_read
+    // MQ135'ni ovoz o'qishi muvaffaqiyatli bo'lgandagina o'qiydi) — shuning uchun
+    // shu yerda ham xuddi shu shartga bog'laymiz, aks holda boshlanmagan (garbage)
+    // qiymat JSON'ga sizib chiqadi.
+    if (d.valid) {
+        doc["air_raw"] = d.air_raw;
+        if (!isnan(d.air_pct)) doc["air_pct"] = serialized(String(d.air_pct, 0));
+    }
+#endif
     String out;
     serializeJson(doc, out);
     return out;

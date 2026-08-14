@@ -144,9 +144,16 @@ class ReadingRepository(BaseRepository[Reading]):
 
     async def latest_sound_average(self, building_id: int | None = None, max_age_seconds: int = 7200) -> dict | None:
         """Bino ichidagi barcha aktiv ovoz datchiklarining (masalan 3 ta ovoz sensori)
-        oxirgi o'qishlari bo'yicha O'RTACHA qiymatni hisoblab qaytaradi."""
+        oxirgi o'qishlari bo'yicha O'RTACHA qiymatni hisoblab qaytaradi.
+
+        Ba'zi ovoz qurilmalariga MQ135 ham ulangan bo'lishi mumkin (bitta ESP32'da
+        ovoz + havo sifati birga) — shu qurilmalarning air_quality ustuni ham shu
+        yerda o'rtachalanadi (NULL bo'lgan qatorlar avg() tomonidan avtomatik
+        e'tiborga olinmaydi)."""
         return await self._latest_average(
-            "sound", {"value": Reading.level}, building_id, max_age_seconds, round_digits=1
+            "sound",
+            {"value": Reading.level, "air_quality": Reading.air_quality},
+            building_id, max_age_seconds, round_digits=1,
         )
 
     async def latest_water_average(self, building_id: int | None = None, max_age_seconds: int = 7200) -> dict | None:

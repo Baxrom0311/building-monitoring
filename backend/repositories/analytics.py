@@ -225,7 +225,10 @@ class AnalyticsRepository(BaseRepository[HourlyUtilityStats]):
             ("avg_humidity", Reading.humidity, 1),
             ("avg_air_quality", Reading.air_quality, 1),
         ],
-        "sound": [("avg_level", Reading.level, 1)],
+        "sound": [
+            ("avg_level", Reading.level, 1),
+            ("avg_air_quality", Reading.air_quality, 1),
+        ],
         "heating": [
             ("avg_temperature_in_c", Reading.temperature_in_c, 1),
             ("avg_temperature_out_c", Reading.temperature_out_c, 1),
