@@ -677,6 +677,8 @@ void loop() {
   #include "display/disp_heating.h"
 #elif defined(HAVE_LCD) && defined(SENSOR_ELECTRICITY)
   #include "display/disp_elec.h"
+#elif defined(HAVE_LCD) && defined(SENSOR_GAS)
+  #include "display/disp_gas.h"
 #else
   #include "display/disp_none.h"
 #endif

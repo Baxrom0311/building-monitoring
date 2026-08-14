@@ -221,14 +221,14 @@ static void sensor_init() {
 }
 
 static bool sensor_connect() {
-    return g_ads_ok;
+    // Test rejimida ADS1115 chipi shart emas — simulyatsiya qiymati fizik
+    // datchiksiz (masalan faqat ESP32+LCD stendida) ham ishlashi kerak.
+    return g_cfg.test_mode || g_ads_ok;
 }
 
 static bool sensor_read(SensorData& d) {
-    if (!g_ads_ok) { d.valid = false; return false; }
-
     if (g_cfg.test_mode) {
-        d.pressure_bar  = 0.02f + (random(0, 100) / 5000.0f);     // 0.02 - 0.04 bar (low pressure)
+        d.pressure_bar  = 0.23f + (random(0, 100) / 1000.0f);     // 0.23 - 0.33 bar (norma atrofida, GAS_NOMINAL=0.27)
         d.flow_rate     = 1.5f + (random(0, 100) / 100.0f);       // 1.5 - 2.5 m3/h
 
         static float sim_volume = 1250.450f;
@@ -264,9 +264,10 @@ static bool sensor_read(SensorData& d) {
     // ── Jami hajm ────────────────────────────────────────────────────────────
     d.volume_m3 = g_initial_volume_m3 + ((float)current_pulses * GAS_M3_PER_PULSE);
     d.temperature_c = NAN;
-    // Bosim kanali xato bo'lsa ham (0 bar bilan) yuborilaveradi — jim qolib
-    // ketmasligi uchun. Faqat ADS1115 umuman topilmasa (g_ads_ok=false)
-    // sensor_read() yuqorida false qaytaradi va bu yerga yetib kelmaydi.
+    // Bosim kanali xato bo'lsa ham (yoki ADS1115 umuman topilmagan bo'lsa,
+    // d.pressure_bar NaN bo'ladi) impuls hisoblagichi (PIN_GAS_PULSE, ADS1115'ga
+    // bog'liq emas) mustaqil ishlayveradi — shuning uchun oqim/hajm baribir
+    // yuboriladi, faqat bosim maydoni jim qoladi (isnan() orqali).
     d.valid = true;
 
     g_last_read_pulses = current_pulses;
