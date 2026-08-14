@@ -1294,3 +1294,37 @@ class FirmwareOnDemandResponse(BaseModel):
     sha256: str
     size: int
     message: str
+
+
+# ── Tashqi tizimga (masalan 195.158.8.44:7000) sensor forward mapping ──────────
+
+class ExternalForwardCreate(BaseModel):
+    building_id: int
+    utility_type: UtilityType
+    external_token: str
+    external_device: str
+    is_active: bool = True
+
+
+class ExternalForwardUpdate(BaseModel):
+    external_token: Optional[str] = None
+    external_device: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+class ExternalForwardResponse(BaseModel):
+    id: int
+    building_id: int
+    utility_type: str
+    external_token: str
+    external_device: str
+    is_active: bool
+    last_sent_at: Optional[int] = None
+    last_sent_value: Optional[float] = None
+    last_error: Optional[str] = None
+
+
+class ExternalForwardTestResponse(BaseModel):
+    ok: bool
+    value: Optional[float] = None
+    error: Optional[str] = None

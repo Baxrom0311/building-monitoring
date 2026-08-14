@@ -32,6 +32,7 @@ from routers.telemetry import router as telemetry_router
 from routers.websocket import router as websocket_router
 from routers.chat import router as chat_router
 from routers.display import router as display_router
+from routers.external_forward import router as external_forward_router
 from routers.territory import router as territory_router
 from services.auth import bootstrap_admin
 from services.background import (
@@ -44,6 +45,7 @@ from services.background import (
     ota_batch_worker,
     test_device_cleanup_worker,
 )
+from services.external_forward import external_forward_worker
 from services.monitoring import build_snapshot
 from services.websocket import ws_manager
 
@@ -71,6 +73,7 @@ async def lifespan(app: FastAPI):
             audit_cleanup_worker,
             analytics_worker,
             ota_batch_worker,
+            external_forward_worker,
         ):
             _background_tasks.append(asyncio.create_task(worker()))
     yield
@@ -125,6 +128,7 @@ app.include_router(websocket_router)
 app.include_router(health_router)
 app.include_router(chat_router)
 app.include_router(display_router)
+app.include_router(external_forward_router)
 
 # Vite frontend static assets.
 if settings.static_dir.exists():

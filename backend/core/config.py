@@ -93,6 +93,13 @@ class Settings:
     telegram_chat_id: str = os.getenv("TELEGRAM_CHAT_ID", "")
     alert_webhook_url: str = os.getenv("ALERT_WEBHOOK_URL", "")
 
+    # Tashqi tizimga (masalan 195.158.8.44:7000) bino o'rtacha o'qishlarini
+    # davriy yuborish — standart holatda O'CHIRILGAN, tashqi tomon bilan
+    # kelishilgach EXTERNAL_FORWARD_ENABLED=true bilan yoqiladi.
+    external_forward_enabled: bool = os.getenv("EXTERNAL_FORWARD_ENABLED", "false").lower() in {"1", "true", "yes", "on"}
+    external_forward_url: str = os.getenv("EXTERNAL_FORWARD_URL", "http://195.158.8.44:7000/api/sensor/data/save")
+    external_forward_interval_sec: int = int(os.getenv("EXTERNAL_FORWARD_INTERVAL_SEC", "300"))
+
     app_name: str = "Meter Monitor"
     app_version: str = "4.0"
     secret_key: str = os.getenv("SECRET_KEY", "change-me-in-production")

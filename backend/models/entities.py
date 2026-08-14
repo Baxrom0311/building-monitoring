@@ -352,6 +352,30 @@ class Sensor(Base):
     updated_at: Mapped[int | None] = mapped_column(Integer)
 
 
+class ExternalSensorForward(Base, TimestampMixin):
+    """Bino+utility_type -> tashqi tizim (masalan 195.158.8.44:7000) sensor
+    token'i bog'lanishi. Fon ishchisi har `EXTERNAL_FORWARD_INTERVAL_SEC`da
+    (standart 300s) shu ro'yxatdagi har bir aktiv qatorga mos bino/utility
+    uchun joriy O'RTACHA qiymatni hisoblab, tashqi API'ga yuboradi
+    (services/external_forward.py). Standart holatda O'CHIRILGAN
+    (EXTERNAL_FORWARD_ENABLED=false) — yoqilguncha faqat CRUD/test uchun."""
+
+    __tablename__ = "external_sensor_forwards"
+    __table_args__ = (
+        UniqueConstraint("building_id", "utility_type", "external_token", name="uq_ext_forward_building_utility_token"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    building_id: Mapped[int] = mapped_column(ForeignKey("buildings.id"), nullable=False)
+    utility_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    external_token: Mapped[str] = mapped_column(String(255), nullable=False)
+    external_device: Mapped[str] = mapped_column(String(255), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    last_sent_at: Mapped[int | None] = mapped_column(Integer)
+    last_sent_value: Mapped[float | None] = mapped_column(Float)
+    last_error: Mapped[str | None] = mapped_column(String(500))
+
+
 class Reading(Base):
     __tablename__ = "readings"
     __table_args__ = (

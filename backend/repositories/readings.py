@@ -179,6 +179,27 @@ class ReadingRepository(BaseRepository[Reading]):
             building_id, max_age_seconds, round_digits=1,
         )
 
+    async def latest_utility_average(
+        self, utility_type: str, building_id: int | None = None, max_age_seconds: int = 7200
+    ) -> dict | None:
+        """utility_type nomiga qarab mos latest_*_average()/soil_resolved()ga
+        yo'naltiruvchi umumiy funksiya — tashqi tizimga yuborish (services/
+        external_forward.py) kabi "menga faqat utility_type string kerak"
+        chaqiruvchilar uchun."""
+        if utility_type == "water":
+            return await self.latest_water_average(building_id, max_age_seconds)
+        if utility_type == "gas":
+            return await self.latest_gas_average(building_id, max_age_seconds)
+        if utility_type == "electricity":
+            return await self.latest_electricity_average(building_id, max_age_seconds)
+        if utility_type == "heating":
+            return await self.latest_heating_average(building_id, max_age_seconds)
+        if utility_type == "sound":
+            return await self.latest_sound_average(building_id, max_age_seconds)
+        if utility_type == "soil":
+            return await self.latest_soil_resolved(building_id)
+        return None
+
     async def exists_external_id(self, device_id: str, reading_id: str) -> bool:
         existing = await self.session.scalar(
             select(Reading.id).where(and_(Reading.device_id == device_id, Reading.reading_id == reading_id))
