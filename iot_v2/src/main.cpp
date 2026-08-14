@@ -1028,6 +1028,30 @@ void loop() {
     if (meter_time) {
         last_read_ms = now;
 
+        // LCD eskirgan (oxirgi muvaffaqiyatli) qiymatni cheksiz ko'rsatib
+        // turmasin. Shu tekshiruvni BIR JOYDA (lambda) ta'riflaymiz, chunki
+        // elektr rejimida ikkita mustaqil xato-chiqish nuqtasi bor: (a) metr
+        // ulanmasa (pastda, sensor_connect() muvaffaqiyatsiz) va (b) ulangan
+        // metrdan o'qish muvaffaqiyatsiz bo'lsa (pastroqda, read_ok=false).
+        // Faqat (b) uchun chaqirilsa, metr uzilib qolgandan keyingi barcha
+        // keyingi sikllar (a) yo'liga tushib qoladi va LCD ABADIY eski
+        // qiymatda qotib qolardi — audit topilmasi.
+        auto show_stale_if_needed = [&]() {
+            if (last_read_ok_ms == 0 || now - last_read_ok_ms > DISPLAY_STALE_MS) {
+                SensorData stale = {};
+                stale.valid = false;
+#ifdef SENSOR_HEATING
+                stale.temperature_in_c  = NAN;
+                stale.temperature_out_c = NAN;
+#endif
+#ifdef SENSOR_ELECTRICITY
+                lcd_show_electricity(stale);
+#else
+                disp_show_reading(stale);
+#endif
+            }
+        };
+
 #ifdef SENSOR_ELECTRICITY
         wifi_pause();
 
@@ -1039,6 +1063,7 @@ void loop() {
                 diag_error("Meter ulanish xato");
                 if (meter_fail_count >= 3)
                     meter_retry_ms = min(meter_retry_ms * 2, METER_RETRY_MAX_MS);
+                show_stale_if_needed();
                 return;
             }
             meter_fail_count = 0;
@@ -1071,25 +1096,7 @@ void loop() {
 #else
             diag_error("Sensor o'qish xato");
 #endif
-            // LCD eskirgan (oxirgi muvaffaqiyatli) qiymatni cheksiz ko'rsatib
-            // turmasin — RS485_DISPLAY suv rejimidagi g_last_water_ms naqshiga
-            // o'xshab, DISPLAY_STALE_MS dan ortiq muvaffaqiyatli o'qish
-            // bo'lmasa aniq "malumot yo'q" holatini chiqaramiz.
-            if (last_read_ok_ms == 0 || now - last_read_ok_ms > DISPLAY_STALE_MS) {
-                SensorData stale = {};
-                stale.valid = false;
-#ifdef SENSOR_HEATING
-                // disp_heating.h d.valid'ga emas, isnan() ga qaraydi —
-                // "--.-" ko'rsatilishi uchun haroratlar aniq NAN bo'lishi kerak.
-                stale.temperature_in_c  = NAN;
-                stale.temperature_out_c = NAN;
-#endif
-#ifdef SENSOR_ELECTRICITY
-                lcd_show_electricity(stale);
-#else
-                disp_show_reading(stale);
-#endif
-            }
+            show_stale_if_needed();
             return;
         }
 
