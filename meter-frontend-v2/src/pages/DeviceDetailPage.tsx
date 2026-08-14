@@ -188,6 +188,14 @@ export default function DeviceDetailPage() {
     return historyData.readings.filter((r) => r.utility_type === journalTab)
   }, [historyData?.readings, journalTab])
 
+  // soil/sound jurnal ustunlari — MQ135 ulangan qurilmalarda havo sifati ham
+  // bor, lekin barcha soil/sound qurilmalarda emas, shuning uchun ustun faqat
+  // shu sahifadagi qatorlarda haqiqiy air_quality bo'lsagina ko'rsatiladi.
+  const journalHasAirQuality = useMemo(
+    () => filteredReadings.some((r) => r.air_quality !== null && r.air_quality !== undefined),
+    [filteredReadings]
+  )
+
   const activeJournalUtility =
     journalTab !== 'all'
       ? journalTab
@@ -738,7 +746,12 @@ export default function DeviceDetailPage() {
                                       { key: 'tempOut', name: 'Chiqish (°C)', color: '#06B6D4' },
                                     ]
                                   : device.utility_type === 'sound'
-                                    ? [{ key: 'level', name: 'Ovoz darajasi (%)', color: '#A855F7' }]
+                                    ? [
+                                        { key: 'level', name: 'Ovoz darajasi (%)', color: '#A855F7' },
+                                        ...(chartData.some((d) => d.airQuality > 0)
+                                          ? [{ key: 'airQuality', name: 'Havo sifati (%)', color: '#10B981' }]
+                                          : []),
+                                      ]
                                     : [{ key: 'power', name: 'Power (W)', color: '#EAB308' }]
                       }
                 />
@@ -808,9 +821,15 @@ export default function DeviceDetailPage() {
                           <TableHead>Jami hajm (m³)</TableHead>
                         </>
                       ) : activeJournalUtility === 'soil' ? (
-                        <TableHead>Namlik (%)</TableHead>
+                        <>
+                          <TableHead>Namlik (%)</TableHead>
+                          {journalHasAirQuality && <TableHead>Havo sifati (%)</TableHead>}
+                        </>
                       ) : activeJournalUtility === 'sound' ? (
-                        <TableHead>Ovoz darajasi (%)</TableHead>
+                        <>
+                          <TableHead>Ovoz darajasi (%)</TableHead>
+                          {journalHasAirQuality && <TableHead>Havo sifati (%)</TableHead>}
+                        </>
                       ) : activeJournalUtility === 'heating' ? (
                         <>
                           <TableHead>Kirish (°C)</TableHead>
@@ -854,6 +873,12 @@ export default function DeviceDetailPage() {
                                     {r.air_quality !== null && r.air_quality !== undefined ? ` · Havo: ${r.air_quality.toFixed(1)}%` : ''}
                                   </span>
                                 )}
+                                {ut === 'sound' && (
+                                  <span>
+                                    Ovoz: {r.level !== null && r.level !== undefined ? `${r.level.toFixed(1)}%` : '—'}
+                                    {r.air_quality !== null && r.air_quality !== undefined ? ` · Havo: ${r.air_quality.toFixed(1)}%` : ''}
+                                  </span>
+                                )}
                                 {ut === 'electricity' && (
                                   <span>
                                     {r.voltage_l1 ?? 0} V · {r.current_l1 ?? 0} A · {r.power_w ?? 0} W
@@ -863,9 +888,6 @@ export default function DeviceDetailPage() {
                                   <span>
                                     Kirish: {r.temperature_in_c ?? '—'}°C · Chiqish: {r.temperature_out_c ?? '—'}°C
                                   </span>
-                                )}
-                                {ut === 'sound' && (
-                                  <span>Ovoz: {r.level !== null && r.level !== undefined ? `${r.level.toFixed(1)}%` : '—'}</span>
                                 )}
                                 {ut === 'gas' && (
                                   <span>
@@ -890,13 +912,27 @@ export default function DeviceDetailPage() {
                               <TableCell className="font-mono">{r.volume_m3 ?? '—'}</TableCell>
                             </>
                           ) : activeJournalUtility === 'soil' ? (
-                            <TableCell className="font-mono">
-                              {r.humidity !== null && r.humidity !== undefined ? `${r.humidity.toFixed(1)}%` : '—'}
-                            </TableCell>
+                            <>
+                              <TableCell className="font-mono">
+                                {r.humidity !== null && r.humidity !== undefined ? `${r.humidity.toFixed(1)}%` : '—'}
+                              </TableCell>
+                              {journalHasAirQuality && (
+                                <TableCell className="font-mono">
+                                  {r.air_quality !== null && r.air_quality !== undefined ? `${r.air_quality.toFixed(1)}%` : '—'}
+                                </TableCell>
+                              )}
+                            </>
                           ) : activeJournalUtility === 'sound' ? (
-                            <TableCell className="font-mono">
-                              {r.level !== null && r.level !== undefined ? `${r.level.toFixed(1)}%` : '—'}
-                            </TableCell>
+                            <>
+                              <TableCell className="font-mono">
+                                {r.level !== null && r.level !== undefined ? `${r.level.toFixed(1)}%` : '—'}
+                              </TableCell>
+                              {journalHasAirQuality && (
+                                <TableCell className="font-mono">
+                                  {r.air_quality !== null && r.air_quality !== undefined ? `${r.air_quality.toFixed(1)}%` : '—'}
+                                </TableCell>
+                              )}
+                            </>
                           ) : activeJournalUtility === 'heating' ? (
                             <>
                               <TableCell className="font-mono">{r.temperature_in_c ?? '—'}</TableCell>

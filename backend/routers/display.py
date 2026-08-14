@@ -52,7 +52,7 @@ async def public_display(building_id: Optional[int] = None):
                     "ts": r.ts,
                 }
             elif r.utility_type == "sound":
-                latest["sound"] = {"value": r.level, "ts": r.ts}
+                latest["sound"] = {"value": r.level, "air_quality": r.air_quality, "ts": r.ts}
             elif r.utility_type == "heating":
                 latest["heating"] = {
                     "value": r.temperature_in_c,
