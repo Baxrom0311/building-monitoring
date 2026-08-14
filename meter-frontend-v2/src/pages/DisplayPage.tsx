@@ -177,7 +177,7 @@ const CHARTS = [
     glow: 'rgba(34,197,94,0.5)',
     bg: 'from-orange-500/20 via-slate-900/80 to-slate-950',
     nominal: GAS_NOMINAL as number | null,
-    fake: { base: GAS_NOMINAL, amp: 0.03 } as { base: number; amp: number } | null,
+    fake: null as { base: number; amp: number } | null,
   },
   {
     key: 'soil' as const,
