@@ -59,15 +59,21 @@ interface LatestValue {
 interface DisplayData {
   building?: { id: number; name: string; address?: string | null } | null
   buildings?: { id: number; name: string }[]
-  // Real-vaqt qiymatlari (soatlik o'rtacha emas) — har utility uchun eng oxirgi xom o'qish
-  latest?: Partial<Record<'electricity' | 'water' | 'gas' | 'soil' | 'sound' | 'heating' | 'air_quality', LatestValue>>
+  // Real-vaqt qiymatlari (soatlik o'rtacha emas) — har utility uchun eng oxirgi xom o'qish.
+  // Havo sifati ikkita JISMONAN alohida manbadan kelishi mumkin (yerto'la MQ135
+  // va yo'lak MQ135) — bittasi ikkinchisining o'rniga o'rtachalanmasin deb
+  // backend ularni alohida kalitlar sifatida qaytaradi (routers/display.py).
+  latest?: Partial<
+    Record<'electricity' | 'water' | 'gas' | 'soil' | 'sound' | 'heating' | 'air_quality_soil' | 'air_quality_sound', LatestValue>
+  >
   electricity: HourlyUtilityStat[]
   water: HourlyUtilityStat[]
   gas: HourlyUtilityStat[]
   soil: HourlyUtilityStat[]
   sound: HourlyUtilityStat[]
   heating?: HourlyUtilityStat[]
-  air_quality?: HourlyUtilityStat[]
+  air_quality_soil?: HourlyUtilityStat[]
+  air_quality_sound?: HourlyUtilityStat[]
 }
 
 // ?building_id=3 bo'lsa kiosk faqat shu bino ma'lumotini ko'rsatadi
@@ -192,19 +198,31 @@ const CHARTS = [
     fake: null as { base: number; amp: number } | null,
   },
   {
-    key: 'air_quality' as const,
+    // Yerto'la MQ135 (tuproq namligi datchigiga ulangan) — yo'lakdagi ovoz+MQ135
+    // datchigidan JISMONAN alohida joy, shuning uchun alohida karta (birlashtirib
+    // o'rtachalash noto'g'ri bo'lardi — ikki xil xonaning havosi bir xil emas).
+    key: 'air_quality_soil' as const,
     dataKey: 'avg_air_quality' as keyof HourlyUtilityStat,
-    label: 'Havo sifati',
+    label: "Havo sifati (Yerto'la)",
     unit: '%',
     icon: Wind,
     color: '#10B981',
     glow: 'rgba(16,185,129,0.5)',
     bg: 'from-emerald-500/20 via-slate-900/80 to-slate-950',
     nominal: 75 as number | null,
-    // Havo sifati MQ135 sensoridan REAL keladi — endi backend'da o'zining
-    // alohida utility_type="air_quality" qatorlari bor (latest_air_quality_average),
-    // soil/sound'ga yopishtirilgan eski qatorlar faqat zaxira sifatida ishlatiladi.
-    // fake kerak emas; ma'lumot bo'lmasa halol "—" ko'rsatiladi (soxta qiymat emas).
+    fake: null as { base: number; amp: number } | null,
+  },
+  {
+    // Yo'lak MQ135 (ovoz datchigiga ulangan).
+    key: 'air_quality_sound' as const,
+    dataKey: 'avg_air_quality' as keyof HourlyUtilityStat,
+    label: "Havo sifati (Yo'lak)",
+    unit: '%',
+    icon: Wind,
+    color: '#0EA5E9',
+    glow: 'rgba(14,165,233,0.5)',
+    bg: 'from-sky-500/20 via-slate-900/80 to-slate-950',
+    nominal: 75 as number | null,
     fake: null as { base: number; amp: number } | null,
   },
   {
@@ -394,14 +412,15 @@ export default function DisplayPage() {
         : [{ key: cfg.dataKey, label: cfg.label, color: cfg.color }]
 
     let rawRows = data ? (data[cfg.key as keyof DisplayData] as HourlyUtilityStat[] | undefined) ?? [] : []
-    if (cfg.key === 'air_quality' && data) {
+    if ((cfg.key === 'air_quality_soil' || cfg.key === 'air_quality_sound') && data) {
       // Reading.air_quality XOM (firmwaredan kelgan) semantikada saqlanadi —
       // inversiya (yuqori=yaxshi foizga aylantirish) har doim displey qatlamida
-      // qilinishi kerak, manba qaysi bo'lishidan qat'i nazar (dedicated
-      // air_quality qatorlari yoki soil/sound'ga "yopishtirilgan" eski qatorlar).
-      const dedicated = data.air_quality ?? []
-      const soilHasAir = (data.soil ?? []).some((r) => r.avg_air_quality != null)
-      const airSource = dedicated.length > 0 ? dedicated : soilHasAir ? data.soil ?? [] : data.sound ?? []
+      // qilinishi kerak. Yerto'la va yo'lak MQ135'lari JISMONAN alohida joy —
+      // bittasining zaxira manbasi faqat O'ZINING eski (soil/sound'ga
+      // yopishtirilgan) qatorlari, ikkinchisiniki emas (aralashtirmaslik uchun).
+      const dedicated = (cfg.key === 'air_quality_soil' ? data.air_quality_soil : data.air_quality_sound) ?? []
+      const legacyFallback = (cfg.key === 'air_quality_soil' ? data.soil : data.sound) ?? []
+      const airSource = dedicated.length > 0 ? dedicated : legacyFallback
       rawRows = airSource.map((r) => ({
         ...r,
         avg_air_quality: r.avg_air_quality != null ? Math.max(0, Number((100 - r.avg_air_quality).toFixed(1))) : null,
@@ -431,13 +450,12 @@ export default function DisplayPage() {
 
     // Real-vaqt qiymati bilan almashtirish — kattasi joriy o'qishni ko'rsatadi
     const rawLatest = data?.latest?.[cfg.key]
-    if (cfg.key === 'air_quality') {
-      // Reading.air_quality XOM semantikada saqlanadi — manba qaysi bo'lishidan
-      // qat'i nazar (dedicated air_quality yozuvi yoki soil/sound'ga
-      // "yopishtirilgan" eski yozuv) inversiya shu yerda bir marta qilinadi.
-      const airLatest =
-        rawLatest?.value != null ? rawLatest : data?.latest?.soil?.air_quality != null ? data?.latest?.soil : data?.latest?.sound
-      const airRaw = rawLatest?.value != null ? rawLatest.value : airLatest?.air_quality
+    if (cfg.key === 'air_quality_soil' || cfg.key === 'air_quality_sound') {
+      // Reading.air_quality XOM semantikada saqlanadi — inversiya shu yerda bir
+      // marta qilinadi. Zaxira manba FAQAT o'ziniki (soil<->soil, sound<->sound) —
+      // yerto'la va yo'lak havosi bir-birining o'rniga ishlatilmasin.
+      const legacyLatest = cfg.key === 'air_quality_soil' ? data?.latest?.soil : data?.latest?.sound
+      const airRaw = rawLatest?.value != null ? rawLatest.value : legacyLatest?.air_quality
       if (airRaw != null) {
         series[0].latest = Math.max(0, Number((100 - airRaw).toFixed(1)))
       }
@@ -649,7 +667,7 @@ export default function DisplayPage() {
             ? waterDomain
             : isGas
             ? gasDomain
-            : cfg.key === 'soil' || cfg.key === 'sound' || cfg.key === 'air_quality'
+            : cfg.key === 'soil' || cfg.key === 'sound' || cfg.key === 'air_quality_soil' || cfg.key === 'air_quality_sound'
             ? [0, 100]
             : ['auto', 'auto']
 

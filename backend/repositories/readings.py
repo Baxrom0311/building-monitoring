@@ -102,6 +102,7 @@ class ReadingRepository(BaseRepository[Reading]):
         building_id: int | None = None,
         max_age_seconds: int = 7200,
         round_digits: int = 2,
+        sensor_type: str | None = None,
     ) -> dict | None:
         """Umumiy naqsh: bino ichidagi bir turdagi barcha aktiv qurilmalarning
         (masalan bir nechta suv/gaz/elektr/issiqlik sensori) OXIRGI o'qishlari
@@ -109,7 +110,11 @@ class ReadingRepository(BaseRepository[Reading]):
 
         `columns` — natija dict kaliti -> Reading ustuni (masalan
         {"value": Reading.pressure_bar}). Har bir qurilmaning faqat eng oxirgi
-        o'qishi hisobga olinadi (ichki subquery), keyin shular bo'yicha avg()."""
+        o'qishi hisobga olinadi (ichki subquery), keyin shular bo'yicha avg().
+
+        `sensor_type` berilsa (masalan "air_quality" utility'si uchun, jismonan
+        boshqa-boshqa joydagi manbalarni — yerto'la/yo'lak — ajratish uchun)
+        faqat shu manba turidan kelgan qatorlar o'rtachalanadi."""
         from core.time import now_ts
         cutoff = now_ts() - max_age_seconds
         subq_stmt = (
@@ -119,6 +124,8 @@ class ReadingRepository(BaseRepository[Reading]):
         )
         if building_id is not None:
             subq_stmt = subq_stmt.where(Reading.building_id == building_id)
+        if sensor_type is not None:
+            subq_stmt = subq_stmt.where(Reading.sensor_type == sensor_type)
         subq = subq_stmt.group_by(Reading.device_id).subquery()
 
         avg_cols = [func.avg(col).label(key) for key, col in columns.items()]
@@ -131,6 +138,8 @@ class ReadingRepository(BaseRepository[Reading]):
             .join(subq, and_(Reading.device_id == subq.c.device_id, Reading.ts == subq.c.max_ts))
             .where(Reading.utility_type == utility_type)
         )
+        if sensor_type is not None:
+            stmt = stmt.where(Reading.sensor_type == sensor_type)
         res = (await self.session.execute(stmt)).mappings().one_or_none()
         if not res or not res["sensor_count"]:
             return None
@@ -186,15 +195,24 @@ class ReadingRepository(BaseRepository[Reading]):
             building_id, max_age_seconds, round_digits=1,
         )
 
-    async def latest_air_quality_average(self, building_id: int | None = None, max_age_seconds: int = 7200) -> dict | None:
+    async def latest_air_quality_average(
+        self, building_id: int | None = None, max_age_seconds: int = 7200, sensor_type: str | None = None
+    ) -> dict | None:
         """Bino ichidagi barcha aktiv havo sifati (MQ135) datchiklarining oxirgi
         o'qishlari bo'yicha O'RTACHA qiymatni hisoblab qaytaradi.
 
         utility_type="air_quality" qatorlari server tomonida soil/sound
         payload'laridan ajratilib (split) yoziladi (services/readings.py) —
-        bu yerda ular mustaqil kommunal tur sifatida o'rtachalanadi."""
+        bu yerda ular mustaqil kommunal tur sifatida o'rtachalanadi.
+
+        sensor_type MUHIM: MQ135 jismonan ikki xil joyga o'rnatilishi mumkin
+        (masalan yerto'la namligi datchigiga — sensor_type="capacitive_soil_moisture",
+        yoki yo'lakdagi ovoz datchigiga — sensor_type="microphone"). Bularni
+        birlashtirib o'rtachalash noto'g'ri (ikki xil xonaning havosi bir xil
+        emas) — shuning uchun chaqiruvchi manba turini ANIQ ko'rsatishi kerak."""
         return await self._latest_average(
-            "air_quality", {"value": Reading.air_quality}, building_id, max_age_seconds, round_digits=1,
+            "air_quality", {"value": Reading.air_quality}, building_id, max_age_seconds,
+            round_digits=1, sensor_type=sensor_type,
         )
 
     async def latest_utility_average(

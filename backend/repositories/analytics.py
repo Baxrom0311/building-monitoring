@@ -245,6 +245,7 @@ class AnalyticsRepository(BaseRepository[HourlyUtilityStats]):
         bucket_sec: int = 900,
         building_id: int | None = None,
         limit: int = 500,
+        sensor_type: str | None = None,
     ) -> list[dict]:
         """Xom o'qishlardan JONLI mayda-bucket statistikasi (display sparkline uchun).
 
@@ -252,7 +253,11 @@ class AnalyticsRepository(BaseRepository[HourlyUtilityStats]):
         ma'lumot 24 soatda atigi 6 ustun berardi. bucket_sec=900 (15 daqiqa) bilan
         ancha zichroq grafik chiqadi. Bucket bo'yicha guruhlaydi (qurilmalararo
         o'rtacha) — shu bilan bir binodagi bir nechta sensor avtomatik birlashadi.
-        """
+
+        sensor_type berilsa (masalan "air_quality" utility'si uchun) faqat shu
+        manba turidan (masalan "capacitive_soil_moisture" = yerto'la, "microphone" =
+        yo'lak) kelgan qatorlar hisobga olinadi — jismonan boshqa-boshqa joylardagi
+        havo sifati o'qishlari bir-biriga aralashtirib o'rtachalanmasin (audit)."""
         bucket_ts = Reading.ts - (Reading.ts % bucket_sec)
         cols = [bucket_ts.label("bucket_ts"), func.count().label("samples")]
         for label, col, digits in self._BUCKET_FIELDS.get(utility_type, []):
@@ -270,6 +275,8 @@ class AnalyticsRepository(BaseRepository[HourlyUtilityStats]):
         )
         if building_id:
             stmt = stmt.where(Reading.building_id == building_id)
+        if sensor_type:
+            stmt = stmt.where(Reading.sensor_type == sensor_type)
         stmt = stmt.group_by(bucket_ts).order_by(desc(bucket_ts)).limit(limit)
         return [dict(row) for row in (await self.session.execute(stmt)).mappings().all()]
 

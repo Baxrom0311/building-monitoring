@@ -9,6 +9,15 @@ from services import analytics as analytics_service
 
 router = APIRouter(prefix="/api/public")
 
+# MQ135 (havo sifati) jismonan ikki xil joyga o'rnatilishi mumkin — yerto'la
+# namligi datchigiga yoki yo'lakdagi ovoz datchigiga. Ularni bitta o'rtacha
+# songa birlashtirish noto'g'ri (ikki xil xonaning havosi bir xil emas),
+# shuning uchun har biri o'zining sensor_type'i bo'yicha ALOHIDA hisoblanadi.
+AIR_QUALITY_SOURCES = {
+    "air_quality_soil": "capacitive_soil_moisture",   # yerto'la
+    "air_quality_sound": "microphone",                # yo'lak
+}
+
 
 @router.get("/display")
 async def public_display(building_id: Optional[int] = None):
@@ -17,12 +26,13 @@ async def public_display(building_id: Optional[int] = None):
     building_id berilsa faqat shu bino statistikasi qaytadi
     (kiosk ekranini bitta domga bog'lash uchun: /display?building_id=3).
     """
-    async def stats(utility: str) -> list:
+    async def stats(utility: str, sensor_type: str | None = None) -> list:
         # 15-daqiqalik jonli bucket — soatlik jadval elektr uchun 24 soatda atigi
         # ~6 ustun berardi; mayda bucket sparkline'ni ancha zichlashtiradi. Bucket
         # bo'yicha o'rtacha — bir binodagi bir nechta ovoz sensori avtomatik birlashadi.
         return await analytics_service.list_bucketed_stats(
-            building_id=building_id, utility_type=utility, hours=24, bucket_sec=900, limit=500
+            building_id=building_id, utility_type=utility, hours=24, bucket_sec=900, limit=500,
+            sensor_type=sensor_type,
         )
 
     building_info = None
@@ -60,7 +70,10 @@ async def public_display(building_id: Optional[int] = None):
                     "ts": r.ts,
                 }
             elif r.utility_type == "air_quality":
-                latest["air_quality"] = {"value": r.air_quality, "ts": r.ts}
+                for key, sensor_type in AIR_QUALITY_SOURCES.items():
+                    if r.sensor_type == sensor_type:
+                        latest[key] = {"value": r.air_quality, "ts": r.ts}
+                        break
 
         # Agar binoda 1 ta dan ko'p ovoz datchigi (masalan 3 ta ovoz sensori) bo'lsa, ularning o'rtachasini olish
         sound_avg = await reading_repo.latest_sound_average(building_id=building_id)
@@ -88,9 +101,10 @@ async def public_display(building_id: Optional[int] = None):
         heating_avg = await reading_repo.latest_heating_average(building_id=building_id)
         if heating_avg:
             latest["heating"] = heating_avg
-        air_quality_avg = await reading_repo.latest_air_quality_average(building_id=building_id)
-        if air_quality_avg:
-            latest["air_quality"] = air_quality_avg
+        for key, sensor_type in AIR_QUALITY_SOURCES.items():
+            air_avg = await reading_repo.latest_air_quality_average(building_id=building_id, sensor_type=sensor_type)
+            if air_avg:
+                latest[key] = air_avg
     buildings = [{"id": b.id, "name": b.name} for b in all_buildings]
 
     return {
@@ -103,7 +117,8 @@ async def public_display(building_id: Optional[int] = None):
         "soil": await stats("soil"),
         "sound": await stats("sound"),
         "heating": await stats("heating"),
-        "air_quality": await stats("air_quality"),
+        "air_quality_soil": await stats("air_quality", sensor_type="capacitive_soil_moisture"),
+        "air_quality_sound": await stats("air_quality", sensor_type="microphone"),
     }
 
 

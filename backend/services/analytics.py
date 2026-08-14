@@ -65,6 +65,7 @@ async def list_bucketed_stats(
     hours: int = 24,
     bucket_sec: int = 900,
     limit: int = 500,
+    sensor_type: str | None = None,
 ) -> list[dict]:
     """Display sparkline uchun jonli mayda-bucket (default 15 daq) statistika."""
     cutoff = now_ts() - hours * 3600
@@ -75,6 +76,7 @@ async def list_bucketed_stats(
             bucket_sec=bucket_sec,
             building_id=building_id,
             limit=limit,
+            sensor_type=sensor_type,
         )
 
 
