@@ -70,6 +70,22 @@ async def public_display(building_id: Optional[int] = None):
         soil_resolved = await reading_repo.latest_soil_resolved(building_id=building_id)
         if soil_resolved:
             latest["soil"] = soil_resolved
+
+        # Bir turdagi sensordan bir nechtasi bo'lsa (masalan bir binoda 2 ta suv
+        # bosimi datchigi), tasodifiy "eng oxirgisi" o'rniga barchasining
+        # O'RTACHASINI ko'rsatamiz — sound/soil bilan bir xil naqsh.
+        water_avg = await reading_repo.latest_water_average(building_id=building_id)
+        if water_avg:
+            latest["water"] = water_avg
+        gas_avg = await reading_repo.latest_gas_average(building_id=building_id)
+        if gas_avg:
+            latest["gas"] = gas_avg
+        elec_avg = await reading_repo.latest_electricity_average(building_id=building_id)
+        if elec_avg:
+            latest["electricity"] = elec_avg
+        heating_avg = await reading_repo.latest_heating_average(building_id=building_id)
+        if heating_avg:
+            latest["heating"] = heating_avg
     buildings = [{"id": b.id, "name": b.name} for b in all_buildings]
 
     return {
