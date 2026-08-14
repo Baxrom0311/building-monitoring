@@ -36,6 +36,7 @@ class DeviceRole(StrEnum):
     soil_outdoor = "soil_outdoor"
     soil_basement = "soil_basement"
     sound_node = "sound_node"
+    sound_air = "sound_air"
     heating_node = "heating_node"
 
 
