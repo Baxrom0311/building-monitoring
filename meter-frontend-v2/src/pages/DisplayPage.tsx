@@ -834,32 +834,22 @@ export default function DisplayPage() {
                       )}
                     </>
                   ) : (
-                    /* Qozonxona: ΔT qahramon raqam + Kirish/Chiqish kichik satr */
+                    /* Qozonxona: Kirish harorati qahramon raqam + Chiqish/ΔT kichik satr */
                     <>
                       <span
-                        key={dT ?? 'na'}
+                        key={cfg.series[0].latest ?? 'na'}
                         className="value-tick inline-flex items-baseline gap-1.5 transition-colors duration-500"
                       >
                         <span
                           className="font-sans font-bold leading-none tabular-nums tracking-[-0.02em] text-[clamp(2.5rem,5vw,4.25rem)]"
                           style={{ color: heroColor, textShadow: `0 0 40px ${heroColor}33` }}
                         >
-                          {dT != null ? <AnimatedNumber value={dT} decimals={1} /> : '—'}
+                          {cfg.series[0].latest != null ? <AnimatedNumber value={cfg.series[0].latest} decimals={1} /> : '—'}
                         </span>
-                        <span className="text-lg font-semibold text-slate-400 sm:text-xl">°C ΔT</span>
+                        <span className="text-lg font-semibold text-slate-400 sm:text-xl">°C</span>
                       </span>
 
                       <div className="mt-1.5 flex gap-2 tabular-nums">
-                        <span className="rounded-lg bg-white/[0.05] px-2.5 py-1 text-sm">
-                          <span className="text-slate-500">Kir </span>
-                          <span className="font-bold text-cyan-300">
-                            {cfg.series[0].latest != null ? (
-                              <AnimatedNumber value={cfg.series[0].latest} decimals={1} suffix="°" />
-                            ) : (
-                              '—'
-                            )}
-                          </span>
-                        </span>
                         <span className="rounded-lg bg-white/[0.05] px-2.5 py-1 text-sm">
                           <span className="text-slate-500">Chiq </span>
                           <span className="font-bold text-sky-300">
@@ -868,6 +858,12 @@ export default function DisplayPage() {
                             ) : (
                               '—'
                             )}
+                          </span>
+                        </span>
+                        <span className="rounded-lg bg-white/[0.05] px-2.5 py-1 text-sm">
+                          <span className="text-slate-500">ΔT </span>
+                          <span className="font-bold text-cyan-300">
+                            {dT != null ? <AnimatedNumber value={dT} decimals={1} suffix="°" /> : '—'}
                           </span>
                         </span>
                       </div>
