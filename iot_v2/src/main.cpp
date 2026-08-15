@@ -555,8 +555,12 @@ void loop() {
 }
 
 #elif defined(RS485_DISPLAY)
-// RS-485 SUV DISPLEY — shinani PASSIV tinglaydi (poll qilmaydi, UZATMAYDI),
-// suv leaf javoblaridan bosimni olib LCD'ga chiqaradi. WiFi/sensor YO'Q.
+// RS-485 DISPLEY — shinani PASSIV tinglaydi (poll qilmaydi, UZATMAYDI),
+// bitta belgilangan utility_type'ning leaf javoblaridan qiymatni olib LCD'ga
+// chiqaradi. WiFi/sensor YO'Q. Qaysi utility ko'rsatilishini build_flags
+// tanlaydi: -DRS485_DISPLAY_UTILITY="water" (standart, suv ekrani bilan bir
+// xil) yoki "heating" — kelajakda boshqa utility qo'shish uchun ham shu
+// generik displey ishlatiladi (har biriga alohida ~90 qatorlik nusxa emas).
 // Ulanish: RO->32, DI->33, DE(+RE)->25 (DE doim LOW = qabul), LCD I2C SDA=21 SCL=22.
 #include <Arduino.h>
 #include <ArduinoJson.h>
@@ -565,8 +569,12 @@ void loop() {
 #include "rs485_bus.h"
 #include "display/lcd.h"
 
-static unsigned long g_last_water_ms = 0;   // oxirgi suv ko'rsatilgan vaqt
-static unsigned long g_last_bus_ms   = 0;   // shinada oxirgi SO'ROVSIZ faollik (bridge bormi?)
+#ifndef RS485_DISPLAY_UTILITY
+  #define RS485_DISPLAY_UTILITY "water"
+#endif
+
+static unsigned long g_last_reading_ms = 0;   // oxirgi qiymat ko'rsatilgan vaqt
+static unsigned long g_last_bus_ms     = 0;   // shinada oxirgi SO'ROVSIZ faollik (bridge bormi?)
 
 // Shina jim (bridge yo'q) deb hisoblash chegarasi. Leaf DISCOVER_SKIP_MS=30s
 // bo'lgani uchun undan katta — bridge yo'qolsa leaf yana javob bera boshlaydi.
@@ -574,19 +582,29 @@ static unsigned long g_last_bus_ms   = 0;   // shinada oxirgi SO'ROVSIZ faollik 
 #define DISPLAY_BOOT_MS      6000UL   // boshidan bridge eshitilmasa shu vaqtdan keyin
 #define DISPLAY_POLL_EVERY   4000UL   // jim rejimда har shuncha DISCOVER yuboradi
 
-// Freymni tekshirib, suv bo'lsa LCD'ga chiqaradi. true = suv ko'rsatildi.
-static bool display_show_water(const uint8_t* buf) {
+// Freymni tekshirib, RS485_DISPLAY_UTILITY bo'lsa LCD'ga chiqaradi. true = ko'rsatildi.
+static bool display_show_reading(const uint8_t* buf) {
     StaticJsonDocument<512> doc;
     if (deserializeJson(doc, (const char*)buf) != DeserializationError::Ok) return false;
     const char* ut = doc["utility_type"] | "";
-    if (strcmp(ut, "water") != 0) return false;
-    float p = doc["pressure_bottom_bar"] | 0.0f;
+    if (strcmp(ut, RS485_DISPLAY_UTILITY) != 0) return false;
+
     char r0[LCD_COLS + 1];
-    snprintf(r0, sizeof(r0), "Suv: %.2f bar", p);
+    if (!strcmp(RS485_DISPLAY_UTILITY, "water")) {
+        float p = doc["pressure_bottom_bar"] | 0.0f;
+        snprintf(r0, sizeof(r0), "Suv: %.2f bar", p);
+        LOG_PRINTF("SUV: %.2f bar\n", p);
+    } else if (!strcmp(RS485_DISPLAY_UTILITY, "heating")) {
+        float ti = doc["temperature_in_c"]  | 0.0f;
+        float to = doc["temperature_out_c"] | 0.0f;
+        snprintf(r0, sizeof(r0), "K:%.1f Ch:%.1f", ti, to);
+        LOG_PRINTF("ISITISH: kirish=%.1fC chiqish=%.1fC\n", ti, to);
+    } else {
+        snprintf(r0, sizeof(r0), "%-16s", RS485_DISPLAY_UTILITY);
+    }
     lcd_row(0, r0);
     lcd_row(1, "A1TECH  BRR");
-    g_last_water_ms = millis();
-    LOG_PRINTF("SUV: %.2f bar\n", p);
+    g_last_reading_ms = millis();
     return true;
 }
 
@@ -596,10 +614,10 @@ void setup() {
     rs485_init();                 // DE LOW = qabul; kerak bo'lganда o'zi ham so'raydi
     wdt_init();
     lcd_init();
-    lcd_row(0, "Suv kutilmoqda");
+    lcd_row(0, "Kutilmoqda...");
     lcd_row(1, "A1TECH  BRR");
     LOG_PRINTLN();
-    LOG_PRINTLN("=== RS-485 SUV DISPLEY ===");
+    LOG_PRINTF("=== RS-485 DISPLEY (%s) ===\n", RS485_DISPLAY_UTILITY);
     LOG_PRINTF("Bus: RX=%d TX=%d DE=%d @%lu | LCD SDA=%d SCL=%d\n",
                RS485_BUS_RX, RS485_BUS_TX, RS485_BUS_DE, (unsigned long)RS485_BAUD,
                (int)LCD_SDA, (int)LCD_SCL);
@@ -615,10 +633,10 @@ void loop() {
     if (n > 0) {
         g_last_bus_ms = millis();   // shinada faollik bor (bridge ishlayapti)
         buf[n] = '\0';
-        display_show_water(buf);
+        display_show_reading(buf);
     }
 
-    // 2) Shina jim (bridge yo'q) bo'lsa — displey O'ZI DISCOVER yuborib suv so'raydi
+    // 2) Shina jim (bridge yo'q) bo'lsa — displey O'ZI DISCOVER yuborib so'raydi
     unsigned long since_bus  = millis() - g_last_bus_ms;   // g_last_bus_ms=0 bo'lsa uptime
     unsigned long takeover   = (g_last_bus_ms == 0) ? DISPLAY_BOOT_MS : DISPLAY_TAKEOVER_MS;
     static unsigned long last_poll = 0;
@@ -629,14 +647,14 @@ void loop() {
         unsigned long win = millis();
         while (millis() - win < 700) {
             uint16_t m = rs485_recv_frame(buf, RS485_MAX_FRAME, 250);
-            if (m > 0) { buf[m] = '\0'; display_show_water(buf); }
+            if (m > 0) { buf[m] = '\0'; display_show_reading(buf); }
             // g_last_bus_ms YANGILANMAYDI — bu bizning so'rovimizga javob, bridge emas
         }
     }
 
-    // Uzoq vaqt (60s) suv umuman kelmasa — 0-qatorda ogohlantirish
-    if (g_last_water_ms != 0 && millis() - g_last_water_ms > 60000UL) {
-        lcd_row(0, "Suv: malumot yo'q");
+    // Uzoq vaqt (60s) qiymat umuman kelmasa — 0-qatorda ogohlantirish
+    if (g_last_reading_ms != 0 && millis() - g_last_reading_ms > 60000UL) {
+        lcd_row(0, "Malumot yo'q");
     }
     lcd_refresh_if_needed();
 }
