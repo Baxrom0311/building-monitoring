@@ -209,7 +209,10 @@ const CHARTS = [
     color: '#10B981',
     glow: 'rgba(16,185,129,0.5)',
     bg: 'from-emerald-500/20 via-slate-900/80 to-slate-950',
-    nominal: 75 as number | null,
+    // Xom (yuqori=ifloslangan) shkalada ko'rsatiladi — norma PAST bo'lishi kerak
+    // (25% dan past = toza havo), avvalgi invertsiyalangan 75% shkalasiga
+    // (100-25=75) mos keladigan chegara.
+    nominal: 25 as number | null,
     fake: null as { base: number; amp: number } | null,
   },
   {
@@ -222,7 +225,7 @@ const CHARTS = [
     color: '#0EA5E9',
     glow: 'rgba(14,165,233,0.5)',
     bg: 'from-sky-500/20 via-slate-900/80 to-slate-950',
-    nominal: 75 as number | null,
+    nominal: 25 as number | null,
     fake: null as { base: number; amp: number } | null,
   },
   {
@@ -413,11 +416,11 @@ export default function DisplayPage() {
 
     let rawRows = data ? (data[cfg.key as keyof DisplayData] as HourlyUtilityStat[] | undefined) ?? [] : []
     if ((cfg.key === 'air_quality_soil' || cfg.key === 'air_quality_sound') && data) {
-      // Reading.air_quality XOM (firmwaredan kelgan) semantikada saqlanadi —
-      // inversiya (yuqori=yaxshi foizga aylantirish) har doim displey qatlamida
-      // qilinishi kerak. Yerto'la va yo'lak MQ135'lari JISMONAN alohida joy —
-      // bittasining zaxira manbasi faqat O'ZINING eski (soil/sound'ga
-      // yopishtirilgan) qatorlari, ikkinchisiniki emas (aralashtirmaslik uchun).
+      // Reading.air_quality XOM (firmwaredan kelgan, yuqori=ifloslangan)
+      // semantikada ko'rsatiladi — invertsiz, to'g'ridan-to'g'ri. Yerto'la va
+      // yo'lak MQ135'lari JISMONAN alohida joy — bittasining zaxira manbasi
+      // faqat O'ZINING eski (soil/sound'ga yopishtirilgan) qatorlari,
+      // ikkinchisiniki emas (aralashtirmaslik uchun).
       const dedicated = (cfg.key === 'air_quality_soil' ? data.air_quality_soil : data.air_quality_sound) ?? []
       // Eski (soil/sound'ga yopishtirilgan) massivda KO'PCHILIK qator umuman
       // MQ135'siz (faqat namlik/ovoz) — shularni chetlab o'tmasak "N ta o'lchov"
@@ -426,11 +429,7 @@ export default function DisplayPage() {
       const legacyFallback = ((cfg.key === 'air_quality_soil' ? data.soil : data.sound) ?? []).filter(
         (r) => r.avg_air_quality != null
       )
-      const airSource = dedicated.length > 0 ? dedicated : legacyFallback
-      rawRows = airSource.map((r) => ({
-        ...r,
-        avg_air_quality: r.avg_air_quality != null ? Math.max(0, Number((100 - r.avg_air_quality).toFixed(1))) : null,
-      }))
+      rawRows = dedicated.length > 0 ? dedicated : legacyFallback
     }
 
     let points = buildMultiPoints(rawRows, seriesDefs.map((s) => s.key))
@@ -457,13 +456,13 @@ export default function DisplayPage() {
     // Real-vaqt qiymati bilan almashtirish — kattasi joriy o'qishni ko'rsatadi
     const rawLatest = data?.latest?.[cfg.key]
     if (cfg.key === 'air_quality_soil' || cfg.key === 'air_quality_sound') {
-      // Reading.air_quality XOM semantikada saqlanadi — inversiya shu yerda bir
-      // marta qilinadi. Zaxira manba FAQAT o'ziniki (soil<->soil, sound<->sound) —
+      // Reading.air_quality XOM (yuqori=ifloslangan) semantikada ko'rsatiladi —
+      // invertsiz. Zaxira manba FAQAT o'ziniki (soil<->soil, sound<->sound) —
       // yerto'la va yo'lak havosi bir-birining o'rniga ishlatilmasin.
       const legacyLatest = cfg.key === 'air_quality_soil' ? data?.latest?.soil : data?.latest?.sound
       const airRaw = rawLatest?.value != null ? rawLatest.value : legacyLatest?.air_quality
       if (airRaw != null) {
-        series[0].latest = Math.max(0, Number((100 - airRaw).toFixed(1)))
+        series[0].latest = Math.max(0, Number(airRaw.toFixed(1)))
       }
     } else if (rawLatest?.value != null) {
       series[0].latest = rawLatest.value

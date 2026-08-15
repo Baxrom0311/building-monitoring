@@ -70,11 +70,15 @@ export function getHeatingStatus(deltaT: number | null): SensorStatusInfo {
 }
 
 // ── Havo sifati (%) ────────────────────────────────────────────────────────
-export function getAirQualityStatus(qualityPct: number | null): SensorStatusInfo {
-  if (qualityPct == null) return unknownStatus()
-  if (qualityPct >= 80) return { level: 'alo', label: "Toza (A'lo)", color: '#34D399', bgColor: 'rgba(52,211,153,0.15)', borderColor: 'rgba(52,211,153,0.4)' }
-  if (qualityPct >= 60) return { level: 'norma', label: "Me'yorda", color: '#22D3EE', bgColor: 'rgba(34,211,238,0.15)', borderColor: 'rgba(34,211,238,0.4)' }
-  if (qualityPct >= 40) return { level: 'orta', label: 'Qoniqarsiz', color: '#FBBF24', bgColor: 'rgba(251,191,36,0.15)', borderColor: 'rgba(251,191,36,0.4)' }
+// Reading.air_quality XOM (firmwaredan kelgan, yuqori=ifloslangan) semantikada
+// ko'rsatiladi — shuning uchun bu yerdagi chegaralar ham PASTKI qiymat=yaxshi
+// yo'nalishda (avvalgi invertsiyalangan >=80/>=60/>=40 chegaralarining
+// 100-x ko'zgu aksi: <=20/<=40/<=60).
+export function getAirQualityStatus(rawPct: number | null): SensorStatusInfo {
+  if (rawPct == null) return unknownStatus()
+  if (rawPct <= 20) return { level: 'alo', label: "Toza (A'lo)", color: '#34D399', bgColor: 'rgba(52,211,153,0.15)', borderColor: 'rgba(52,211,153,0.4)' }
+  if (rawPct <= 40) return { level: 'norma', label: "Me'yorda", color: '#22D3EE', bgColor: 'rgba(34,211,238,0.15)', borderColor: 'rgba(34,211,238,0.4)' }
+  if (rawPct <= 60) return { level: 'orta', label: 'Qoniqarsiz', color: '#FBBF24', bgColor: 'rgba(251,191,36,0.15)', borderColor: 'rgba(251,191,36,0.4)' }
   return { level: 'yomon', label: 'Ifloslangan!', color: '#FB7185', bgColor: 'rgba(251,113,133,0.2)', borderColor: 'rgba(251,113,133,0.5)' }
 }
 
@@ -87,7 +91,10 @@ export function getSensorStatus(sensorKey: string, value: number | null): Sensor
     case 'soil': return getSoilStatus(value)
     case 'sound': return getSoundStatus(value)
     case 'heating': return getHeatingStatus(value)
-    case 'air_quality': return getAirQualityStatus(value)
+    case 'air_quality':
+    case 'air_quality_soil':
+    case 'air_quality_sound':
+      return getAirQualityStatus(value)
     default: return unknownStatus()
   }
 }
