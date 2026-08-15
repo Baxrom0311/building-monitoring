@@ -374,6 +374,10 @@ class ExternalSensorForward(Base, TimestampMixin):
     # qo'shimcha filtr (masalan "capacitive_soil_moisture" yoki "microphone").
     # Boshqa utility_type'lar uchun NULL — bino bo'yicha oddiy o'rtacha olinadi.
     sensor_type: Mapped[str | None] = mapped_column(String(64))
+    # utility_type="electricity" uchun qaysi ustunni yuborish kerakligini
+    # tanlaydi: NULL/boshqa = kuchlanish (sayt kartasi bilan bir xil),
+    # "energy_kwh" = sarflangan energiya (tashqi tomon buni kutadi).
+    metric: Mapped[str | None] = mapped_column(String(32))
     external_token: Mapped[str] = mapped_column(String(255), nullable=False)
     external_device: Mapped[str] = mapped_column(String(255), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)

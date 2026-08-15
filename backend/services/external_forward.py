@@ -49,7 +49,7 @@ async def forward_readings_once() -> dict:
 
         for m in mappings:
             avg = await reading_repo.latest_utility_average(
-                m.utility_type, building_id=m.building_id, sensor_type=m.sensor_type
+                m.utility_type, building_id=m.building_id, sensor_type=m.sensor_type, metric=m.metric
             )
             value = avg.get("value") if avg else None
             if value is None:

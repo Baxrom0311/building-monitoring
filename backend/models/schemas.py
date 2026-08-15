@@ -1307,6 +1307,9 @@ class ExternalForwardCreate(BaseModel):
     # "capacitive_soil_moisture" (yerto'la MQ135) yoki "microphone" (yo'lak MQ135).
     # Boshqa utility_type'lar uchun bo'sh qoldiring.
     sensor_type: Optional[str] = None
+    # electricity uchun qaysi ustun yuborilishini tanlaydi: bo'sh = kuchlanish,
+    # "energy_kwh" = sarflangan energiya. Boshqa utility_type'lar uchun bo'sh qoldiring.
+    metric: Optional[str] = None
     external_token: str
     external_device: str
     is_active: bool = True
@@ -1314,6 +1317,7 @@ class ExternalForwardCreate(BaseModel):
 
 class ExternalForwardUpdate(BaseModel):
     sensor_type: Optional[str] = None
+    metric: Optional[str] = None
     external_token: Optional[str] = None
     external_device: Optional[str] = None
     is_active: Optional[bool] = None
@@ -1324,6 +1328,7 @@ class ExternalForwardResponse(BaseModel):
     building_id: int
     utility_type: str
     sensor_type: Optional[str] = None
+    metric: Optional[str] = None
     external_token: str
     external_device: str
     is_active: bool

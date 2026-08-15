@@ -179,9 +179,19 @@ class ReadingRepository(BaseRepository[Reading]):
             "gas", {"value": Reading.pressure_bar}, building_id, max_age_seconds
         )
 
-    async def latest_electricity_average(self, building_id: int | None = None, max_age_seconds: int = 7200) -> dict | None:
+    async def latest_electricity_average(
+        self, building_id: int | None = None, max_age_seconds: int = 7200, metric: str | None = None
+    ) -> dict | None:
         """Bino ichida bir nechta elektr hisoblagich/bridge bo'lsa, ularning
-        oxirgi o'qishlari bo'yicha O'RTACHA kuchlanishni hisoblab qaytaradi."""
+        oxirgi o'qishlari bo'yicha O'RTACHA qiymatni hisoblab qaytaradi.
+
+        Standart holatda kuchlanish (bizning saytimiz "Elektr kuchlanishi"
+        kartasi shuni kutadi) — metric="energy_kwh" berilsa, o'rniga sarflangan
+        energiya (tashqi tizimga forward qilish uchun) qaytariladi."""
+        if metric == "energy_kwh":
+            return await self._latest_average(
+                "electricity", {"value": Reading.energy_kwh}, building_id, max_age_seconds, round_digits=3
+            )
         return await self._latest_average(
             "electricity", {"value": Reading.voltage_l1}, building_id, max_age_seconds, round_digits=1
         )
@@ -217,7 +227,7 @@ class ReadingRepository(BaseRepository[Reading]):
 
     async def latest_utility_average(
         self, utility_type: str, building_id: int | None = None, max_age_seconds: int = 7200,
-        sensor_type: str | None = None,
+        sensor_type: str | None = None, metric: str | None = None,
     ) -> dict | None:
         """utility_type nomiga qarab mos latest_*_average()/soil_resolved()ga
         yo'naltiruvchi umumiy funksiya — tashqi tizimga yuborish (services/
@@ -225,13 +235,15 @@ class ReadingRepository(BaseRepository[Reading]):
         chaqiruvchilar uchun.
 
         sensor_type faqat "air_quality" uchun ma'noli — jismonan boshqa-boshqa
-        joydagi (yerto'la/yo'lak) MQ135 manbalarini ajratish uchun."""
+        joydagi (yerto'la/yo'lak) MQ135 manbalarini ajratish uchun.
+        metric faqat "electricity" uchun ma'noli — standart kuchlanish o'rniga
+        metric="energy_kwh" bilan sarflangan energiya qaytariladi."""
         if utility_type == "water":
             return await self.latest_water_average(building_id, max_age_seconds)
         if utility_type == "gas":
             return await self.latest_gas_average(building_id, max_age_seconds)
         if utility_type == "electricity":
-            return await self.latest_electricity_average(building_id, max_age_seconds)
+            return await self.latest_electricity_average(building_id, max_age_seconds, metric=metric)
         if utility_type == "heating":
             return await self.latest_heating_average(building_id, max_age_seconds)
         if utility_type == "sound":

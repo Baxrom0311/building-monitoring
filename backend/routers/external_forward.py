@@ -33,6 +33,7 @@ async def create_external_forward(body: ExternalForwardCreate, admin: dict = Dep
             building_id=body.building_id,
             utility_type=body.utility_type.value,
             sensor_type=body.sensor_type,
+            metric=body.metric,
             external_token=body.external_token,
             external_device=body.external_device,
             is_active=body.is_active,
@@ -87,7 +88,7 @@ async def test_external_forward(forward_id: int, admin: dict = Depends(require_a
             raise HTTPException(status_code=404, detail="Mapping topilmadi")
 
         avg = await reading_repo.latest_utility_average(
-            row.utility_type, building_id=row.building_id, sensor_type=row.sensor_type
+            row.utility_type, building_id=row.building_id, sensor_type=row.sensor_type, metric=row.metric
         )
         value = avg.get("value") if avg else None
         if value is None:
