@@ -13,7 +13,7 @@ from models.schemas import (
 from repositories.external_forward import ExternalForwardRepository
 from repositories.readings import ReadingRepository
 from services import audit
-from services.external_forward import send_one
+from services.external_forward import send_one, to_external_value
 
 router = APIRouter(prefix="/api/external-forwards", tags=["external-forwards"])
 
@@ -93,6 +93,7 @@ async def test_external_forward(forward_id: int, admin: dict = Depends(require_a
         value = avg.get("value") if avg else None
         if value is None:
             return ExternalForwardTestResponse(ok=False, error="joriy o'qish topilmadi (2 soat ichida ma'lumot yo'q)")
+        value = to_external_value(row.utility_type, value)
 
         try:
             await send_one(row.external_token, value, row.external_device)
