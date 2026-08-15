@@ -2,17 +2,26 @@
 /**
  * heating.h — Qozonxona kirish/chiqish suv harorati (2x DS18B20) — iot_v2 (RS-485 / WiFi)
  *
- * Apparat:
- *   DS18B20 #1 (kirish, "supply") → GPIO PIN_TEMP_IN  (1-Wire, har biri
- *   DS18B20 #2 (chiqish, "return") → GPIO PIN_TEMP_OUT   o'z alohida shinasida)
- *   Har ikkalasi ham 1-Wire — 4.7kΩ pull-up rezistor DATA-VCC oralig'ida kerak.
+ * Ikki xil simlash qo'llab-quvvatlanadi:
  *
- * Parametrlar (platformio.ini):
- *   -DPIN_TEMP_IN=4    → Kirish (supply) DS18B20 GPIO (standart: 4)
- *   -DPIN_TEMP_OUT=5   → Chiqish (return) DS18B20 GPIO (standart: 5)
+ *   1) Standart — HAR BIR datchik O'Z ALOHIDA 1-Wire shinasida:
+ *        DS18B20 #1 (kirish, "supply") → GPIO PIN_TEMP_IN
+ *        DS18B20 #2 (chiqish, "return") → GPIO PIN_TEMP_OUT
+ *      -DPIN_TEMP_IN=4 / -DPIN_TEMP_OUT=5 (standart qiymatlar)
+ *
+ *   2) -DHEATING_SHARED_BUS — ikkala datchik BITTA simga (PIN_TEMP_IN) T-ulanган
+ *      (1-Wire bir nechta qurilmani bitta shinada qo'llab-quvvatlaydi — kabel
+ *      tortish osonroq). Kirish/chiqishni ANIQ ROM-manzil bilan emas, OneWire
+ *      qidiruv TARTIBI bo'yicha (indeks 0 = "kirish", 1 = "chiqish") ajratadi —
+ *      bu tartib bir xil qurilmalar to'plami uchun barqaror, lekin FIZIK
+ *      joylashuvga bog'liq EMAS. Agar sinovda kirish/chiqish teskari chiqsa,
+ *      ikki datchikni jismonan almashtiring (yoki shu faylda pastda
+ *      SWAP_IN_OUT'ni true qiling).
+ *
+ * Har ikkala holatda ham 1-Wire — 4.7kΩ pull-up rezistor DATA-VCC oralig'ida kerak.
  *
  * Sensor API (main.cpp dan chaqiriladi):
- *   sensor_init()              — ikkala OneWire shinasini sozlaydi
+ *   sensor_init()              — OneWire shina(lar)ni sozlaydi
  *   sensor_connect() → bool   — kamida bitta DS18B20 topildimi
  *   sensor_read(SensorData&)  → bool — ikkala haroratni o'qiydi
  *   sensor_build_json(...)    → String — JSON (WiFi va RS485_LEAF uchun)
@@ -31,18 +40,87 @@
   #define PIN_TEMP_OUT  5
 #endif
 
-static OneWire g_ow_in(PIN_TEMP_IN);
-static OneWire g_ow_out(PIN_TEMP_OUT);
-static DallasTemperature g_ds_in(&g_ow_in);
-static DallasTemperature g_ds_out(&g_ow_out);
-static bool g_ds_in_ok  = false;
-static bool g_ds_out_ok = false;
+// HEATING_SHARED_BUS rejimida indekslar teskari chiqsa (kirish/chiqish
+// almashib qolsa), buni true qiling — jismoniy simlarni qayta lehimlamasdan
+// tuzatish uchun.
+#ifndef SWAP_IN_OUT
+  #define SWAP_IN_OUT false
+#endif
 
 struct SensorData {
     float temperature_in_c;    // Kirish (supply) harorati, C — topilmasa NAN
     float temperature_out_c;   // Chiqish (return) harorati, C — topilmasa NAN
     bool  valid;
 };
+
+#ifdef HEATING_SHARED_BUS
+// ─── Bitta 1-Wire shinada ikkala DS18B20 ───────────────────────────────────
+static OneWire g_ow(PIN_TEMP_IN);
+static DallasTemperature g_ds(&g_ow);
+static bool g_ds_in_ok  = false;
+static bool g_ds_out_ok = false;
+
+static void sensor_init() {
+    g_ds.begin();
+    g_ds.setResolution(10);            // ~187ms/o'qish (12-bit ~750ms o'rniga)
+    g_ds.setWaitForConversion(false);  // sensor_read()'da BIR marta kutamiz
+
+    int count = g_ds.getDeviceCount();
+    g_ds_in_ok  = count > (SWAP_IN_OUT ? 1 : 0);
+    g_ds_out_ok = count > (SWAP_IN_OUT ? 0 : 1);
+
+    LOG_PRINTF("Isitish sensor: umumiy shina GPIO%d, %d ta DS18B20 topildi (kirish=%s chiqish=%s)\n",
+               PIN_TEMP_IN, count, g_ds_in_ok ? "topildi" : "YO'Q", g_ds_out_ok ? "topildi" : "YO'Q");
+    if (count < 2) {
+        LOG_PRINTLN("OGOHLANTIRISH: HEATING_SHARED_BUS rejimida 2 ta DS18B20 kutilgan edi!");
+    }
+}
+
+static bool sensor_connect() {
+    return g_ds_in_ok || g_ds_out_ok;
+}
+
+static bool sensor_read(SensorData& d) {
+    if (g_cfg.test_mode) {
+        d.temperature_in_c  = 68.0f + (random(-50, 51) / 10.0f);
+        d.temperature_out_c = 42.0f + (random(-50, 51) / 10.0f);
+        d.valid = true;
+        LOG_PRINTF("[TEST] Isitish: kirish=%.1fC chiqish=%.1fC\n",
+                   d.temperature_in_c, d.temperature_out_c);
+        return true;
+    }
+    if (!g_ds_in_ok && !g_ds_out_ok) { d.valid = false; return false; }
+
+    d.temperature_in_c  = NAN;
+    d.temperature_out_c = NAN;
+    g_ds.requestTemperatures();
+    unsigned long t = millis();
+    while (millis() - t < g_ds.millisToWaitForConversion()) yield();
+
+    int idx_in  = SWAP_IN_OUT ? 1 : 0;
+    int idx_out = SWAP_IN_OUT ? 0 : 1;
+    if (g_ds_in_ok) {
+        float tv = g_ds.getTempCByIndex(idx_in);
+        if (tv != DEVICE_DISCONNECTED_C) d.temperature_in_c = tv;
+    }
+    if (g_ds_out_ok) {
+        float tv = g_ds.getTempCByIndex(idx_out);
+        if (tv != DEVICE_DISCONNECTED_C) d.temperature_out_c = tv;
+    }
+
+    d.valid = true;
+    LOG_PRINTF("Isitish: kirish=%.1fC chiqish=%.1fC\n", d.temperature_in_c, d.temperature_out_c);
+    return true;
+}
+
+#else
+// ─── Har biri o'z alohida 1-Wire shinasida ─────────────────────────────────
+static OneWire g_ow_in(PIN_TEMP_IN);
+static OneWire g_ow_out(PIN_TEMP_OUT);
+static DallasTemperature g_ds_in(&g_ow_in);
+static DallasTemperature g_ds_out(&g_ow_out);
+static bool g_ds_in_ok  = false;
+static bool g_ds_out_ok = false;
 
 static void sensor_init() {
     g_ds_in.begin();
@@ -111,6 +189,7 @@ static bool sensor_read(SensorData& d) {
                d.temperature_in_c, d.temperature_out_c);
     return true;
 }
+#endif  // HEATING_SHARED_BUS
 
 void sensor_set_volume(float) {}  // stub (common.h extern talab qiladi)
 
