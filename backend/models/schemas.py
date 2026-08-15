@@ -1303,12 +1303,17 @@ class FirmwareOnDemandResponse(BaseModel):
 class ExternalForwardCreate(BaseModel):
     building_id: int
     utility_type: UtilityType
+    # air_quality uchun ikki jismonan alohida manbani ajratish: masalan
+    # "capacitive_soil_moisture" (yerto'la MQ135) yoki "microphone" (yo'lak MQ135).
+    # Boshqa utility_type'lar uchun bo'sh qoldiring.
+    sensor_type: Optional[str] = None
     external_token: str
     external_device: str
     is_active: bool = True
 
 
 class ExternalForwardUpdate(BaseModel):
+    sensor_type: Optional[str] = None
     external_token: Optional[str] = None
     external_device: Optional[str] = None
     is_active: Optional[bool] = None
@@ -1318,6 +1323,7 @@ class ExternalForwardResponse(BaseModel):
     id: int
     building_id: int
     utility_type: str
+    sensor_type: Optional[str] = None
     external_token: str
     external_device: str
     is_active: bool

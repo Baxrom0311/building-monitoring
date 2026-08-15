@@ -368,6 +368,12 @@ class ExternalSensorForward(Base, TimestampMixin):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     building_id: Mapped[int] = mapped_column(ForeignKey("buildings.id"), nullable=False)
     utility_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    # air_quality bitta binoda ikki JISMONAN alohida manbadan kelishi mumkin
+    # (masalan yerto'la MQ135 va yo'lak MQ135) — ular tashqi tomonga alohida-
+    # alohida yuborilishi kerak, shuning uchun Reading.sensor_type bo'yicha
+    # qo'shimcha filtr (masalan "capacitive_soil_moisture" yoki "microphone").
+    # Boshqa utility_type'lar uchun NULL — bino bo'yicha oddiy o'rtacha olinadi.
+    sensor_type: Mapped[str | None] = mapped_column(String(64))
     external_token: Mapped[str] = mapped_column(String(255), nullable=False)
     external_device: Mapped[str] = mapped_column(String(255), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)

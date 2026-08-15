@@ -216,12 +216,16 @@ class ReadingRepository(BaseRepository[Reading]):
         )
 
     async def latest_utility_average(
-        self, utility_type: str, building_id: int | None = None, max_age_seconds: int = 7200
+        self, utility_type: str, building_id: int | None = None, max_age_seconds: int = 7200,
+        sensor_type: str | None = None,
     ) -> dict | None:
         """utility_type nomiga qarab mos latest_*_average()/soil_resolved()ga
         yo'naltiruvchi umumiy funksiya — tashqi tizimga yuborish (services/
         external_forward.py) kabi "menga faqat utility_type string kerak"
-        chaqiruvchilar uchun."""
+        chaqiruvchilar uchun.
+
+        sensor_type faqat "air_quality" uchun ma'noli — jismonan boshqa-boshqa
+        joydagi (yerto'la/yo'lak) MQ135 manbalarini ajratish uchun."""
         if utility_type == "water":
             return await self.latest_water_average(building_id, max_age_seconds)
         if utility_type == "gas":
@@ -235,7 +239,7 @@ class ReadingRepository(BaseRepository[Reading]):
         if utility_type == "soil":
             return await self.latest_soil_resolved(building_id)
         if utility_type == "air_quality":
-            return await self.latest_air_quality_average(building_id, max_age_seconds)
+            return await self.latest_air_quality_average(building_id, max_age_seconds, sensor_type=sensor_type)
         return None
 
     async def exists_external_id(self, device_id: str, reading_id: str) -> bool:

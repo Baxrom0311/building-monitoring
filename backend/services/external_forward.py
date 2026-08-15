@@ -48,7 +48,9 @@ async def forward_readings_once() -> dict:
         mappings = await fwd_repo.list_active()
 
         for m in mappings:
-            avg = await reading_repo.latest_utility_average(m.utility_type, building_id=m.building_id)
+            avg = await reading_repo.latest_utility_average(
+                m.utility_type, building_id=m.building_id, sensor_type=m.sensor_type
+            )
             value = avg.get("value") if avg else None
             if value is None:
                 m.last_error = "joriy o'qish topilmadi (2 soat ichida ma'lumot yo'q)"
