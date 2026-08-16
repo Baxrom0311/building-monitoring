@@ -15,7 +15,7 @@ from models.schemas import (
 from services import alerts as alert_service
 from services import audit
 
-router = APIRouter(prefix="/api")
+router = APIRouter(prefix="/api", tags=["alerts"])
 
 
 @router.get("/alerts", response_model=AlertListResponse)

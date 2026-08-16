@@ -21,7 +21,7 @@ from services.backup import (
     restore_backup_once,
 )
 
-router = APIRouter(prefix="/api")
+router = APIRouter(prefix="/api", tags=["backups"])
 
 
 @router.post("/backups", response_model=BackupCreateResponse)

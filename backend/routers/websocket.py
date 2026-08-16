@@ -7,7 +7,7 @@ from services.websocket import ws_manager
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(tags=["websocket"])
 
 
 @router.websocket("/ws")

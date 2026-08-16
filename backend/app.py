@@ -81,7 +81,22 @@ async def lifespan(app: FastAPI):
         task.cancel()
 
 
-app = FastAPI(title=settings.app_name, version=settings.app_version, lifespan=lifespan)
+app = FastAPI(
+    title=settings.app_name,
+    version=settings.app_version,
+    lifespan=lifespan,
+    description=(
+        "Kommunal xizmatlar monitoringi platformasi — ESP32 qurilmalaridan "
+        "(elektr/suv/gaz/isitish/tuproq/ovoz/havo sifati) o'qishlarni qabul "
+        "qiladi, binolar/xonadonlar bo'yicha billing va analitika yuritadi, "
+        "va real-vaqt kuzatuv (WebSocket) hamda ommaviy displey (kiosk) "
+        "endpoint'larini taqdim etadi.\n\n"
+        "Ko'pchilik endpoint `Authorization: Bearer <token>` talab qiladi "
+        "(pastda \"Authorize\" tugmasi orqali kiritish mumkin) — "
+        "`/api/auth/login` orqali oling. Qurilmalar (`X-Device-Token`) va "
+        "ommaviy (`/api/public/*`) yo'llar bundan mustasno."
+    ),
+)
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RequestContextMiddleware)
 app.add_middleware(RequestSizeLimitMiddleware)
@@ -138,17 +153,17 @@ if settings.static_dir.exists():
 _SW_KILL = b"""self.addEventListener('install',()=>self.skipWaiting())
 self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(k=>Promise.all(k.map(c=>caches.delete(c)))).then(()=>self.registration.unregister())))"""
 
-@app.get("/sw.js")
+@app.get("/sw.js", include_in_schema=False)
 async def service_worker_kill():
     return Response(content=_SW_KILL, media_type="application/javascript",
                     headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
 
-@app.get("/workbox-{rest:path}")
+@app.get("/workbox-{rest:path}", include_in_schema=False)
 async def workbox_kill(rest: str):
     return Response(content=b"", status_code=410)
 
 # SPA catch-all — barcha /api/* dan tashqari yo'llar index.html qaytaradi
-@app.get("/{full_path:path}", response_class=HTMLResponse)
+@app.get("/{full_path:path}", response_class=HTMLResponse, include_in_schema=False)
 async def spa_fallback(full_path: str):
     # Mavjud bo'lmagan API yo'llari HTML emas, 404 qaytarsin
     if full_path.startswith("api/") or full_path == "api":

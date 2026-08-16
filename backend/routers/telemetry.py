@@ -24,7 +24,7 @@ from services import monitoring as monitoring_service
 from services import readings as reading_service
 from services.websocket import ws_manager
 
-router = APIRouter(prefix="/api")
+router = APIRouter(prefix="/api", tags=["telemetry"])
 
 
 @router.get("/summary", response_model=SummaryResponse)

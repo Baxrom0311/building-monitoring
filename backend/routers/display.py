@@ -7,7 +7,7 @@ from repositories.buildings import BuildingRepository
 from repositories.readings import ReadingRepository
 from services import analytics as analytics_service
 
-router = APIRouter(prefix="/api/public")
+router = APIRouter(prefix="/api/public", tags=["display"])
 
 # MQ135 (havo sifati) jismonan ikki xil joyga o'rnatilishi mumkin — yerto'la
 # namligi datchigiga yoki yo'lakdagi ovoz datchigiga. Ularni bitta o'rtacha

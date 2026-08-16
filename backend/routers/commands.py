@@ -8,7 +8,7 @@ from services import audit
 from services import commands as command_service
 from services import devices as device_service
 
-router = APIRouter(prefix="/api")
+router = APIRouter(prefix="/api", tags=["commands"])
 
 
 @router.post("/devices/{device_id}/reboot", response_model=CommandQueuedResponse)

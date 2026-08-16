@@ -39,7 +39,7 @@ from services import audit
 from services import buildings as building_service
 from services import readings as reading_service
 
-router = APIRouter(prefix="/api")
+router = APIRouter(prefix="/api", tags=["buildings"])
 
 
 EXTERNAL_SOURCE_PREFIX = "ext://urganchshahar/"

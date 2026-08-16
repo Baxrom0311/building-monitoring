@@ -6,7 +6,7 @@ from core.security import require_admin
 from models.schemas import AuditLogListResponse
 from services import audit
 
-router = APIRouter(prefix="/api")
+router = APIRouter(prefix="/api", tags=["audit"])
 
 
 @router.get("/audit-logs", response_model=AuditLogListResponse)

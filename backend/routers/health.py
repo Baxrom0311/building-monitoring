@@ -8,7 +8,7 @@ from core.database import SessionLocal
 from models.schemas import HealthResponse, ReadyResponse
 from services import monitoring
 
-router = APIRouter()
+router = APIRouter(tags=["health"])
 
 
 @router.get("/health", response_model=HealthResponse)

@@ -31,7 +31,7 @@ from services import audit
 from services import devices as device_service
 from services import readings as reading_service
 
-router = APIRouter(prefix="/api")
+router = APIRouter(prefix="/api", tags=["devices"])
 
 
 @router.post("/register", response_model=DeviceRegisterResponse)

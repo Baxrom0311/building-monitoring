@@ -29,7 +29,7 @@ from services import commands as command_service
 from services import devices as device_service
 from services import ota as ota_service
 
-router = APIRouter(prefix="/api")
+router = APIRouter(prefix="/api", tags=["ota"])
 
 
 def _safe_ota_path(filename: str) -> Path:
