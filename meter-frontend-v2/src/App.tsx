@@ -31,6 +31,7 @@ const BillingPage = lazy(() => import('@/pages/BillingPage'))
 const TerritoryPage = lazy(() => import('@/pages/TerritoryPage'))
 const DisplayPage = lazy(() => import('@/pages/DisplayPage'))
 const DemoPage = lazy(() => import('@/pages/DemoPage'))
+const DocsPage = lazy(() => import('@/pages/DocsPage'))
 
 const queryClient = new QueryClient({
   queryCache: new QueryCache({
@@ -135,6 +136,7 @@ export default function App() {
                     <Route path="/billing" element={<BillingPage />} />
                     <Route path="/billing/:utility" element={<BillingPage />} />
                     <Route path="/territory" element={<TerritoryPage />} />
+                    <Route path="/docs" element={<DocsPage />} />
                     <Route path="*" element={<Navigate to="/dashboard" replace />} />
                   </Route>
                 </Routes>

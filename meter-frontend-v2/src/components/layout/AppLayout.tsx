@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import {
   Activity,
   Bell,
+  BookOpen,
   Building2,
   Cpu,
   Droplets,
@@ -93,6 +94,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/users': 'Foydalanuvchilar',
   '/audit': 'Audit jurnali',
   '/settings': 'Sozlamalar',
+  '/docs': 'Hujjatlar',
 }
 
 function AppSidebar({ openAlerts }: { openAlerts: number }) {
@@ -137,6 +139,7 @@ function AppSidebar({ openAlerts }: { openAlerts: number }) {
             { label: 'Sozlamalar', path: '/settings', icon: Settings, adminOnly: true },
             { label: 'Displey ekran', path: '/display', icon: Gauge },
             { label: 'Demo stend', path: '/demo', icon: Presentation },
+            { label: 'Hujjatlar', path: '/docs', icon: BookOpen },
           ],
         },
       ]
