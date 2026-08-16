@@ -56,11 +56,12 @@ const APP_SECTIONS: AppSection[] = [
     path: '/buildings',
     icon: Building2,
     summary:
-      "Barcha binolar ro'yxati — qidiruv, karta/jadval ko'rinishi va interaktiv xarita (holatiga qarab rangli belgilar bilan).",
+      "Barcha binolar ro'yxati — qidiruv, karta/jadval ko'rinishi va interaktiv xarita (holatiga qarab rangli belgilar bilan). Bino sahifasida 4 ta bo'lim bor: Umumiy, Qurilmalar, Tahlil, Kommunal.",
     actions: [
       "Yangi bino qo'shish (nom, manzil, qavat/podyezd soni)",
       "Tashqi tizimdan binolarni ommaviy import qilish",
-      "Bino kartasini bosib, uning to'liq sahifasiga o'tish",
+      "Qurilmalar bo'limida qurilma biriktirish/uzish",
+      "Admin: bino nomi/manzilini tahrirlash yoki binoni o'chirish, Display kiosk sahifasiga bir tugma bilan o'tish",
     ],
   },
   {
@@ -73,6 +74,7 @@ const APP_SECTIONS: AppSection[] = [
       "Yangi qurilma qo'shish",
       "Bog'lanmagan qurilmani biror binoga tezkor biriktirish",
       'Qurilma qatorini bosib tafsilotini ochish',
+      "Qurilma sahifasida (faqat admin): reboot, faollashtirish/faolsizlantirish, o'chirish; RS-485 bridge qurilmalar uchun ulangan leaf sensorlar alohida ko'rsatiladi",
     ],
   },
   {
@@ -123,7 +125,10 @@ const APP_SECTIONS: AppSection[] = [
     icon: Home,
     summary:
       "Turar-joy ierarxiyasi: Mahallalar → Ko'chalar → Xonadonlar. Hisobotlar va billing shu ro'yxatga tayanadi.",
-    actions: ["Xonadon/ko'cha/mahalla qo'shish", "Excel orqali ommaviy xonadon import qilish"],
+    actions: [
+      "Xonadon/ko'cha/mahalla qo'shish, tahrirlash, o'chirish",
+      "Excel orqali ommaviy xonadon import qilish",
+    ],
   },
   {
     label: 'AI yordamchi',
@@ -169,9 +174,9 @@ const APP_SECTIONS: AppSection[] = [
     path: '/settings',
     icon: Settings,
     summary:
-      "Faqat admin. Zaxira nusxalar (yaratish/tiklash), ESP32 provisioning tokenlari va tizim salomatligi paneli.",
+      "Zaxira nusxalar va ESP32 provisioning tokenlari (faqat admin) hamda \"Tizim\" bo'limi (hammaga ko'rinadi — API manzili, saqlash muddati, Telegram xabarnomalari; hozircha faqat frontend-lokal, backend'ga saqlanmaydi).",
     actions: [
-      "Zaxira nusxa yaratish/yuklab olish/tiklash",
+      "Zaxira nusxa yaratish/yuklab olish/tiklash/o'chirish",
       "Yangi qurilma ro'yxatdan o'tishi uchun bir martalik token yaratish",
     ],
   },
@@ -256,6 +261,8 @@ function Esp32Diagram({
   )
 }
 
+type ModeBadge = 'wifi' | 'leaf' | 'bridge' | 'display' | 'test'
+
 interface SensorSpec {
   id: string
   title: string
@@ -263,7 +270,7 @@ interface SensorSpec {
   intro: string
   diagram: { pin: string; label: string; optional?: boolean }[]
   pins: { signal: string; pin: string }[]
-  envs: { name: string; note: string; badge?: 'wifi' | 'leaf' | 'test' }[]
+  envs: { name: string; note: string; badge?: ModeBadge }[]
   note?: string
 }
 
@@ -312,7 +319,7 @@ const SENSORS: SensorSpec[] = [
       { name: 'water', note: "Standalone WiFi, LCD yo'q", badge: 'wifi' },
       { name: 'water_debug', note: 'Serial log', badge: 'wifi' },
       { name: 'water_rs485_leaf', note: 'RS-485 leaf', badge: 'leaf' },
-      { name: 'water_display', note: 'Faqat LCD — shinani tinglaydi', badge: 'leaf' },
+      { name: 'water_display', note: 'Faqat LCD — shinani passiv tinglaydi', badge: 'display' },
     ],
   },
   {
@@ -355,6 +362,9 @@ const SENSORS: SensorSpec[] = [
     envs: [
       { name: 'soil_wifi_lcd', note: 'Standalone, LCD bilan', badge: 'wifi' },
       { name: 'soil_wifi', note: "Standalone, LCD'siz", badge: 'wifi' },
+      { name: 'soil_debug', note: 'Serial log + LCD', badge: 'wifi' },
+      { name: 'soil_outdoor', note: "Production, SOIL_DEVICE_ROLE=\"soil_outdoor\" qattiq belgilangan", badge: 'wifi' },
+      { name: 'soil_basement', note: "Production, SOIL_DEVICE_ROLE=\"soil_basement\" qattiq belgilangan", badge: 'wifi' },
       { name: 'soil_rs485_leaf', note: 'RS-485 leaf, faqat namlik', badge: 'leaf' },
       { name: 'soil_mq135_rs485_leaf', note: 'RS-485 leaf + MQ135', badge: 'leaf' },
       { name: 'soil_mq135_test', note: 'Stol ustida sinov', badge: 'test' },
@@ -378,37 +388,40 @@ const SENSORS: SensorSpec[] = [
     envs: [
       { name: 'sound_wifi_lcd', note: 'Standalone, LCD bilan', badge: 'wifi' },
       { name: 'sound_wifi', note: "Standalone, LCD'siz", badge: 'wifi' },
+      { name: 'sound_debug', note: 'Serial log + LCD', badge: 'wifi' },
       { name: 'sound_air_wifi_lcd', note: '+ MQ135, LCD bilan', badge: 'wifi' },
       { name: 'sound_air_wifi', note: "+ MQ135, LCD'siz", badge: 'wifi' },
+      { name: 'sound_air_debug', note: '+ MQ135, Serial log', badge: 'wifi' },
       { name: 'sound_rs485_leaf', note: 'RS-485 leaf', badge: 'leaf' },
     ],
     note: 'Havo sifati backend\'da alohida utility sifatida saqlanadi (sensor_type=microphone) — tuproqdagi MQ135 bilan aralashtirilmaydi.',
   },
 ]
 
-const HEATING_ENVS = [
-  { name: 'heating', wiring: 'Ikki shina', note: 'Standalone WiFi', badge: 'wifi' as const },
-  { name: 'heating_debug', wiring: 'Ikki shina', note: 'Serial log + LCD', badge: 'wifi' as const },
-  { name: 'heating_debug_shared', wiring: 'Bitta shina', note: 'Stend tekshiruvi', badge: 'wifi' as const },
-  { name: 'heating_rs485_leaf', wiring: 'Ikki shina', note: 'RS-485 leaf', badge: 'leaf' as const },
-  { name: 'heating_rs485_leaf_debug', wiring: 'Ikki shina', note: 'RS-485 leaf + Serial log', badge: 'leaf' as const },
-  { name: 'heating_rs485_leaf_shared', wiring: 'Bitta shina', note: 'RS-485 leaf, production', badge: 'leaf' as const },
+const HEATING_ENVS: { name: string; wiring: string; note: string; badge: ModeBadge }[] = [
+  { name: 'heating', wiring: 'Ikki shina', note: 'Standalone WiFi', badge: 'wifi' },
+  { name: 'heating_debug', wiring: 'Ikki shina', note: 'Serial log + LCD', badge: 'wifi' },
+  { name: 'heating_debug_shared', wiring: 'Bitta shina', note: 'Stend tekshiruvi', badge: 'wifi' },
+  { name: 'heating_rs485_leaf', wiring: 'Ikki shina', note: 'RS-485 leaf', badge: 'leaf' },
+  { name: 'heating_rs485_leaf_debug', wiring: 'Ikki shina', note: 'RS-485 leaf + Serial log', badge: 'leaf' },
+  { name: 'heating_rs485_leaf_shared', wiring: 'Bitta shina', note: 'RS-485 leaf, production', badge: 'leaf' },
   {
     name: 'heating_rs485_leaf_shared_debug',
     wiring: 'Bitta shina',
     note: 'RS-485 leaf + Serial log',
-    badge: 'leaf' as const,
+    badge: 'leaf',
   },
-  { name: 'heating_display', wiring: '—', note: 'Faqat LCD', badge: 'leaf' as const },
+  { name: 'heating_display', wiring: '—', note: 'Faqat LCD — shinani passiv tinglaydi', badge: 'display' },
 ]
 
-const FULL_ENV_TABLE: { name: string; mode: 'wifi' | 'leaf' | 'bridge' | 'test'; sensor: string }[] = [
-  { name: 'soil_wifi_lcd / soil_wifi', mode: 'wifi', sensor: 'Tuproq namligi' },
-  { name: 'sound_wifi_lcd / sound_wifi', mode: 'wifi', sensor: 'Ovoz' },
-  { name: 'sound_air_wifi_lcd / sound_air_wifi', mode: 'wifi', sensor: 'Ovoz + havo sifati' },
-  { name: 'electricity / electricity_debug / electricity_test', mode: 'wifi', sensor: 'Elektr (DLMS)' },
+const FULL_ENV_TABLE: { name: string; mode: ModeBadge; sensor: string }[] = [
+  { name: 'soil_wifi_lcd / soil_wifi / soil_debug', mode: 'wifi', sensor: 'Tuproq namligi' },
+  { name: 'soil_outdoor / soil_basement', mode: 'wifi', sensor: 'Tuproq, SOIL_DEVICE_ROLE qattiq belgilangan' },
+  { name: 'sound_wifi_lcd / sound_wifi / sound_debug', mode: 'wifi', sensor: 'Ovoz' },
+  { name: 'sound_air_wifi_lcd / sound_air_wifi / sound_air_debug', mode: 'wifi', sensor: 'Ovoz + havo sifati' },
+  { name: 'electricity / electricity_debug', mode: 'wifi', sensor: 'Elektr (DLMS)' },
   { name: 'water / water_debug', mode: 'wifi', sensor: 'Suv bosimi' },
-  { name: 'gas / gas_test', mode: 'wifi', sensor: 'Gaz bosimi' },
+  { name: 'gas', mode: 'wifi', sensor: 'Gaz bosimi' },
   { name: 'heating / heating_debug / heating_debug_shared', mode: 'wifi', sensor: 'Isitish' },
   { name: 'water_rs485_leaf', mode: 'leaf', sensor: 'Suv bosimi' },
   { name: 'gas_rs485_leaf', mode: 'leaf', sensor: 'Gaz bosimi' },
@@ -418,19 +431,28 @@ const FULL_ENV_TABLE: { name: string; mode: 'wifi' | 'leaf' | 'bridge' | 'test';
   { name: 'heating_rs485_leaf_shared(_debug)', mode: 'leaf', sensor: 'Isitish, bitta shina' },
   { name: 'electricity_rs485_leaf', mode: 'leaf', sensor: 'Elektr (DLMS→JSON)' },
   { name: 'building_bridge', mode: 'bridge', sensor: 'Elektr + barcha leaf' },
-  { name: 'water_display / heating_display', mode: 'bridge', sensor: 'Faqat LCD, passiv' },
+  { name: 'water_display / heating_display', mode: 'display', sensor: 'Faqat LCD, shinani passiv tinglaydi' },
+  { name: 'electricity_test', mode: 'test', sensor: 'Elektr — simulyatsiya, metr kerak emas' },
+  { name: 'gas_test', mode: 'test', sensor: 'Gaz — simulyatsiya, ADS1115 ham kerak emas' },
   { name: 'soil_mq135_test', mode: 'test', sensor: 'Stol ustida sinov' },
-  { name: 'ads1115_test', mode: 'test', sensor: 'ADS1115 chip (I2C 0x48)' },
-  { name: 'rs485_selftest', mode: 'test', sensor: 'Freym protokoli o\'z-o\'zini sinash' },
-  { name: 'rs485_master_test', mode: 'test', sensor: 'Master/poll simulyatori' },
-  { name: 'rs485_rxmon', mode: 'test', sensor: 'Xom bayt monitor' },
+  { name: 'ads1115_test', mode: 'test', sensor: 'ADS1115 chip (I2C 0x48) — mustaqil, sensor kerak emas' },
+  { name: 'rs485_selftest', mode: 'test', sensor: "Freym protokoli o'z-o'zini sinash — DLMS pinlarida (16/17/4)" },
+  { name: 'rs485_master_test', mode: 'test', sensor: 'Master/poll simulyatori — 2 ta ESP32 kerak, leaf pinlarida' },
+  { name: 'rs485_rxmon', mode: 'test', sensor: 'Xom bayt monitor — leaf pinlarida (32/33/25)' },
 ]
 
-const MODE_LABEL: Record<string, string> = { wifi: 'WIFI', leaf: 'LEAF', bridge: 'BRIDGE', test: 'TEST' }
-const MODE_VARIANT: Record<string, 'default' | 'secondary' | 'outline' | 'destructive'> = {
+const MODE_LABEL: Record<ModeBadge, string> = {
+  wifi: 'WIFI',
+  leaf: 'LEAF',
+  bridge: 'BRIDGE',
+  display: 'DISPLAY',
+  test: 'TEST',
+}
+const MODE_VARIANT: Record<ModeBadge, 'default' | 'secondary' | 'outline' | 'destructive' | 'ghost'> = {
   wifi: 'default',
   leaf: 'secondary',
   bridge: 'outline',
+  display: 'ghost',
   test: 'destructive',
 }
 
@@ -457,7 +479,10 @@ function SensorCard({ s }: { s: SensorSpec }) {
     <Collapsible open={open} onOpenChange={setOpen}>
       <Card>
         <CollapsibleTrigger asChild>
-          <button type="button" className="flex w-full items-start justify-between gap-3 p-4 text-left sm:p-6">
+          <button
+            type="button"
+            className="flex w-full items-start justify-between gap-3 rounded-t-xl p-4 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/50 sm:p-6"
+          >
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <h3 className="text-base font-semibold">{s.title}</h3>
@@ -522,7 +547,7 @@ function SensorCard({ s }: { s: SensorSpec }) {
                             <div className="flex items-center gap-2">
                               {e.name}
                               {e.badge && (
-                                <Badge variant={MODE_VARIANT[e.badge]} className="font-mono text-[9px]">
+                                <Badge variant={MODE_VARIANT[e.badge]} className="font-mono">
                                   {MODE_LABEL[e.badge]}
                                 </Badge>
                               )}
@@ -625,7 +650,7 @@ export default function DocsPage() {
         <TabsContent value="iot" className="space-y-8 pt-2">
           <section>
             <h2 className="mb-1 text-lg font-semibold">Ikki ulanish rejimi</h2>
-            <p className="mb-4 max-w-2xl text-sm text-muted-foreground">
+            <p className="mb-3 max-w-2xl text-sm text-muted-foreground">
               LoRa yo'q — har bir bino WiFi/internetga ega. Qurilma yoki to'g'ridan-to'g'ri WiFi'ga, yoki bino
               ichidagi RS-485 shinasi orqali bitta "bridge"ga ulanadi.
             </p>
@@ -772,7 +797,7 @@ export default function DocsPage() {
                       <TableCell className="whitespace-nowrap font-mono text-sm">
                         <div className="flex items-center gap-2">
                           {e.name}
-                          <Badge variant={MODE_VARIANT[e.badge]} className="font-mono text-[9px]">
+                          <Badge variant={MODE_VARIANT[e.badge]} className="font-mono">
                             {MODE_LABEL[e.badge]}
                           </Badge>
                         </div>
@@ -847,10 +872,10 @@ pio device monitor -p /dev/cu.usbserial-XXXX -b 115200`}
                 <>Ochilgan sahifada ("captive portal") o'z WiFi tarmog'ingizni tanlang, parolni kiriting.</>,
                 <>Server/token maydonlarini odatda standart qiymat bilan qoldiring.</>,
                 <>"Saqlash"ni bosing — qurilma qayta ulanadi.</>,
-                <>10 daqiqa ichida sozlanmasa yoki keyinchalik tarmoq topilmay qolsa: bitta ulanish urinishi → hali bo'lmasa portal <b>yana</b> ochiladi — bu sikl WiFi tuzalguncha davom etadi.</>,
+                <>10 daqiqa ichida sozlanmasa — portal yopiladi, qurilma saqlangan ma'lumot bilan ishga tushadi. Keyinchalik tarmoq <b>3 daqiqa</b> uzluksiz topilmay qolsa (masalan bino ko'chirilganda): portal <b>yana</b> avtomatik ochiladi — bu sikl WiFi tuzalguncha davom etadi.</>,
               ].map((text, i) => (
                 <li key={i} className="relative pl-2 text-sm">
-                  <span className="absolute -left-[27px] flex h-5 w-5 items-center justify-center rounded-full border border-primary font-mono text-[10px] font-bold text-primary">
+                  <span className="absolute -left-[31px] flex h-5 w-5 items-center justify-center rounded-full border border-primary font-mono text-[10px] font-bold text-primary">
                     {i + 1}
                   </span>
                   {text}
@@ -877,9 +902,9 @@ pio device monitor -p /dev/cu.usbserial-XXXX -b 115200`}
                 <TableBody>
                   {FULL_ENV_TABLE.map((e) => (
                     <TableRow key={e.name}>
-                      <TableCell className="whitespace-nowrap font-mono text-sm">{e.name}</TableCell>
+                      <TableCell className="font-mono text-sm">{e.name}</TableCell>
                       <TableCell>
-                        <Badge variant={MODE_VARIANT[e.mode]} className="font-mono text-[9px]">
+                        <Badge variant={MODE_VARIANT[e.mode]} className="font-mono">
                           {MODE_LABEL[e.mode]}
                         </Badge>
                       </TableCell>
