@@ -85,6 +85,9 @@ app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
     lifespan=lifespan,
+    docs_url="/api/docs",
+    redoc_url="/api/redoc",
+    openapi_url="/api/openapi.json",
     description=(
         "Kommunal xizmatlar monitoringi platformasi — ESP32 qurilmalaridan "
         "(elektr/suv/gaz/isitish/tuproq/ovoz/havo sifati) o'qishlarni qabul "
