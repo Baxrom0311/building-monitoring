@@ -38,7 +38,6 @@ const NAV_ITEMS = [
   { label: 'Kommunal hisobotlar (Billing)', path: '/billing', icon: FileSpreadsheet },
   { label: 'Xonadonlar va Mahalla (Territory)', path: '/territory', icon: Home },
   { label: 'Displey Ekran', path: '/display', icon: Gauge },
-  { label: 'Demo Stend (5-in-1)', path: '/demo', icon: Activity },
   { label: 'AI Chat yordamchi', path: '/chat', icon: MessageSquare },
   { label: 'Sozlamalar', path: '/settings', icon: Settings },
   { label: 'Foydalanuvchilar', path: '/users', icon: Users },

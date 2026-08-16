@@ -13,7 +13,6 @@ import {
   Home,
   LayoutDashboard,
   MessageSquare,
-  Presentation,
   ScrollText,
   Settings,
   Users,
@@ -187,14 +186,6 @@ const APP_SECTIONS: AppSection[] = [
     summary:
       "Autentifikatsiyasiz, katta ekran/TV uchun kiosk ko'rinishi — har 30 soniyada avtomatik yangilanadi. Bir binoga ?building_id= orqali bog'lash mumkin.",
     actions: ["To'liq ekran rejimi", "Binolar orasida avtomatik aylanish (15s)"],
-  },
-  {
-    label: 'Demo stend',
-    path: '/demo',
-    icon: Presentation,
-    summary:
-      "Autentifikatsiyasiz, to'liq soxta ma'lumotli namoyish ekrani — savdo/taqdimot uchun, real qurilmalarga bog'liq emas.",
-    actions: [],
   },
 ]
 
