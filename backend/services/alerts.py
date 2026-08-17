@@ -76,12 +76,8 @@ def _rule_message(rule: AlertRule | None, fallback: str) -> str:
     return fallback if rule is None or not rule.message else rule.message
 
 
-def _rule_dedupe_sec(rule: AlertRule | None) -> int:
-    return settings.alert_dedupe_sec if rule is None or rule.dedupe_sec is None else rule.dedupe_sec
-
-
-def _queue_alert(alerts: list[tuple[Alert, int]], alert: Alert, rule: AlertRule | None) -> None:
-    alerts.append((alert, _rule_dedupe_sec(rule)))
+def _queue_alert(alerts: list[Alert], alert: Alert) -> None:
+    alerts.append(alert)
 
 
 def _notification_for_alert(alert: Alert, ts: int) -> AlertNotification:
@@ -106,7 +102,11 @@ async def _broadcast_alert_event(event: str, payload: dict) -> None:
 
 async def check_alerts(session, reading: MeterReading) -> list[dict]:
     ts = now_ts()
-    alerts: list[tuple[Alert, int]] = []
+    alerts: list[Alert] = []
+    # Har bir siklda TEKSHIRILGAN-lekin-HOZIR faol bo'lmagan kind'lar shu yerga
+    # qo'shiladi va oxirida ochiq bo'lsa yopiladi — shu holat normallashsa,
+    # keyingi safar shart yana buzilganda tizim QAYTA alert bera oladi.
+    clear_kinds: list[str] = []
     rules = await _alert_rules_for_reading(session, reading)
     if reading.utility_type == "electricity":
         for phase, voltage in [("L1", reading.voltage_l1), ("L2", reading.voltage_l2), ("L3", reading.voltage_l3)]:
@@ -114,6 +114,8 @@ async def check_alerts(session, reading: MeterReading) -> list[dict]:
                 continue
             undervoltage_min = _rule_min(rules.get("undervoltage"), settings.voltage_min)
             overvoltage_max = _rule_max(rules.get("overvoltage"), settings.voltage_max)
+            under_kind = f"undervoltage_{phase.lower()}"
+            over_kind = f"overvoltage_{phase.lower()}"
             if voltage < undervoltage_min or voltage > overvoltage_max:
                 rule_kind = "overvoltage" if voltage > overvoltage_max else "undervoltage"
                 kind = f"{rule_kind}_{phase.lower()}"
@@ -131,47 +133,54 @@ async def check_alerts(session, reading: MeterReading) -> list[dict]:
                         value=voltage,
                         message=_rule_message(rule, f"{phase}: {voltage:.1f}V"),
                     ),
-                    rule,
                 )
+                clear_kinds.append(over_kind if kind == under_kind else under_kind)
+            else:
+                clear_kinds.append(under_kind)
+                clear_kinds.append(over_kind)
         frequency_rule = rules.get("frequency")
         frequency_min = _rule_min(frequency_rule, settings.frequency_min)
         frequency_max = _rule_max(frequency_rule, settings.frequency_max)
-        if reading.frequency is not None and (reading.frequency < frequency_min or reading.frequency > frequency_max):
-            _queue_alert(
-                alerts,
-                Alert(
-                    device_id=reading.device_id,
-                    building_id=reading.building_id,
-                    point_id=reading.point_id,
-                    utility_type=reading.utility_type,
-                    severity=_rule_severity(frequency_rule, "warning"),
-                    ts=ts,
-                    kind="frequency",
-                    value=reading.frequency,
-                    message=_rule_message(frequency_rule, f"Chastota: {reading.frequency:.2f}Hz"),
-                ),
-                frequency_rule,
-            )
+        if reading.frequency is not None:
+            if reading.frequency < frequency_min or reading.frequency > frequency_max:
+                _queue_alert(
+                    alerts,
+                    Alert(
+                        device_id=reading.device_id,
+                        building_id=reading.building_id,
+                        point_id=reading.point_id,
+                        utility_type=reading.utility_type,
+                        severity=_rule_severity(frequency_rule, "warning"),
+                        ts=ts,
+                        kind="frequency",
+                        value=reading.frequency,
+                        message=_rule_message(frequency_rule, f"Chastota: {reading.frequency:.2f}Hz"),
+                    ),
+                )
+            else:
+                clear_kinds.append("frequency")
     elif reading.utility_type == "water":
         pressure = reading.pressure_bar
         water_low_rule = rules.get("water_low_pressure")
         water_pressure_min = _rule_min(water_low_rule, settings.water_pressure_min_bar)
-        if pressure is not None and pressure < water_pressure_min:
-            _queue_alert(
-                alerts,
-                Alert(
-                    device_id=reading.device_id,
-                    building_id=reading.building_id,
-                    point_id=reading.point_id,
-                    utility_type="water",
-                    severity=_rule_severity(water_low_rule, "warning"),
-                    ts=ts,
-                    kind="water_low_pressure",
-                    value=pressure,
-                    message=_rule_message(water_low_rule, f"Suv bosimi past: {pressure:.2f} bar"),
-                ),
-                water_low_rule,
-            )
+        if pressure is not None:
+            if pressure < water_pressure_min:
+                _queue_alert(
+                    alerts,
+                    Alert(
+                        device_id=reading.device_id,
+                        building_id=reading.building_id,
+                        point_id=reading.point_id,
+                        utility_type="water",
+                        severity=_rule_severity(water_low_rule, "warning"),
+                        ts=ts,
+                        kind="water_low_pressure",
+                        value=pressure,
+                        message=_rule_message(water_low_rule, f"Suv bosimi past: {pressure:.2f} bar"),
+                    ),
+                )
+            else:
+                clear_kinds.append("water_low_pressure")
         if reading.pressure_bottom_bar is not None and reading.pressure_top_bar is not None:
             water_top_rule = rules.get("water_not_reaching_top")
             top_pressure_min = _rule_min(water_top_rule, settings.water_pressure_min_bar)
@@ -192,33 +201,34 @@ async def check_alerts(session, reading: MeterReading) -> list[dict]:
                         value=reading.pressure_top_bar,
                         message=_rule_message(water_top_rule, "Pastda bosim bor, yuqorida suv bosimi past"),
                     ),
-                    water_top_rule,
                 )
+            else:
+                clear_kinds.append("water_not_reaching_top")
     elif reading.utility_type == "gas":
         gas_pressure_rule = rules.get("gas_pressure")
         gas_pressure_min = _rule_min(gas_pressure_rule, settings.gas_pressure_min_bar)
         gas_pressure_max = _rule_max(gas_pressure_rule, settings.gas_pressure_max_bar)
-        if reading.pressure_bar is not None and (
-            reading.pressure_bar < gas_pressure_min or reading.pressure_bar > gas_pressure_max
-        ):
-            _queue_alert(
-                alerts,
-                Alert(
-                    device_id=reading.device_id,
-                    building_id=reading.building_id,
-                    point_id=reading.point_id,
-                    utility_type="gas",
-                    severity=_rule_severity(gas_pressure_rule, "critical"),
-                    ts=ts,
-                    kind="gas_pressure",
-                    value=reading.pressure_bar,
-                    message=_rule_message(
-                        gas_pressure_rule,
-                        f"Gaz bosimi normadan tashqari: {reading.pressure_bar:.3f} bar",
+        if reading.pressure_bar is not None:
+            if reading.pressure_bar < gas_pressure_min or reading.pressure_bar > gas_pressure_max:
+                _queue_alert(
+                    alerts,
+                    Alert(
+                        device_id=reading.device_id,
+                        building_id=reading.building_id,
+                        point_id=reading.point_id,
+                        utility_type="gas",
+                        severity=_rule_severity(gas_pressure_rule, "critical"),
+                        ts=ts,
+                        kind="gas_pressure",
+                        value=reading.pressure_bar,
+                        message=_rule_message(
+                            gas_pressure_rule,
+                            f"Gaz bosimi normadan tashqari: {reading.pressure_bar:.3f} bar",
+                        ),
                     ),
-                ),
-                gas_pressure_rule,
-            )
+                )
+            else:
+                clear_kinds.append("gas_pressure")
     elif reading.utility_type == "soil":
         if reading.humidity is not None:
             soil_dry_rule = rules.get("soil_dry")
@@ -239,8 +249,8 @@ async def check_alerts(session, reading: MeterReading) -> list[dict]:
                         value=reading.humidity,
                         message=_rule_message(soil_dry_rule, f"Tuproq quruq: {reading.humidity:.1f}%"),
                     ),
-                    soil_dry_rule,
                 )
+                clear_kinds.append("soil_wet")
             elif reading.humidity > soil_max:
                 _queue_alert(
                     alerts,
@@ -255,8 +265,11 @@ async def check_alerts(session, reading: MeterReading) -> list[dict]:
                         value=reading.humidity,
                         message=_rule_message(soil_wet_rule, f"Tuproq haddan ziyod nam: {reading.humidity:.1f}%"),
                     ),
-                    soil_wet_rule,
                 )
+                clear_kinds.append("soil_dry")
+            else:
+                clear_kinds.append("soil_dry")
+                clear_kinds.append("soil_wet")
     elif reading.utility_type == "sound":
         if reading.level is not None:
             sound_high_rule = rules.get("sound_high_level")
@@ -277,8 +290,8 @@ async def check_alerts(session, reading: MeterReading) -> list[dict]:
                         value=reading.level,
                         message=_rule_message(sound_low_rule, f"Ovoz darajasi past: {reading.level:.1f}%"),
                     ),
-                    sound_low_rule,
                 )
+                clear_kinds.append("sound_high_level")
             elif reading.level > sound_max:
                 _queue_alert(
                     alerts,
@@ -293,13 +306,16 @@ async def check_alerts(session, reading: MeterReading) -> list[dict]:
                         value=reading.level,
                         message=_rule_message(sound_high_rule, f"Ovoz darajasi yuqori: {reading.level:.1f}%"),
                     ),
-                    sound_high_rule,
                 )
+                clear_kinds.append("sound_low_level")
+            else:
+                clear_kinds.append("sound_low_level")
+                clear_kinds.append("sound_high_level")
 
     to_broadcast = []
     alert_repo = AlertRepository(session)
-    for alert, dedupe_sec in alerts:
-        if await alert_repo.has_recent_duplicate(alert, ts - dedupe_sec):
+    for alert in alerts:
+        if await alert_repo.has_open(alert.device_id, alert.kind):
             continue
         alert_repo.add(alert)
         await session.flush()
@@ -315,6 +331,8 @@ async def check_alerts(session, reading: MeterReading) -> list[dict]:
                 "message": alert.message,
             }
         )
+    for kind in clear_kinds:
+        await alert_repo.clear_kind_for_device(reading.device_id, kind, ts)
     return to_broadcast
 
 

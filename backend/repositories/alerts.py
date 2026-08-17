@@ -35,18 +35,32 @@ class AlertRepository(BaseRepository[Alert]):
             stmt = stmt.where(Alert.kind.startswith(kind))
         return await self.session.scalar(stmt) or 0
 
-    async def has_recent_duplicate(self, alert: Alert, since_ts: int) -> bool:
+    async def has_open(self, device_id: str, kind: str) -> bool:
+        """Shu device+kind uchun hali CLEARED qilinmagan (ochiq) alert bormi.
+
+        Vaqt oynasi (ts>...) EMAS, balki "ochiqmi" tekshiriladi — aks holda
+        (eski `has_recent_duplicate` xatosi) davom etayotgan bitta holat
+        (masalan doimiy past suv bosimi) har o'qish siklida (odatda ~10 daq)
+        yangi qator sifatida qayta yaratilaverar edi, chunki dedupe oynasi
+        aynan shu davriylikka teng edi — natijada bitta real muammo kunlar
+        davomida minglab takroriy alert/bildirishnoma hosil qilardi."""
         existing = await self.session.scalar(
             select(Alert.id).where(
-                and_(
-                    Alert.device_id == alert.device_id,
-                    Alert.kind == alert.kind,
-                    Alert.cleared.is_(False),
-                    Alert.ts > since_ts,
-                )
+                and_(Alert.device_id == device_id, Alert.kind == kind, Alert.cleared.is_(False))
             )
         )
         return existing is not None
+
+    async def clear_kind_for_device(self, device_id: str, kind: str, ts: int) -> int:
+        """Holat normallashganda (masalan bosim yana me'yorga qaytganda)
+        shu device+kind uchun ochiq alert(lar)ni avtomatik yopadi — shunda
+        keyingi safar shart yana buzilsa, tizim qayta ALERT bera oladi."""
+        result = await self.session.execute(
+            update(Alert)
+            .where(and_(Alert.device_id == device_id, Alert.kind == kind, Alert.cleared.is_(False)))
+            .values(cleared=True, cleared_at=ts)
+        )
+        return result.rowcount or 0
 
     async def open_critical_due_for_escalation(self, cutoff: int, limit: int = 100) -> list[Alert]:
         return list(
