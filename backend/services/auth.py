@@ -17,8 +17,7 @@ from repositories.base import model_to_dict
 from schemas.auth import LoginRequest, UserCreate, UserUpdate
 
 
-# Tizim rollari: admin/user/viewer + kommunal idoralar (faqat o'z hisobotini yuklaydi)
-ALLOWED_ROLES = ("admin", "user", "viewer", "water_org", "gas_org", "electricity_org")
+ALLOWED_ROLES = ("admin", "user", "viewer")
 
 
 def _public_user(user: User) -> dict:

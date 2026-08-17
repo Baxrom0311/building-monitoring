@@ -4,7 +4,6 @@ import { Gauge, Loader2 } from 'lucide-react'
 import apiClient from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/errors'
 import { useAuth } from '@/contexts/AuthContext'
-import { roleHomePath } from '@/lib/roles'
 import type { LoginResponse } from '@/types/api'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -20,7 +19,7 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
-  if (user) return <Navigate to={roleHomePath(user.role)} replace />
+  if (user) return <Navigate to="/dashboard" replace />
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -29,7 +28,7 @@ export default function LoginPage() {
     try {
       const { data } = await apiClient.post<LoginResponse>('/api/auth/login', { username, password })
       login(data.access_token, data.user)
-      navigate(roleHomePath(data.user.role), { replace: true })
+      navigate('/dashboard', { replace: true })
     } catch (err) {
       setError(getApiErrorMessage(err))
     } finally {

@@ -43,3 +43,4 @@ Thumbs.db
 # Frontend build artifacts
 node_modules/
 *.tsbuildinfo
+db_backups/

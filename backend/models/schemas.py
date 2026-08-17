@@ -121,9 +121,8 @@ class BuildingUpdate(BaseModel):
     construction_year: Optional[int] = Field(None, ge=1800, le=2100)
     # Urganchshahar integratsiya
     organization_name: Optional[str] = Field(None, max_length=255)
-    # mahalla_name/street_name atayin yo'q: ular street_id'dan (yoki qurilishda
-    # erkin matn sifatida) bir marta o'rnatiladi va boshqa o'zgartirilmaydi —
-    # aks holda territory/billing sahifalari bilan sinxronsizlik chiqadi.
+    # mahalla_name/street_name atayin yo'q: bir marta o'rnatiladi (import
+    # paytida) va boshqa o'zgartirilmaydi.
     object_type: Optional[str] = Field(None, max_length=255)
     polygon_coordinate: Optional[str] = None
     is_official: Optional[bool] = None

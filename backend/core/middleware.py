@@ -74,17 +74,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 
 class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
-    # Excel billing hisobotlari 25MB dan katta bo'ladi (F3 ~28MB)
-    _LARGE_UPLOAD_PATHS = ("/api/billing/import",)
-    _LARGE_UPLOAD_LIMIT = 60 * 1024 * 1024
-
     async def dispatch(self, request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
         content_length = request.headers.get("Content-Length")
-        limit = (
-            self._LARGE_UPLOAD_LIMIT
-            if request.url.path in self._LARGE_UPLOAD_PATHS
-            else settings.max_request_body_bytes
-        )
+        limit = settings.max_request_body_bytes
         if content_length and limit > 0:
             try:
                 size = int(content_length)

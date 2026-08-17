@@ -6,11 +6,9 @@ import {
   Building2,
   ChevronDown,
   Cpu,
-  FileSpreadsheet,
   FlaskConical,
   Gauge,
   HardDriveDownload,
-  Home,
   LayoutDashboard,
   MessageSquare,
   ScrollText,
@@ -55,7 +53,7 @@ const APP_SECTIONS: AppSection[] = [
     path: '/buildings',
     icon: Building2,
     summary:
-      "Barcha binolar ro'yxati — qidiruv, karta/jadval ko'rinishi va interaktiv xarita (holatiga qarab rangli belgilar bilan). Bino sahifasida 4 ta bo'lim bor: Umumiy, Qurilmalar, Tahlil, Kommunal.",
+      "Barcha binolar ro'yxati — qidiruv, karta/jadval ko'rinishi va interaktiv xarita (holatiga qarab rangli belgilar bilan). Bino sahifasida 3 ta bo'lim bor: Umumiy, Qurilmalar, Tahlil.",
     actions: [
       "Yangi bino qo'shish (nom, manzil, qavat/podyezd soni)",
       "Tashqi tizimdan binolarni ommaviy import qilish",
@@ -108,28 +106,6 @@ const APP_SECTIONS: AppSection[] = [
     ],
   },
   {
-    label: 'Kommunal hisobotlar',
-    path: '/billing',
-    icon: FileSpreadsheet,
-    summary:
-      "Bino kesimida sarf/hisoblangan/to'langan/qarzdorlik, top iste'molchilar reytingi va Excel hisobot yuklash tarixi.",
-    actions: [
-      'Utility bo\'yicha Excel hisobot yuklash (bo\'sh shablonni yuklab olish mumkin)',
-      "Davr/utility bo'yicha filtrlash",
-    ],
-  },
-  {
-    label: 'Xonadonlar',
-    path: '/territory',
-    icon: Home,
-    summary:
-      "Turar-joy ierarxiyasi: Mahallalar → Ko'chalar → Xonadonlar. Hisobotlar va billing shu ro'yxatga tayanadi.",
-    actions: [
-      "Xonadon/ko'cha/mahalla qo'shish, tahrirlash, o'chirish",
-      "Excel orqali ommaviy xonadon import qilish",
-    ],
-  },
-  {
     label: 'AI yordamchi',
     path: '/chat',
     icon: MessageSquare,
@@ -154,7 +130,7 @@ const APP_SECTIONS: AppSection[] = [
     path: '/users',
     icon: Users,
     summary:
-      "Faqat admin. Tizim foydalanuvchilarini boshqarish — rol: admin, foydalanuvchi, ko'rgazma, yoki suv/gaz/elektr tashkiloti operatori.",
+      "Faqat admin. Tizim foydalanuvchilarini boshqarish — rol: admin, foydalanuvchi yoki ko'rgazma.",
     actions: [
       "Yangi foydalanuvchi yaratish",
       "Rol/parol o'zgartirish",
@@ -626,7 +602,6 @@ export default function DocsPage() {
               {[
                 ['Admin', "To'liq huquq — Test qurilmalar, Foydalanuvchilar, Audit, Sozlamalar shu rolga ochiq."],
                 ['Foydalanuvchi / ko\'rgazma', "O'qish huquqi — ko'pchilik tahrirlash tugmalari yashirin."],
-                ['Suv / gaz / elektr tashkiloti', "Faqat o'z utility'siga oid Kommunal hisobotlar sahifasini ko'radi va yuklaydi."],
               ].map(([t, d]) => (
                 <div key={t} className="rounded-md border p-3">
                   <div className="text-sm font-semibold">{t}</div>

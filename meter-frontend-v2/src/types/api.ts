@@ -2,7 +2,7 @@
 export interface User {
   id: number
   username: string
-  role: 'admin' | 'user' | 'viewer' | 'water_org' | 'gas_org' | 'electricity_org'
+  role: 'admin' | 'user' | 'viewer'
   is_active: boolean
 }
 

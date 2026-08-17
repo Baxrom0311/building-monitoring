@@ -27,8 +27,6 @@ const AuditPage = lazy(() => import('@/pages/AuditPage'))
 const SettingsPage = lazy(() => import('@/pages/SettingsPage'))
 const ChatPage = lazy(() => import('@/pages/ChatPage'))
 const AnalyticsPage = lazy(() => import('@/pages/AnalyticsPage'))
-const BillingPage = lazy(() => import('@/pages/BillingPage'))
-const TerritoryPage = lazy(() => import('@/pages/TerritoryPage'))
 const DisplayPage = lazy(() => import('@/pages/DisplayPage'))
 const DocsPage = lazy(() => import('@/pages/DocsPage'))
 
@@ -131,9 +129,6 @@ export default function App() {
                     />
                     <Route path="/chat" element={<ChatPage />} />
                     <Route path="/analytics" element={<AnalyticsPage />} />
-                    <Route path="/billing" element={<BillingPage />} />
-                    <Route path="/billing/:utility" element={<BillingPage />} />
-                    <Route path="/territory" element={<TerritoryPage />} />
                     <Route path="/docs" element={<DocsPage />} />
                     <Route path="*" element={<Navigate to="/dashboard" replace />} />
                   </Route>

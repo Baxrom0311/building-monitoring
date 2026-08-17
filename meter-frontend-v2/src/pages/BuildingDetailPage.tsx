@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import {
   ArrowLeft,
   Cpu,
   Droplets,
-  FileSpreadsheet,
   Flame,
   Link2,
   MapPin,
@@ -159,61 +158,6 @@ function utilityLabel(utility: string): string {
   )
 }
 
-// ─── Kommunal (billing) yordamchilari ────────────────────────────────────────
-
-interface BuildingBillingRow {
-  utility_type: string
-  period: number // 202607
-  volume: number | null
-  accrued: number | null
-  paid: number | null
-  debt: number | null
-  penalty: number | null
-  people_count: number | null
-  has_meter: boolean | null
-  apartment_no: string | null
-  owner_name: string | null
-}
-
-interface BuildingBillingApartment {
-  id: number
-  apartment_no: string | null
-  owner_name: string | null
-}
-
-interface BuildingBillingResponse {
-  building_id: number
-  billings: BuildingBillingRow[]
-  apartments: BuildingBillingApartment[]
-}
-
-function fmtPeriodNum(period: number): string {
-  const s = String(period)
-  if (s.length !== 6) return s
-  return `${s.slice(0, 4)}-${s.slice(4)}`
-}
-
-function fmtNumber(value: number | null | undefined): string {
-  if (value === null || value === undefined) return '—'
-  return value.toLocaleString('uz-UZ', { maximumFractionDigits: 2 })
-}
-
-function fmtMoney(value: number | null | undefined): string {
-  if (value === null || value === undefined) return '—'
-  return `${value.toLocaleString('uz-UZ', { maximumFractionDigits: 0 })} so'm`
-}
-
-function volumeUnit(utility: string): string {
-  return utility === 'electricity' ? 'kWh' : 'm³'
-}
-
-function utilityBadgeClass(utility: string): string {
-  if (utility === 'water') return 'border-cyan-500/30 text-cyan-500'
-  if (utility === 'gas') return 'border-orange-500/30 text-orange-500'
-  if (utility === 'electricity') return 'border-yellow-500/30 text-yellow-500'
-  return ''
-}
-
 // ─── Sahifa ───────────────────────────────────────────────────────────────────
 
 type ConfirmAction = { type: 'unbind'; deviceId: string } | { type: 'delete' }
@@ -246,22 +190,6 @@ export default function BuildingDetailPage() {
     error: hourlyQueryError,
     refetch: refetchHourly,
   } = useHourlyStats(24, buildingIdInt || undefined)
-  const {
-    data: billingData,
-    isLoading: billingLoading,
-    isError: billingIsError,
-    error: billingQueryError,
-    refetch: refetchBilling,
-  } = useQuery({
-    queryKey: ['billing', 'building', buildingIdInt],
-    queryFn: async () => {
-      const { data } = await apiClient.get<BuildingBillingResponse>(
-        `/api/billing/building/${buildingIdInt}`,
-      )
-      return data
-    },
-    enabled: buildingIdInt > 0,
-  })
 
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null)
   const [confirmPending, setConfirmPending] = useState(false)
@@ -363,56 +291,6 @@ export default function BuildingDetailPage() {
       }
     })
   }, [hourly])
-
-  // Kommunal (billing) — davrlar va filtr
-  const billingPeriods = useMemo(() => {
-    const set = new Set((billingData?.billings ?? []).map((b) => b.period))
-    return Array.from(set).sort((a, b) => b - a)
-  }, [billingData])
-
-  const [billingPeriod, setBillingPeriod] = useState<number | null>(null)
-  const [billingUtility, setBillingUtility] = useState<'all' | string>('all')
-
-  useEffect(() => {
-    if (billingPeriod === null && billingPeriods.length > 0) {
-      setBillingPeriod(billingPeriods[0])
-    }
-  }, [billingPeriod, billingPeriods])
-
-  const billingUtilities = useMemo(() => {
-    const set = new Set((billingData?.billings ?? []).map((b) => b.utility_type))
-    return Array.from(set)
-  }, [billingData])
-
-  const billingRows = useMemo(() => {
-    const rows = billingData?.billings ?? []
-    return rows.filter(
-      (b) =>
-        (billingPeriod === null || b.period === billingPeriod) &&
-        (billingUtility === 'all' || b.utility_type === billingUtility),
-    )
-  }, [billingData, billingPeriod, billingUtility])
-
-  const billingTotals = useMemo(() => {
-    const byUtility = new Map<
-      string,
-      { volume: number; accrued: number; paid: number; debt: number; count: number }
-    >()
-    for (const b of billingData?.billings ?? []) {
-      if (billingPeriod !== null && b.period !== billingPeriod) continue
-      let agg = byUtility.get(b.utility_type)
-      if (!agg) {
-        agg = { volume: 0, accrued: 0, paid: 0, debt: 0, count: 0 }
-        byUtility.set(b.utility_type, agg)
-      }
-      agg.volume += b.volume ?? 0
-      agg.accrued += b.accrued ?? 0
-      agg.paid += b.paid ?? 0
-      agg.debt += b.debt ?? 0
-      agg.count += 1
-    }
-    return Array.from(byUtility.entries()).map(([utility, agg]) => ({ utility, ...agg }))
-  }, [billingData, billingPeriod])
 
   if (!id) {
     return <ErrorBlock title="Xato" message="Bino identifikatori topilmadi." />
@@ -587,9 +465,6 @@ export default function BuildingDetailPage() {
                 Qurilmalar ({buildingDevices.length})
               </TabsTrigger>
               <TabsTrigger value="analytics">Tahlil</TabsTrigger>
-              <TabsTrigger value="billing">
-                Kommunal ({billingData?.apartments.length ?? 0})
-              </TabsTrigger>
             </TabsList>
 
             {/* ─── Umumiy ─── */}
@@ -807,159 +682,6 @@ export default function BuildingDetailPage() {
                   title="Ma'lumot topilmadi"
                   message="Oxirgi 24 soat ichida bu bino bo'yicha o'lchov yozuvlari yo'q."
                 />
-              )}
-            </TabsContent>
-
-            {/* ─── Kommunal ─── */}
-            <TabsContent value="billing" className="mt-4 space-y-4">
-              {billingLoading ? (
-                <LoadingBlock
-                  title="Kommunal ma'lumotlar yuklanmoqda..."
-                  message="Xonadonlar bo'yicha suv/gaz/elektr hisobotlari tekshirilmoqda."
-                />
-              ) : billingIsError ? (
-                <ErrorBlock
-                  title="Kommunal ma'lumotlar olinmadi"
-                  message={getApiErrorMessage(billingQueryError)}
-                  onRetry={() => refetchBilling()}
-                />
-              ) : billingPeriods.length === 0 ? (
-                <EmptyBlock
-                  title="Kommunal hisobot topilmadi"
-                  message="Bu bino uchun suv/gaz/elektr idoralari hali hisobot yuklamagan."
-                />
-              ) : (
-                <>
-                  <div className="flex flex-wrap items-center gap-3">
-                    <Select
-                      value={String(billingPeriod ?? '')}
-                      onValueChange={(v) => setBillingPeriod(Number(v))}
-                    >
-                      <SelectTrigger className="w-[140px]">
-                        <SelectValue placeholder="Davr" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {billingPeriods.map((p) => (
-                          <SelectItem key={p} value={String(p)}>
-                            {fmtPeriodNum(p)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Select value={billingUtility} onValueChange={setBillingUtility}>
-                      <SelectTrigger className="w-[160px]">
-                        <SelectValue placeholder="Kommunal turi" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Barcha turlar</SelectItem>
-                        {billingUtilities.map((u) => (
-                          <SelectItem key={u} value={u}>
-                            {utilityLabel(u)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {billingTotals.length > 0 && (
-                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                      {billingTotals.map((t) => (
-                        <KPICard
-                          key={t.utility}
-                          title={utilityLabel(t.utility)}
-                          value={`${fmtNumber(t.volume)} ${volumeUnit(t.utility)}`}
-                          subtitle={`${t.count} ta xonadon · qarz: ${fmtMoney(t.debt)}`}
-                          icon={UTILITY_ICONS[t.utility] ?? Cpu}
-                        />
-                      ))}
-                    </div>
-                  )}
-
-                  <Card className="overflow-hidden pb-0">
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                        <FileSpreadsheet className="h-4 w-4 text-muted-foreground" />
-                        Xonadonlar kesimida sarf — {billingPeriod ? fmtPeriodNum(billingPeriod) : '—'}
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="p-0">
-                      {billingRows.length > 0 ? (
-                        <div className="overflow-x-auto">
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead>Tur</TableHead>
-                                <TableHead>Xonadon</TableHead>
-                                <TableHead>Egasi</TableHead>
-                                <TableHead className="text-right">Hajm</TableHead>
-                                <TableHead className="text-right">Hisoblangan</TableHead>
-                                <TableHead className="text-right">To'langan</TableHead>
-                                <TableHead className="text-right">Qarz</TableHead>
-                                <TableHead>Hisoblagich</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {billingRows.map((row, i) => (
-                                <TableRow key={`${row.utility_type}-${row.apartment_no}-${i}`}>
-                                  <TableCell>
-                                    <Badge
-                                      variant="outline"
-                                      className={utilityBadgeClass(row.utility_type)}
-                                    >
-                                      {utilityLabel(row.utility_type)}
-                                    </Badge>
-                                  </TableCell>
-                                  <TableCell className="font-medium">
-                                    {row.apartment_no ?? '—'}
-                                  </TableCell>
-                                  <TableCell className="text-muted-foreground">
-                                    {row.owner_name ?? '—'}
-                                  </TableCell>
-                                  <TableCell className="text-right font-mono">
-                                    {fmtNumber(row.volume)} {volumeUnit(row.utility_type)}
-                                  </TableCell>
-                                  <TableCell className="text-right font-mono">
-                                    {fmtMoney(row.accrued)}
-                                  </TableCell>
-                                  <TableCell className="text-right font-mono">
-                                    {fmtMoney(row.paid)}
-                                  </TableCell>
-                                  <TableCell className="text-right font-mono">
-                                    {(row.debt ?? 0) > 0 ? (
-                                      <span className="text-red-500">{fmtMoney(row.debt)}</span>
-                                    ) : (
-                                      fmtMoney(row.debt)
-                                    )}
-                                  </TableCell>
-                                  <TableCell>
-                                    {row.has_meter === null ? (
-                                      '—'
-                                    ) : row.has_meter ? (
-                                      <Badge variant="outline" className="border-emerald-500/30 text-emerald-500">
-                                        Bor
-                                      </Badge>
-                                    ) : (
-                                      <Badge variant="outline" className="border-muted-foreground/30 text-muted-foreground">
-                                        Yo'q
-                                      </Badge>
-                                    )}
-                                  </TableCell>
-                                </TableRow>
-                              ))}
-                            </TableBody>
-                          </Table>
-                        </div>
-                      ) : (
-                        <div className="p-4">
-                          <EmptyBlock
-                            title="Ma'lumot topilmadi"
-                            message="Tanlangan davr/tur bo'yicha kommunal hisobot yo'q."
-                          />
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                </>
               )}
             </TabsContent>
           </Tabs>

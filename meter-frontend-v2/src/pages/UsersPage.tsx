@@ -52,27 +52,18 @@ import {
 
 const DEFAULT_PAGE_SIZE = 15
 
-type RoleFilter = 'all' | 'admin' | 'user' | 'viewer' | 'water_org' | 'gas_org' | 'electricity_org'
+type RoleFilter = 'all' | 'admin' | 'user' | 'viewer'
 type StatusFilter = 'all' | 'active' | 'inactive'
 
 const ROLE_LABELS: Record<string, string> = {
   admin: 'Administrator',
   user: 'Foydalanuvchi',
   viewer: "Ko'rgazma",
-  water_org: 'Suv idorasi',
-  gas_org: 'Gaz idorasi',
-  electricity_org: 'Elektr idorasi',
 }
 
 function roleBadge(role: User['role']) {
   if (role === 'admin') return <Badge>Admin</Badge>
   if (role === 'viewer') return <Badge variant="outline">Ko'rgazma</Badge>
-  if (role === 'water_org')
-    return <Badge variant="outline" className="border-cyan-500/40 text-cyan-500">Suv idorasi</Badge>
-  if (role === 'gas_org')
-    return <Badge variant="outline" className="border-orange-500/40 text-orange-500">Gaz idorasi</Badge>
-  if (role === 'electricity_org')
-    return <Badge variant="outline" className="border-yellow-500/40 text-yellow-500">Elektr idorasi</Badge>
   return <Badge variant="secondary">User</Badge>
 }
 

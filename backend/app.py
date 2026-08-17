@@ -22,7 +22,6 @@ from routers.alerts import router as alerts_router
 from routers.audit import router as audit_router
 from routers.auth import router as auth_router
 from routers.backups import router as backups_router
-from routers.billing import router as billing_router
 from routers.buildings import router as buildings_router
 from routers.commands import router as commands_router
 from routers.devices import router as devices_router
@@ -33,7 +32,6 @@ from routers.websocket import router as websocket_router
 from routers.chat import router as chat_router
 from routers.display import router as display_router
 from routers.external_forward import router as external_forward_router
-from routers.territory import router as territory_router
 from services.auth import bootstrap_admin
 from services.background import (
     alert_notification_worker,
@@ -89,11 +87,11 @@ app = FastAPI(
     redoc_url="/api/redoc",
     openapi_url="/api/openapi.json",
     description=(
-        "Kommunal xizmatlar monitoringi platformasi — ESP32 qurilmalaridan "
+        "IoT qurilmalar monitoringi platformasi — ESP32 qurilmalaridan "
         "(elektr/suv/gaz/isitish/tuproq/ovoz/havo sifati) o'qishlarni qabul "
-        "qiladi, binolar/xonadonlar bo'yicha billing va analitika yuritadi, "
-        "va real-vaqt kuzatuv (WebSocket) hamda ommaviy displey (kiosk) "
-        "endpoint'larini taqdim etadi.\n\n"
+        "qiladi, binolar bo'yicha analitika yuritadi, va real-vaqt kuzatuv "
+        "(WebSocket) hamda ommaviy displey (kiosk) endpoint'larini taqdim "
+        "etadi.\n\n"
         "Ko'pchilik endpoint `Authorization: Bearer <token>` talab qiladi "
         "(pastda \"Authorize\" tugmasi orqali kiritish mumkin) — "
         "`/api/auth/login` orqali oling. Qurilmalar (`X-Device-Token`) va "
@@ -134,8 +132,6 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 app.include_router(alerts_router)
 app.include_router(audit_router)
 app.include_router(backups_router)
-app.include_router(billing_router)
-app.include_router(territory_router)
 app.include_router(buildings_router)
 app.include_router(devices_router)
 app.include_router(commands_router)

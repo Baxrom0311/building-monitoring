@@ -1,8 +1,7 @@
 import type { ReactNode } from 'react'
-import { Navigate, useLocation } from 'react-router-dom'
+import { Navigate } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
-import { orgUtility, roleHomePath } from '@/lib/roles'
 
 interface ProtectedRouteProps {
   children: ReactNode
@@ -11,7 +10,6 @@ interface ProtectedRouteProps {
 
 export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRouteProps) {
   const { user, isLoading } = useAuth()
-  const location = useLocation()
 
   if (isLoading) {
     return (
@@ -22,13 +20,7 @@ export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRout
   }
 
   if (!user) return <Navigate to="/login" replace />
-  if (requireAdmin && user.role !== 'admin') return <Navigate to={roleHomePath(user.role)} replace />
-
-  // Kommunal idora operatori faqat O'Z sahifasida ishlaydi
-  const utility = orgUtility(user.role)
-  if (utility && !location.pathname.startsWith(`/billing/${utility}`)) {
-    return <Navigate to={`/billing/${utility}`} replace />
-  }
+  if (requireAdmin && user.role !== 'admin') return <Navigate to="/dashboard" replace />
 
   return <>{children}</>
 }

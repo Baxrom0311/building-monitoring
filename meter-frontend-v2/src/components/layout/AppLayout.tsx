@@ -7,13 +7,9 @@ import {
   BookOpen,
   Building2,
   Cpu,
-  Droplets,
-  Flame,
   FlaskConical,
   Gauge,
-  FileSpreadsheet,
   HardDriveDownload,
-  Home,
   LayoutDashboard,
   LogOut,
   MessageSquare,
@@ -23,14 +19,12 @@ import {
   Settings,
   Sun,
   Users,
-  Zap,
   type LucideIcon,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { GlobalSearchModal } from '@/components/GlobalSearchModal'
 import { PageTransition } from '@/components/layout/PageTransition'
 import { StatusPulse } from '@/components/ui/StatusPulse'
-import { orgUtility } from '@/lib/roles'
 import { useTheme } from '@/contexts/ThemeContext'
 import { useAlerts } from '@/hooks/queries'
 import { disconnectWebSocket, useWebSocketStatus } from '@/lib/websocket'
@@ -83,11 +77,6 @@ const PAGE_TITLES: Record<string, string> = {
   '/devices/test': 'Test qurilmalar',
   '/analytics': 'Analitika',
   '/alerts': 'Ogohlantirishlar',
-  '/billing/water': 'Suv hisobotlari',
-  '/billing/gas': 'Gaz hisobotlari',
-  '/billing/electricity': 'Elektr hisobotlari',
-  '/billing': 'Kommunal hisobotlar',
-  '/territory': 'Xonadonlar',
   '/firmware': 'Firmware / OTA',
   '/chat': 'AI Chat',
   '/users': 'Foydalanuvchilar',
@@ -98,17 +87,9 @@ const PAGE_TITLES: Record<string, string> = {
 
 function AppSidebar({ openAlerts }: { openAlerts: number }) {
   const location = useLocation()
-  const { user, isAdmin } = useAuth()
-  const utility = orgUtility(user?.role)
+  const { isAdmin } = useAuth()
 
   const groups: NavGroup[] = useMemo(() => {
-      // Kommunal idora operatori faqat o'z sahifasini ko'radi
-      if (utility) {
-        const label =
-          utility === 'water' ? 'Suv hisobotlari' : utility === 'gas' ? 'Gaz hisobotlari' : 'Elektr hisobotlari'
-        const icon = utility === 'water' ? Droplets : utility === 'gas' ? Flame : Zap
-        return [{ label: 'Kommunal', items: [{ label, path: `/billing/${utility}`, icon }] }]
-      }
       const allGroups: NavGroup[] = [
         {
           label: 'Kuzatuv',
@@ -124,8 +105,6 @@ function AppSidebar({ openAlerts }: { openAlerts: number }) {
           label: 'Kundalik ishlar',
           items: [
             { label: 'Ogohlantirishlar', path: '/alerts', icon: Bell, badge: openAlerts },
-            { label: 'Kommunal hisobotlar', path: '/billing', icon: FileSpreadsheet },
-            { label: 'Xonadonlar', path: '/territory', icon: Home },
             { label: 'AI yordamchi', path: '/chat', icon: MessageSquare },
           ],
         },
@@ -147,11 +126,11 @@ function AppSidebar({ openAlerts }: { openAlerts: number }) {
           items: group.items.filter((item) => !item.adminOnly || isAdmin),
         }))
         .filter((group) => group.items.length > 0)
-    }, [isAdmin, openAlerts, utility])
+    }, [isAdmin, openAlerts])
 
   const isActive = (path: string) =>
     location.pathname === path ||
-    (path !== '/devices' && path !== '/billing' && location.pathname.startsWith(path + '/'))
+    (path !== '/devices' && location.pathname.startsWith(path + '/'))
 
   return (
     <Sidebar collapsible="icon">
