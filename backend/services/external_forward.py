@@ -24,12 +24,11 @@ logger = logging.getLogger(__name__)
 
 def to_external_value(utility_type: str, value: float) -> float:
     """Reading.air_quality XOM (firmwaredan kelgan, yuqori=ifloslangan)
-    semantikada saqlanadi — bizning saytimiz buni "Havo sifati" kartasida
-    100-x qilib ko'rsatadi (yuqori=yaxshi). Tashqi "ODOR" tokenlari ham xuddi
-    shu (yuqori=yaxshi/toza) shkalani kutadi, shuning uchun forward qilishdan
-    oldin bir xil inversiya shu yerda qilinadi."""
-    if utility_type == "air_quality":
-        return max(0.0, round(100.0 - value, 1))
+    semantikada saqlanadi — sayt buni "Havo sifati" kartasida ham xuddi shu
+    xom holida ko'rsatadi (yuqori=yomonroq). Tashqi "ODOR" tokenlari ham
+    yuqori=yomonroq shkalani kutadi (ilgari 100-x inversiyasi teskari
+    ko'rsatib yuborar edi — endi hech qanday utility uchun inversiya
+    qilinmaydi, xom qiymat to'g'ridan-to'g'ri yuboriladi)."""
     return value
 
 
