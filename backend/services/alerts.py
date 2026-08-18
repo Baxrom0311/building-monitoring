@@ -1,4 +1,5 @@
 from fastapi import HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import settings
 from core.database import SessionLocal
@@ -40,7 +41,7 @@ def _validate_alert_rule_values(kind: str, min_value: float | None, max_value: f
         raise HTTPException(422, "Bu rule uchun min_value yoki max_value kerak")
 
 
-async def _alert_rules_for_reading(session, reading: MeterReading) -> dict[str, AlertRule]:
+async def _alert_rules_for_reading(session: AsyncSession, reading: MeterReading) -> dict[str, AlertRule]:
     rows = await AlertRuleRepository(session).matching_for_reading(
         str(reading.utility_type),
         reading.building_id,
@@ -100,7 +101,7 @@ async def _broadcast_alert_event(event: str, payload: dict) -> None:
     await ws_manager.broadcast({"type": "alert", "event": event, **payload})
 
 
-async def check_alerts(session, reading: MeterReading) -> list[dict]:
+async def check_alerts(session: AsyncSession, reading: MeterReading) -> list[dict]:
     ts = now_ts()
     alerts: list[Alert] = []
     # Har bir siklda TEKSHIRILGAN-lekin-HOZIR faol bo'lmagan kind'lar shu yerga
@@ -510,5 +511,5 @@ async def clear_all_alerts(device_id: str | None) -> dict:
     return {"ok": True}
 
 
-async def clear_offline_alerts_for_device(session, device_id: str) -> None:
+async def clear_offline_alerts_for_device(session: AsyncSession, device_id: str) -> None:
     await AlertRepository(session).clear_offline_for_device(device_id, now_ts())

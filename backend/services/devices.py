@@ -1,4 +1,5 @@
 from fastapi import HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import settings
 from core.database import SessionLocal
@@ -13,14 +14,8 @@ from repositories.devices import CommandRepository, DeviceProvisioningTokenRepos
 from services.websocket import ws_manager
 
 
-
-
-def _online(last_seen: int | None) -> bool:
+def is_online(last_seen: int | None) -> bool:
     return (now_ts() - (last_seen or 0)) < settings.offline_sec
-
-
-def online_status(last_seen: int | None) -> bool:
-    return _online(last_seen)
 
 
 def _global_device_token_ok(token: str | None) -> bool:
@@ -116,7 +111,7 @@ async def get_device_config(device_id: str) -> dict:
     }
 
 
-async def _consume_provisioning_token(session, body: DeviceRegister, ts: int) -> dict | None:
+async def _consume_provisioning_token(session: AsyncSession, body: DeviceRegister, ts: int) -> dict | None:
     if not body.provisioning_token:
         return None
     rows = await DeviceProvisioningTokenRepository(session).active_candidates(ts)
@@ -322,7 +317,7 @@ async def get_device(device_id: str) -> dict:
         device = await DeviceRepository(session).get(device_id)
     if not device:
         raise HTTPException(404, "Qurilma topilmadi")
-    return model_to_dict(device) | {"online": _online(device.last_seen)}
+    return model_to_dict(device) | {"online": is_online(device.last_seen)}
 
 
 async def create_device(body: DeviceCreate) -> dict:
@@ -369,7 +364,7 @@ async def create_device(body: DeviceCreate) -> dict:
         device_repo.add(device)
         await session.commit()
         await session.refresh(device)
-        response = model_to_dict(device) | {"online": _online(device.last_seen)}
+        response = model_to_dict(device) | {"online": is_online(device.last_seen)}
 
     await ws_manager.broadcast(
         {

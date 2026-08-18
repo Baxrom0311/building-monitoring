@@ -1,17 +1,18 @@
 import json
+from typing import Awaitable, Callable
 
 from fastapi import WebSocket
 
 
 class ConnectionManager:
-    def __init__(self):
+    def __init__(self) -> None:
         self._sockets: list[WebSocket] = []
-        self._snapshot_provider = None
+        self._snapshot_provider: Callable[[], Awaitable[dict]] | None = None
 
-    def set_snapshot_provider(self, provider):
+    def set_snapshot_provider(self, provider: Callable[[], Awaitable[dict]]) -> None:
         self._snapshot_provider = provider
 
-    async def connect(self, ws: WebSocket, subprotocol: str | None = None):
+    async def connect(self, ws: WebSocket, subprotocol: str | None = None) -> None:
         # Brauzer `new WebSocket(url, [token])` yuborsa, handshake muvaffaqiyatli
         # bo'lishi uchun subprotocol qaytarilishi shart
         await ws.accept(subprotocol=subprotocol)
@@ -23,11 +24,11 @@ class ConnectionManager:
             except Exception:
                 pass
 
-    def disconnect(self, ws: WebSocket):
+    def disconnect(self, ws: WebSocket) -> None:
         if ws in self._sockets:
             self._sockets.remove(ws)
 
-    async def broadcast(self, data: dict):
+    async def broadcast(self, data: dict) -> None:
         if not self._sockets:
             return
         msg = json.dumps(data, ensure_ascii=False)

@@ -1,3 +1,4 @@
+import logging
 from typing import Optional
 
 import httpx
@@ -38,6 +39,8 @@ from services import analytics as analytics_service
 from services import audit
 from services import buildings as building_service
 from services import readings as reading_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["buildings"])
 
@@ -112,7 +115,7 @@ async def import_external_buildings(admin: dict = Depends(require_admin)):
                     lat = sum(lats) / len(lats)
                     lon = sum(lons) / len(lons)
             except Exception:
-                pass
+                logger.warning("polygonCoordinate markazini hisoblab bo'lmadi: house_id=%s", h.get("id"))
 
         # sensorData maydonlarini ajratish
         sensor = h.get("sensorData") or {}

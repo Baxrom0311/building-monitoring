@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 
 from fastapi import HTTPException, UploadFile
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import settings
 from core.database import SessionLocal
@@ -103,28 +104,6 @@ def _compat_tuple(
         _clean_meta(hardware_version),
         _clean_meta(sensor_type),
         _clean_meta(converter_type),
-    )
-
-
-def _firmware_direct_tuple(firmware: Firmware) -> tuple[str | None, ...]:
-    return _compat_tuple(
-        firmware.utility_type,
-        firmware.firmware_mode,
-        firmware.device_role,
-        firmware.hardware_version,
-        firmware.sensor_type,
-        firmware.converter_type,
-    )
-
-
-def _compat_row_tuple(compatibility: FirmwareCompatibility) -> tuple[str | None, ...]:
-    return _compat_tuple(
-        compatibility.utility_type,
-        compatibility.firmware_mode,
-        compatibility.device_role,
-        compatibility.hardware_version,
-        compatibility.sensor_type,
-        compatibility.converter_type,
     )
 
 
@@ -446,7 +425,7 @@ async def ota_events(device_id: str | None = None, status: str | None = None, li
     return {"events": [model_to_dict(row) for row in rows], "total": len(rows)}
 
 
-async def _refresh_batch_counts(session, firmware_id: int | None = None, batch_id: int | None = None) -> None:
+async def _refresh_batch_counts(session: AsyncSession, firmware_id: int | None = None, batch_id: int | None = None) -> None:
     batch_repo = OTABatchRepository(session)
     device_repo = OTABatchDeviceRepository(session)
     batches = await batch_repo.list_refresh_targets(firmware_id, batch_id)
@@ -466,7 +445,7 @@ async def _refresh_batch_counts(session, firmware_id: int | None = None, batch_i
         batch.updated_at = ts
 
 
-async def _prepare_batch_retries(session, batch_id: int, ts: int) -> dict:
+async def _prepare_batch_retries(session: AsyncSession, batch_id: int, ts: int) -> dict:
     timeout_cutoff = ts - settings.ota_batch_retry_timeout_sec
     retryable = await OTABatchDeviceRepository(session).retryable(batch_id)
     reset = 0

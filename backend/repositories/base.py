@@ -1,6 +1,6 @@
 from typing import Any, Generic, TypeVar
 
-from sqlalchemy import inspect, select
+from sqlalchemy import inspect
 from sqlalchemy.ext.asyncio import AsyncSession
 
 ModelT = TypeVar("ModelT")
@@ -18,16 +18,6 @@ class BaseRepository(Generic[ModelT]):
 
     async def get(self, object_id: Any) -> ModelT | None:
         return await self.session.get(self.model, object_id)
-
-    async def list(self, *filters, order_by=None, limit: int | None = None) -> list[ModelT]:
-        stmt = select(self.model)
-        for item in filters:
-            stmt = stmt.where(item)
-        if order_by is not None:
-            stmt = stmt.order_by(order_by)
-        if limit is not None:
-            stmt = stmt.limit(limit)
-        return list((await self.session.scalars(stmt)).all())
 
     def add(self, obj: ModelT) -> ModelT:
         self.session.add(obj)

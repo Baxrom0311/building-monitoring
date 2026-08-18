@@ -1,5 +1,4 @@
 from sqlalchemy import and_, desc, func, select
-from sqlalchemy.orm import aliased
 
 from core.config import settings
 from core.database import SessionLocal
@@ -29,7 +28,7 @@ async def build_snapshot() -> dict:
                 .limit(20)
             )
         ).all()
-    device_rows = [model_to_dict(device) | {"online": devices_service.online_status(device.last_seen)} for device in devices]
+    device_rows = [model_to_dict(device) | {"online": devices_service.is_online(device.last_seen)} for device in devices]
     return {"devices": device_rows, "alerts": [model_to_dict(alert) for alert in alerts]}
 
 
