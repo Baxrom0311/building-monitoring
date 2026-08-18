@@ -18,6 +18,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext'
 import { useBackups, useBuildings, useProvisioningTokens, useSummary, qk } from '@/hooks/queries'
 import apiClient from '@/lib/api'
+import { formatTs } from '@/lib/utils'
 import { API_BASE_URL } from '@/lib/env'
 import type { BackupItem, ProvisioningToken } from '@/types/api'
 import { EmptyBlock, ErrorBlock, LoadingBlock } from '@/components/StateBlock'
@@ -72,11 +73,6 @@ const UTILITY_OPTIONS = [
   { value: 'soil', label: "Yerto'la" },
   { value: 'sound', label: 'Ovoz' },
 ]
-
-function formatTs(ts: number | null | undefined) {
-  if (!ts) return '-'
-  return new Date(ts * 1000).toLocaleString('uz-UZ')
-}
 
 function tokenStatusBadge(t: ProvisioningToken) {
   const now = Date.now() / 1000

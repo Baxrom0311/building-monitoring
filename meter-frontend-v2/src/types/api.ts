@@ -6,11 +6,6 @@ export interface User {
   is_active: boolean
 }
 
-export interface LoginRequest {
-  username: string
-  password: string
-}
-
 export interface LoginResponse {
   access_token: string
   token_type: string
@@ -376,16 +371,6 @@ export interface ProvisioningToken {
   created_by_user_id: number | null
   created_by_username: string | null
   created_at: number | null
-}
-
-export interface ProvisioningTokenCreateResponse {
-  ok: boolean
-  id: number
-  provisioning_token: string
-  expires_at: number
-  device_id: string | null
-  building_id: number | null
-  utility_type: string | null
 }
 
 export interface ProvisioningTokenListResponse {

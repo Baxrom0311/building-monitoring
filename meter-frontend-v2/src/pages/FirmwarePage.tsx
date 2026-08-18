@@ -14,6 +14,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext'
 import { useDevices, useFirmwareList, useOtaBatches, qk } from '@/hooks/queries'
 import apiClient from '@/lib/api'
+import { formatTs } from '@/lib/utils'
 import type { Device, Firmware, OtaBatch, OtaBatchDetail } from '@/types/api'
 import { EmptyBlock, ErrorBlock, LoadingBlock } from '@/components/StateBlock'
 import { getApiErrorMessage } from '@/lib/errors'
@@ -80,11 +81,6 @@ const MODE_OPTIONS = [
   { value: 'lora_gateway', label: 'LoRa Gateway' },
   { value: 'display', label: 'Display' },
 ]
-
-function formatTs(ts: number | null | undefined) {
-  if (!ts) return '-'
-  return new Date(ts * 1000).toLocaleString('uz-UZ')
-}
 
 function formatSize(size: number | null | undefined) {
   if (!size) return '-'

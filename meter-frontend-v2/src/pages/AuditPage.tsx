@@ -9,7 +9,7 @@ import { getApiErrorMessage } from '@/lib/errors'
 import { notifySuccess } from '@/lib/toast'
 import { downloadCsv } from '@/lib/table'
 import { Pagination } from '@/components/Pagination'
-import { cn } from '@/lib/utils'
+import { cn, formatTs } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -74,10 +74,6 @@ function useAuditLogsFiltered(page: number, filters: AuditFilters) {
     },
     placeholderData: keepPreviousData,
   })
-}
-
-function formatTs(ts: number) {
-  return new Date(ts * 1000).toLocaleString('uz-UZ')
 }
 
 function prettyDetail(detail: string | null): string {

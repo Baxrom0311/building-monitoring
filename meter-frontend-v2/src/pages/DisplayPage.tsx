@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactElement } from 'react'
 import {
   Area,
   AreaChart,
@@ -653,7 +653,7 @@ export default function DisplayPage() {
             'group relative flex min-h-[340px] flex-col overflow-hidden rounded-2xl bg-[#111725] border transition-[opacity,border-color,box-shadow] duration-700 lg:min-h-0 pl-4 animate-card-enter',
             isAlert ? 'opacity-100 status-breathe' : 'border-white/[0.06] opacity-[0.9]',
           ].join(' ')
-          const cardStyle: Record<string, any> = { animationDelay: `${i * 70}ms` }
+          const cardStyle: CSSProperties & Record<string, string | number> = { animationDelay: `${i * 70}ms` }
           if (isAlert) {
             cardStyle.borderColor = status.color
             cardStyle['--st'] = st
@@ -666,7 +666,7 @@ export default function DisplayPage() {
           // ── Chart uchun umumiy: data, Y-domen, dataKey ──
           const chartData = isElec ? elecData : cfg.points
           const mainKey = isElec ? 'dev' : 'v0'
-          const yDomain: any = isElec
+          const yDomain: [number, number] | ['auto', 'auto'] = isElec
             ? elecDomain
             : isWater
             ? waterDomain
@@ -678,7 +678,7 @@ export default function DisplayPage() {
 
           // ── Norma (me'yor) chizig'i — QALIN, YORQIN, ko'zga tashlanadigan ──
           const NORMA = '#34D399'
-          const normaLines: any[] = []
+          const normaLines: ReactElement[] = []
           const pushNorma = (y: number, txt: string) =>
             normaLines.push(
               <ReferenceLine

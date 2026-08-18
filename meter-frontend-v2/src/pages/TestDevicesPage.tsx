@@ -16,7 +16,7 @@ import { qk, useDevicesList } from '@/hooks/queries'
 import apiClient from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/errors'
 import { notifyError, notifySuccess } from '@/lib/toast'
-import { cn } from '@/lib/utils'
+import { cn, formatTs } from '@/lib/utils'
 import type { Device } from '@/types/api'
 import { EmptyBlock, ErrorBlock, TableSkeleton } from '@/components/StateBlock'
 import { KPICard } from '@/components/KPICard'
@@ -45,10 +45,6 @@ interface SimulationResponse {
   message: string
   ts?: number | null
   device?: Device | null
-}
-
-function formatTime(ts?: number | null) {
-  return ts ? new Date(ts * 1000).toLocaleString('uz-UZ') : '-'
 }
 
 function Countdown({ ts }: { ts?: number | null }) {
@@ -321,7 +317,7 @@ export default function TestDevicesPage() {
                         {device.meter_serial ?? '-'}
                       </Badge>
                     </TableCell>
-                    <TableCell>{formatTime(device.last_seen)}</TableCell>
+                    <TableCell>{formatTs(device.last_seen)}</TableCell>
                     <TableCell>
                       <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-500">
                         <Timer className="h-4 w-4" />

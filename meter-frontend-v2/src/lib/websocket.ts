@@ -59,7 +59,6 @@ function connect() {
     ws = new WebSocket(wsUrl)
 
     ws.onopen = () => {
-      console.log('[v0] WebSocket connected')
       reconnectAttempts = 0
       emitStatus('connected')
     }
@@ -82,7 +81,6 @@ function connect() {
         emitStatus('idle')
         return
       }
-      console.log('[v0] WebSocket closed, attempting to reconnect...')
       emitStatus('reconnecting')
       attemptReconnect()
     }
@@ -161,10 +159,6 @@ export function useWebSocketStatus() {
   }, [])
 
   return status
-}
-
-export function connectWebSocket() {
-  connect()
 }
 
 export function disconnectWebSocket() {

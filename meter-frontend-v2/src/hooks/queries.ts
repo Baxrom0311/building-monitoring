@@ -12,7 +12,6 @@ import type {
   Reading,
   DeviceHistoryResponse,
   OtaBatch,
-  BuildingsEnergySummaryResponse,
   HourlyUtilityStatsResponse,
   ProvisioningTokenListResponse,
   BackupListResponse,
@@ -66,16 +65,6 @@ export function useSummary(): UseQueryResult<Summary> {
       return data
     },
     refetchInterval: REALTIME_FALLBACK_INTERVAL_MS,
-  })
-}
-
-export function useEnergySummary(days = 30): UseQueryResult<BuildingsEnergySummaryResponse> {
-  return useQuery({
-    queryKey: qk.energySummary(days),
-    queryFn: async () => {
-      const { data } = await apiClient.get(`/api/analytics/energy/summary?days=${days}`)
-      return data
-    },
   })
 }
 
@@ -242,17 +231,6 @@ export function useAlerts(cleared?: boolean, limit?: number): UseQueryResult<Ale
       return data.alerts
     },
     refetchInterval: REALTIME_FALLBACK_INTERVAL_MS,
-  })
-}
-
-// Users (Admin)
-export function useUsers(): UseQueryResult<User[]> {
-  return useQuery({
-    queryKey: qk.usersAll(),
-    queryFn: async () => {
-      const { data } = await apiClient.get('/api/auth/users')
-      return data.users
-    },
   })
 }
 

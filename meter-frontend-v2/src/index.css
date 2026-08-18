@@ -133,24 +133,6 @@
 
 /* ─── 2026 Modern Dashboard Animation Utilities ────────────────────────────── */
 
-@keyframes pulse-glow {
-  0%, 100% {
-    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4);
-  }
-  50% {
-    box-shadow: 0 0 0 8px rgba(16, 185, 129, 0);
-  }
-}
-
-@keyframes pulse-warning {
-  0%, 100% {
-    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4);
-  }
-  50% {
-    box-shadow: 0 0 0 8px rgba(245, 158, 11, 0);
-  }
-}
-
 @keyframes fade-in-up {
   from {
     opacity: 0;
@@ -173,14 +155,6 @@
 
 .animate-fade-in-up {
   animation: fade-in-up 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-.animate-pulse-glow {
-  animation: pulse-glow 2s infinite;
-}
-
-.animate-pulse-warning {
-  animation: pulse-warning 2s infinite;
 }
 
 .animate-shimmer-wave {
@@ -286,12 +260,4 @@
 }
 *::-webkit-scrollbar-thumb:hover {
   background-color: color-mix(in oklch, var(--muted-foreground) 55%, transparent);
-}
-
-/* Interaktiv card'lar uchun izchil, mayin ko'tarilish (opt-in: .card-interactive) */
-.card-interactive {
-  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease, border-color 0.2s ease;
-}
-.card-interactive:hover {
-  transform: translateY(-2px);
 }

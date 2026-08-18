@@ -171,5 +171,3 @@ export const translations = {
     confirmDelete: "Haqiqatdan ham o\'chirmoqchisiz?",
   },
 }
-
-export type TranslationKey = keyof typeof translations
