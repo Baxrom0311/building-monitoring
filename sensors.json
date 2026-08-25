@@ -1,0 +1,55 @@
+{
+    "success": true,
+    "message": "Sensors list",
+    "data": [
+        {
+            "title": "issiqlik",
+            "token": "HOT_WATER_OBJ_5s58b6vl32g8MECDoZ7dRNLSnPVG9hlv",
+            "sensorType": "HOT_WATER",
+            "objectId": 216,
+            "objectTitle": "Зарбулоқ,12/2"
+        },
+        {
+            "title": "hid",
+            "token": "ODOR_ENT_ag9nu8iSNkYuGjFNGsTBVvbpBRCPa0jP",
+            "sensorType": "ODOR",
+            "objectId": null,
+            "objectTitle": null
+        },
+        {
+            "title": "suv bosimi",
+            "token": "WATER_OBJ_1ABBSABEkVj6qU9uIQOusRas8We2C0KR",
+            "sensorType": "WATER",
+            "objectId": 216,
+            "objectTitle": "Зарбулоқ,12/2"
+        },
+        {
+            "title": "ovoz",
+            "token": "NOISE_OBJ_eC7nl0JNRpfvPeIRhU3E6ejuH5gBbBrp",
+            "sensorType": "NOISE",
+            "objectId": 216,
+            "objectTitle": "Зарбулоқ,12/2"
+        },
+        {
+            "title": "yerto'la namligi",
+            "token": "HUMIDITY_OBJ_9vrW5Cea9ekvnr7LOWRckUgk0gtvbMFn",
+            "sensorType": "HUMIDITY",
+            "objectId": 216,
+            "objectTitle": "Зарбулоқ,12/2"
+        },
+        {
+            "title": "elektr",
+            "token": "ELECTRICITY_OBJ_uqB51hSEhqARUtXmz3DHVZRGv7ofbQJT",
+            "sensorType": "ELECTRICITY",
+            "objectId": 216,
+            "objectTitle": "Зарбулоқ,12/2"
+        },
+        {
+            "title": "12/2hid",
+            "token": "ODOR_OBJ_iXi68Z0QPhxoBZ90QGXHuj8aFDU7VWrM",
+            "sensorType": "ODOR",
+            "objectId": 216,
+            "objectTitle": "Зарбулоқ,12/2"
+        }
+    ]
+}
